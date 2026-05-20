@@ -1,6 +1,6 @@
 import type { NormalizedBalance, OnchainConfig } from '../../types';
 
-// TRON pakai HTTP API (kompatibel TronGrid) lewat endpoint QuickNode.
+// TRON pakai HTTP API TronGrid (https://api.trongrid.io).
 // TRX: POST /wallet/getaccount. TRC20: POST /wallet/triggerconstantcontract (balanceOf).
 
 const B58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -43,17 +43,26 @@ function formatUnits(raw: bigint, decimals: number): number {
   return parseFloat(`${whole}.${frac}`);
 }
 
-async function post<T>(url: string, path: string, body: unknown): Promise<T> {
+async function post<T>(url: string, path: string, body: unknown, apiKey?: string): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+  if (apiKey) headers['TRON-PRO-API-KEY'] = apiKey; // dipakai TronGrid
   const res = await fetch(`${url.replace(/\/$/, '')}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers,
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`TRON ${path} ${res.status}`);
   return (await res.json()) as T;
 }
 
-export async function getTronBalances(url: string, config: OnchainConfig): Promise<NormalizedBalance[]> {
+export async function getTronBalances(
+  url: string,
+  config: OnchainConfig,
+  apiKey?: string,
+): Promise<NormalizedBalance[]> {
   const out: NormalizedBalance[] = [];
   const address = config.address;
 
@@ -61,7 +70,7 @@ export async function getTronBalances(url: string, config: OnchainConfig): Promi
     const acc = await post<{ balance?: number }>(url, '/wallet/getaccount', {
       address,
       visible: true,
-    });
+    }, apiKey);
     const total = (acc.balance ?? 0) / 1e6; // sun -> TRX
     if (total > 0) out.push({ walletType: 'onchain', asset: 'TRX', free: total, locked: 0, total });
   }
@@ -75,7 +84,7 @@ export async function getTronBalances(url: string, config: OnchainConfig): Promi
         function_selector: 'balanceOf(address)',
         parameter: holderHex,
         visible: true,
-      });
+      }, apiKey);
       const hex = result.constant_result?.[0];
       if (hex) {
         const total = formatUnits(BigInt('0x' + hex), token.decimals);

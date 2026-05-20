@@ -9,9 +9,11 @@ export interface Env {
   ENVIRONMENT?: string;
   SNAPSHOT_INTERVAL_MINUTES?: string;
   COINGECKO_API_KEY?: string;
-  QUICKNODE_ETH_URL?: string;
-  QUICKNODE_BSC_URL?: string;
-  QUICKNODE_TRON_URL?: string;
+  // Endpoint RPC default (netral provider: Alchemy untuk EVM, TronGrid untuk TRON).
+  RPC_ETH_URL?: string;
+  RPC_BSC_URL?: string;
+  RPC_TRON_URL?: string;
+  RPC_TRON_API_KEY?: string; // opsional: TronGrid TRON-PRO-API-KEY
 }
 
 export interface SessionData {
@@ -61,7 +63,8 @@ export interface CexCredentials {
 
 // Kredensial / konfigurasi on-chain (terenkripsi di enc_credentials)
 export interface OnchainCredentials {
-  rpcUrl?: string; // endpoint QuickNode; kalau kosong pakai default dari env
+  rpcUrl?: string; // endpoint RPC (Alchemy/TronGrid); kalau kosong pakai default dari env
+  apiKey?: string; // opsional: TronGrid TRON-PRO-API-KEY
 }
 
 // Token yang ditrack untuk account on-chain (disimpan di kolom config, non-rahasia)

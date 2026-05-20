@@ -357,7 +357,7 @@ export const appHtml = `<!doctype html>
         <template x-if="ac.type==='eth' || ac.type==='bsc' || ac.type==='tron'">
           <div class="space-y-3 rounded-xl bg-slate-50 p-3">
             <input x-model="ac.address" placeholder="Address wallet" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm" />
-            <input x-model="ac.rpcUrl" placeholder="QuickNode RPC URL (opsional, pakai default jika kosong)" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm" />
+            <input x-model="ac.rpcUrl" placeholder="RPC URL — Alchemy (EVM) / TronGrid (TRON), opsional jika sudah ada default" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm" />
             <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="ac.trackNative" /> Track native coin</label>
             <div class="space-y-2">
               <div class="flex items-center justify-between"><span class="text-xs font-medium text-slate-600">Token yang ditrack</span>

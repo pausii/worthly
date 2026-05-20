@@ -11,7 +11,9 @@ MASTER_KEY="ganti-dengan-base64-32-byte-acak"
 # Opsional: API key CoinGecko (kalau pakai endpoint berbayar). Kosongkan kalau pakai gratis.
 COINGECKO_API_KEY=""
 
-# Opsional: endpoint default QuickNode (boleh juga diisi per-account lewat UI).
-QUICKNODE_ETH_URL=""
-QUICKNODE_BSC_URL=""
-QUICKNODE_TRON_URL=""
+# Opsional: endpoint RPC default (boleh juga diisi per-account lewat UI).
+# EVM = Alchemy, TRON = TronGrid.
+RPC_ETH_URL=""
+RPC_BSC_URL=""
+RPC_TRON_URL=""
+RPC_TRON_API_KEY=""

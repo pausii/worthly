@@ -1,6 +1,6 @@
 import type { NormalizedBalance, OnchainConfig } from '../../types';
 
-// ETH & BSC pakai JSON-RPC standar (Ethereum) lewat endpoint QuickNode.
+// ETH & BSC pakai JSON-RPC standar (Ethereum) lewat endpoint Alchemy.
 
 async function rpc<T>(url: string, method: string, params: unknown[]): Promise<T> {
   const res = await fetch(url, {

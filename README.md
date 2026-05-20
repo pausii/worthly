@@ -5,7 +5,7 @@ Personal crypto / CEX portfolio tracker yang berjalan di **Cloudflare Workers**.
 - **Backend:** Hono + Cloudflare D1 (database) + KV (session, rate limit, cache harga)
 - **Frontend:** Alpine.js + Tailwind CSS + Chart.js (semua via CDN), responsif
 - **CEX:** Binance & Bybit (saldo SPOT / FUTURES / EARN / FUNDING + riwayat deposit) via API resmi
-- **On-chain:** TRON, Ethereum, BSC (native + token) via QuickNode
+- **On-chain:** Ethereum, BSC (native + token) via Alchemy; TRON via TronGrid
 - **Sinkronisasi otomatis:** Cron Trigger tiap 2 menit
 - **Keamanan:** login single-user (PBKDF2 600k iterasi), sesi httpOnly+Secure+SameSite=Strict,
   rate-limit login, proteksi CSRF, security headers, kredensial CEX/RPC **dienkripsi AES-GCM** di D1.
@@ -25,7 +25,7 @@ Harga: ticker publik Binance (crypto) + Frankfurter/ECB (fiat) ─► konversi k
 |---|---|
 | `src/lib` | kripto/keamanan, db, session, auth middleware, rate limit |
 | `src/services/cex` | klien Binance & Bybit (signed request) |
-| `src/services/onchain` | klien EVM (ETH/BSC) & TRON via QuickNode |
+| `src/services/onchain` | klien EVM (ETH/BSC, Alchemy) & TRON (TronGrid) |
 | `src/services/prices` | konversi harga ke USD + cache |
 | `src/services/sync.ts` | orkestrator sinkronisasi + snapshot |
 | `src/routes` | endpoint API (auth, portfolios, accounts, holdings, dashboard) |
@@ -56,9 +56,11 @@ npm run kv:create   # salin "id" ke wrangler.toml
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" | npx wrangler secret put MASTER_KEY
 
 # Opsional (default endpoint on-chain; bisa juga diisi per-account lewat UI):
-npx wrangler secret put QUICKNODE_ETH_URL
-npx wrangler secret put QUICKNODE_BSC_URL
-npx wrangler secret put QUICKNODE_TRON_URL
+# EVM (ETH/BSC) pakai Alchemy, TRON pakai TronGrid.
+npx wrangler secret put RPC_ETH_URL        # mis. https://eth-mainnet.g.alchemy.com/v2/KEY
+npx wrangler secret put RPC_BSC_URL        # mis. https://bnb-mainnet.g.alchemy.com/v2/KEY
+npx wrangler secret put RPC_TRON_URL       # mis. https://api.trongrid.io
+npx wrangler secret put RPC_TRON_API_KEY   # opsional, TronGrid API key
 ```
 
 Untuk dev lokal, salin `.dev.vars.example` → `.dev.vars` dan isi `MASTER_KEY`.
@@ -82,7 +84,7 @@ Buka aplikasi → akan diminta **setup user pertama** (username + password ≥ 1
 - **Binance / Bybit:** menu *Accounts* → pilih exchange → tempel **API key read-only**
   (matikan izin trade & withdraw di dashboard exchange). Key langsung dienkripsi.
 - **On-chain (ETH/BSC/Tron):** menu *Accounts* → pilih jaringan → isi address wallet,
-  (opsional) URL QuickNode, dan daftar token TRC20/ERC20/BEP20 yang ingin ditrack (contract, simbol, decimals).
+  (opsional) URL RPC (Alchemy untuk EVM / TronGrid untuk TRON), dan daftar token TRC20/ERC20/BEP20 yang ingin ditrack (contract, simbol, decimals).
 - **Manual:** menu *Holding Manual* → mis. `IDR 100000000` atau `USD 300`. Otomatis dikonversi ke USD.
 
 ## Catatan keamanan

@@ -112,22 +112,25 @@ async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
   if (!config.address) throw new Error('Address on-chain belum diisi');
 
   let rpcUrl = '';
+  let apiKey = '';
   if (acc.enc_credentials) {
     const creds = JSON.parse(await decryptSecret(acc.enc_credentials, env.MASTER_KEY)) as OnchainCredentials;
     rpcUrl = creds.rpcUrl ?? '';
+    apiKey = creds.apiKey ?? '';
   }
   if (!rpcUrl) {
     rpcUrl =
       acc.type === 'eth'
-        ? env.QUICKNODE_ETH_URL ?? ''
+        ? env.RPC_ETH_URL ?? ''
         : acc.type === 'bsc'
-          ? env.QUICKNODE_BSC_URL ?? ''
-          : env.QUICKNODE_TRON_URL ?? '';
+          ? env.RPC_BSC_URL ?? ''
+          : env.RPC_TRON_URL ?? '';
   }
   if (!rpcUrl) throw new Error(`Endpoint RPC untuk ${acc.type} belum dikonfigurasi`);
+  if (!apiKey && acc.type === 'tron') apiKey = env.RPC_TRON_API_KEY ?? '';
 
   let balances: NormalizedBalance[];
-  if (acc.type === 'tron') balances = await getTronBalances(rpcUrl, config);
+  if (acc.type === 'tron') balances = await getTronBalances(rpcUrl, config, apiKey);
   else balances = await getEvmBalances(rpcUrl, config, acc.type === 'eth' ? 'ETH' : 'BNB');
 
   await upsertBalances(env, acc.id, balances);
