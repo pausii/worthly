@@ -5,16 +5,17 @@ import { ok, fail } from '../lib/response';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// List holding manual (opsional filter ?portfolio_id=).
+const ALLOWED_CURRENCIES = new Set(['USD', 'IDR', 'JPY', 'SGD']);
+
 app.get('/', async (c) => {
   const pid = c.req.query('portfolio_id');
   const rows = pid
     ? await queryAll(
         c.env,
-        'SELECT * FROM manual_holdings WHERE portfolio_id = ? ORDER BY created_at DESC',
+        'SELECT * FROM manual_holdings WHERE portfolio_id = ? ORDER BY added_at DESC, created_at DESC',
         Number(pid),
       )
-    : await queryAll(c.env, 'SELECT * FROM manual_holdings ORDER BY created_at DESC');
+    : await queryAll(c.env, 'SELECT * FROM manual_holdings ORDER BY added_at DESC, created_at DESC');
   return ok(c, rows);
 });
 
@@ -22,36 +23,36 @@ app.post('/', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     portfolio_id?: number;
     label?: string;
-    asset_class?: string;
     currency?: string;
     amount?: number;
     note?: string;
+    added_at?: number;
   };
 
   const portfolioId = Number(body.portfolio_id);
   const label = (body.label ?? '').trim();
-  const assetClass = body.asset_class === 'crypto' ? 'crypto' : 'fiat';
   const currency = (body.currency ?? '').trim().toUpperCase();
   const amount = Number(body.amount);
+  const addedAt = body.added_at && isFinite(Number(body.added_at)) ? Number(body.added_at) : now();
 
-  if (!portfolioId) return fail(c, 'Portofolio wajib dipilih');
-  if (!label) return fail(c, 'Label wajib diisi');
-  if (!currency) return fail(c, 'Mata uang/aset wajib diisi');
-  if (!isFinite(amount) || amount <= 0) return fail(c, 'Jumlah harus angka > 0');
+  if (!portfolioId) return fail(c, 'Portfolio is required');
+  if (!label) return fail(c, 'Label is required');
+  if (!ALLOWED_CURRENCIES.has(currency)) return fail(c, 'Invalid currency');
+  if (!isFinite(amount) || amount <= 0) return fail(c, 'Amount must be a number greater than 0');
 
   const pf = await queryOne(c.env, 'SELECT id FROM portfolios WHERE id = ?', portfolioId);
-  if (!pf) return fail(c, 'Portofolio tidak ditemukan', 404);
+  if (!pf) return fail(c, 'Portfolio not found', 404);
 
   const res = await run(
     c.env,
-    `INSERT INTO manual_holdings (portfolio_id, label, asset_class, currency, amount, note, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO manual_holdings (portfolio_id, label, asset_class, currency, amount, note, added_at, created_at, updated_at)
+     VALUES (?, ?, 'fiat', ?, ?, ?, ?, ?, ?)`,
     portfolioId,
     label,
-    assetClass,
     currency,
     amount,
     body.note ?? null,
+    addedAt,
     now(),
     now(),
   );
@@ -62,27 +63,34 @@ app.put('/:id', async (c) => {
   const id = Number(c.req.param('id'));
   const body = (await c.req.json().catch(() => ({}))) as {
     label?: string;
-    asset_class?: string;
     currency?: string;
     amount?: number;
     note?: string;
+    added_at?: number;
   };
   const existing = await queryOne(c.env, 'SELECT id FROM manual_holdings WHERE id = ?', id);
-  if (!existing) return fail(c, 'Holding tidak ditemukan', 404);
+  if (!existing) return fail(c, 'Holding not found', 404);
+
+  const currency = body.currency?.trim().toUpperCase() || null;
+  if (currency && !ALLOWED_CURRENCIES.has(currency)) return fail(c, 'Invalid currency');
+
+  const addedAt = body.added_at && isFinite(Number(body.added_at)) ? Number(body.added_at) : null;
+
   await run(
     c.env,
     `UPDATE manual_holdings
      SET label = COALESCE(?, label),
-         asset_class = COALESCE(?, asset_class),
          currency = COALESCE(?, currency),
          amount = COALESCE(?, amount),
-         note = ?, updated_at = ?
+         note = ?,
+         added_at = COALESCE(?, added_at),
+         updated_at = ?
      WHERE id = ?`,
     body.label?.trim() || null,
-    body.asset_class || null,
-    body.currency?.trim().toUpperCase() || null,
+    currency,
     isFinite(Number(body.amount)) ? Number(body.amount) : null,
     body.note ?? null,
+    addedAt,
     now(),
     id,
   );

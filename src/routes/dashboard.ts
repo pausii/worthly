@@ -3,14 +3,19 @@ import type { Env, Variables } from '../types';
 import { queryAll } from '../lib/db';
 import { ok } from '../lib/response';
 import { computeValuation } from '../services/valuation';
+import { getUsdRates } from '../services/prices';
 import { syncAll } from '../services/sync';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // Ringkasan nilai semua portofolio (live, dihitung dari saldo + harga terbaru).
 app.get('/overview', async (c) => {
-  const valuation = await computeValuation(c.env);
-  return ok(c, valuation);
+  const [valuation, rates] = await Promise.all([
+    computeValuation(c.env),
+    getUsdRates(c.env, ['IDR']),
+  ]);
+  const usdPerIdr = rates['IDR'] ?? 0;
+  return ok(c, { ...valuation, idrRate: usdPerIdr > 0 ? 1 / usdPerIdr : 0 });
 });
 
 // Data chart pergerakan nilai. ?portfolio_id= (kosong = agregat semua), ?days=30

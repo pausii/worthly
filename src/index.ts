@@ -4,6 +4,7 @@ import { securityHeaders, requireAuth, requireCsrf } from './lib/auth';
 import { getSession, readSessionCookie } from './lib/session';
 import { loginHtml } from './frontend/login';
 import { appHtml } from './frontend/app';
+import { iconSvg, manifestJson, swJs } from './frontend/pwa';
 
 import authRoutes from './routes/auth';
 import portfolioRoutes from './routes/portfolios';
@@ -27,6 +28,21 @@ app.get('/', async (c) => {
 });
 
 app.get('/healthz', (c) => c.json({ ok: true }));
+
+// PWA assets
+app.get('/manifest.json', (c) => {
+  c.header('Content-Type', 'application/manifest+json');
+  return c.body(manifestJson);
+});
+app.get('/icon.svg', (c) => {
+  c.header('Content-Type', 'image/svg+xml; charset=utf-8');
+  return c.body(iconSvg);
+});
+app.get('/sw.js', (c) => {
+  c.header('Content-Type', 'application/javascript; charset=utf-8');
+  c.header('Service-Worker-Allowed', '/');
+  return c.body(swJs);
+});
 
 // --- API publik (auth) ---
 app.route('/api/auth', authRoutes);
