@@ -3,7 +3,8 @@
 // - Enkripsi kredensial: AES-GCM 256 dengan master key dari Worker Secret.
 // - Tanda tangan API exchange: HMAC-SHA256.
 
-const PBKDF2_ITERATIONS = 600_000;
+// Cloudflare Workers membatasi PBKDF2 maksimal 100.000 iterasi.
+const PBKDF2_ITERATIONS = 100_000;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -44,13 +45,24 @@ export interface PasswordHash {
   iterations: number;
 }
 
+/**
+ * Terapkan "pepper" (rahasia server) sebelum PBKDF2. Pepper = MASTER_KEY (Worker Secret).
+ * Tujuannya: walau DB bocor, hash tak bisa di-brute-force tanpa secret ini.
+ */
+async function applyPepper(password: string, pepper: string): Promise<string> {
+  if (!pepper) return password;
+  return hmacSha256Hex(pepper, password);
+}
+
 export async function hashPassword(
   password: string,
   saltB64?: string,
   iterations = PBKDF2_ITERATIONS,
+  pepper = '',
 ): Promise<PasswordHash> {
+  const input = await applyPepper(password, pepper);
   const salt = saltB64 ? b64decode(saltB64) : crypto.getRandomValues(new Uint8Array(16));
-  const baseKey = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, [
+  const baseKey = await crypto.subtle.importKey('raw', encoder.encode(input), 'PBKDF2', false, [
     'deriveBits',
   ]);
   const bits = await crypto.subtle.deriveBits(
@@ -66,8 +78,9 @@ export async function verifyPassword(
   storedHashB64: string,
   saltB64: string,
   iterations: number,
+  pepper = '',
 ): Promise<boolean> {
-  const { hash } = await hashPassword(password, saltB64, iterations);
+  const { hash } = await hashPassword(password, saltB64, iterations, pepper);
   return timingSafeEqual(hash, storedHashB64);
 }
 

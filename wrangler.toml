@@ -11,14 +11,14 @@ crons = ["*/2 * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "wallet_db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "9f363266-8f6a-438b-b4cd-139cf48435d0"
 migrations_dir = "migrations"
 
 # Cloudflare KV untuk session + rate limit + cache harga
 # (buat dulu: `npm run kv:create`, lalu tempel id di sini)
 [[kv_namespaces]]
 binding = "KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "59427ae1102c453a9e61dc34a94a29fc"
 
 [vars]
 ENVIRONMENT = "production"

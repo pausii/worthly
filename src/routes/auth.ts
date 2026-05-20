@@ -45,7 +45,7 @@ app.post('/setup', async (c) => {
   if (username.length < 3) return fail(c, 'Username minimal 3 karakter');
   if (password.length < 10) return fail(c, 'Password minimal 10 karakter');
 
-  const { hash, salt, iterations } = await hashPassword(password);
+  const { hash, salt, iterations } = await hashPassword(password, undefined, undefined, c.env.MASTER_KEY);
   await run(
     c.env,
     'INSERT INTO users (username, password_hash, password_salt, iterations, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -78,8 +78,8 @@ app.post('/login', async (c) => {
 
   // Selalu jalankan verifikasi (timing) walau user tidak ada.
   const valid = user
-    ? await verifyPassword(password, user.password_hash, user.password_salt, user.iterations)
-    : await verifyPassword(password, '', 'AAAAAAAAAAAAAAAAAAAAAA==', 600000).then(() => false);
+    ? await verifyPassword(password, user.password_hash, user.password_salt, user.iterations, c.env.MASTER_KEY)
+    : await verifyPassword(password, '', 'AAAAAAAAAAAAAAAAAAAAAA==', 100000, c.env.MASTER_KEY).then(() => false);
 
   if (!user || !valid) return fail(c, 'Username atau password salah', 401);
 
@@ -120,10 +120,10 @@ app.post('/change-password', requireAuth, requireCsrf, async (c) => {
     s.userId,
   );
   if (!user) return fail(c, 'User tidak ditemukan', 404);
-  const valid = await verifyPassword(current, user.password_hash, user.password_salt, user.iterations);
+  const valid = await verifyPassword(current, user.password_hash, user.password_salt, user.iterations, c.env.MASTER_KEY);
   if (!valid) return fail(c, 'Password saat ini salah', 401);
 
-  const { hash, salt, iterations } = await hashPassword(next);
+  const { hash, salt, iterations } = await hashPassword(next, undefined, undefined, c.env.MASTER_KEY);
   await run(
     c.env,
     'UPDATE users SET password_hash = ?, password_salt = ?, iterations = ?, updated_at = ? WHERE id = ?',
