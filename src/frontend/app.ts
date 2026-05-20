@@ -475,6 +475,16 @@ export const appHtml = `<!doctype html>
 
         async init() {
           if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+          const VIEWS = ['dashboard','portfolios','accounts','holdings','deposits','settings'];
+          const hash = window.location.hash.slice(1);
+          if (VIEWS.includes(hash)) this.view = hash;
+          window.addEventListener('hashchange', () => {
+            const h = window.location.hash.slice(1);
+            if (VIEWS.includes(h) && h !== this.view) {
+              this.view = h;
+              if (h === 'dashboard') this.$nextTick(()=>{ this.renderChart(); this.renderPieChart(); });
+            }
+          });
           const me = await this.api('GET','/auth/me');
           if (!me) return;
           this.csrf = me.data.csrf; this.username = me.data.username;
@@ -508,6 +518,7 @@ export const appHtml = `<!doctype html>
 
         go(id) {
           this.view = id; this.sidebarOpen = false;
+          window.location.hash = id;
           if (id==='dashboard') this.$nextTick(()=>{ this.renderChart(); this.renderPieChart(); });
         },
         navLabel() { const n=this.nav.find(x=>x.id===this.view); return n?n.label:''; },
