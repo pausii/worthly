@@ -1,0 +1,24 @@
+{
+  "name": "wallet-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:create": "wrangler d1 create wallet_db",
+    "kv:create": "wrangler kv namespace create KV",
+    "db:migrate:local": "wrangler d1 migrations apply wallet_db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply wallet_db --remote",
+    "db:console:local": "wrangler d1 execute wallet_db --local --command"
+  },
+  "dependencies": {
+    "hono": "^4.7.10"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250520.0",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.16.0"
+  }
+}

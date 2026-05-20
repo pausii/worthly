@@ -1,0 +1,34 @@
+name = "wallet-tracker"
+main = "src/index.ts"
+compatibility_date = "2025-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Jalankan sinkronisasi CEX/on-chain tiap 2 menit.
+[triggers]
+crons = ["*/2 * * * *"]
+
+# Cloudflare D1 (buat dulu: `npm run db:create`, lalu tempel database_id di sini)
+[[d1_databases]]
+binding = "DB"
+database_name = "wallet_db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# Cloudflare KV untuk session + rate limit + cache harga
+# (buat dulu: `npm run kv:create`, lalu tempel id di sini)
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+[vars]
+ENVIRONMENT = "production"
+# Default jadwal snapshot nilai portofolio (menit). Sync balance tetap tiap 2 menit.
+SNAPSHOT_INTERVAL_MINUTES = "30"
+
+# === SECRETS (JANGAN ditaruh di sini — set via `wrangler secret put`) ===
+# wrangler secret put MASTER_KEY          -> base64 dari 32 byte acak (kunci enkripsi kredensial)
+# wrangler secret put COINGECKO_API_KEY   -> opsional
+# Endpoint QuickNode boleh disimpan per-account (terenkripsi di D1) ATAU sebagai secret default:
+# wrangler secret put QUICKNODE_ETH_URL
+# wrangler secret put QUICKNODE_BSC_URL
+# wrangler secret put QUICKNODE_TRON_URL

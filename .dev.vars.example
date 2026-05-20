@@ -1,0 +1,17 @@
+# Salin file ini menjadi `.dev.vars` untuk pengembangan lokal (`wrangler dev`).
+# JANGAN commit file `.dev.vars` yang asli.
+
+# Kunci master enkripsi kredensial (AES-GCM 256). Wajib 32 byte di-base64.
+# Cara generate (PowerShell):
+#   [Convert]::ToBase64String((1..32 | % {Get-Random -Max 256}))
+# atau (Node):
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+MASTER_KEY="ganti-dengan-base64-32-byte-acak"
+
+# Opsional: API key CoinGecko (kalau pakai endpoint berbayar). Kosongkan kalau pakai gratis.
+COINGECKO_API_KEY=""
+
+# Opsional: endpoint default QuickNode (boleh juga diisi per-account lewat UI).
+QUICKNODE_ETH_URL=""
+QUICKNODE_BSC_URL=""
+QUICKNODE_TRON_URL=""

@@ -1,0 +1,13 @@
+node_modules/
+.wrangler/
+dist/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# Setting lokal/personal Claude Code (jangan di-commit)
+.claude/settings.local.json
