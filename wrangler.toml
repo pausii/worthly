@@ -34,3 +34,5 @@ SNAPSHOT_INTERVAL_MINUTES = "30"
 # wrangler secret put RPC_BSC_URL         -> Alchemy BNB Smart Chain
 # wrangler secret put RPC_TRON_URL        -> TronGrid (mis. https://api.trongrid.io)
 # wrangler secret put RPC_TRON_API_KEY    -> opsional, TronGrid API key (hindari rate-limit)
+# wrangler secret put BINANCE_PROXY_URL   -> HTTP CONNECT proxy bypass geo-block Binance
+#                                            format: http://user:pass@host:port (opsional)

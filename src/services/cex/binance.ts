@@ -18,15 +18,26 @@ async function signedRequest<T>(
   base: string,
   path: string,
   params: Record<string, string | number> = {},
+  relayUrl?: string,
 ): Promise<T> {
   const full = { ...params, timestamp: Date.now(), recvWindow: RECV_WINDOW };
   const query = buildQuery(full);
   const signature = await hmacSha256Hex(creds.apiSecret, query);
-  const url = `${base}${path}?${query}&signature=${signature}`;
-  const res = await fetch(url, {
-    method,
-    headers: { 'X-MBX-APIKEY': creds.apiKey, Accept: 'application/json' },
-  });
+
+  // Saat relay aktif: ganti host dengan relay, path & query tetap sama.
+  // Nginx relay forward ke Binance berdasarkan path prefix (/api/, /sapi/, /fapi/).
+  const targetBase = relayUrl ? new URL(relayUrl).origin : base;
+  const url = `${targetBase}${path}?${query}&signature=${signature}`;
+
+  const headers: Record<string, string> = { 'X-MBX-APIKEY': creds.apiKey, Accept: 'application/json' };
+  if (relayUrl) {
+    const r = new URL(relayUrl);
+    if (r.username) {
+      headers['Authorization'] = `Basic ${btoa(`${decodeURIComponent(r.username)}:${decodeURIComponent(r.password)}`)}`;
+    }
+  }
+
+  const res = await fetch(url, { method, headers });
   const text = await res.text();
   if (!res.ok) {
     throw new Error(`Binance ${path} ${res.status}: ${text.slice(0, 300)}`);
@@ -34,12 +45,14 @@ async function signedRequest<T>(
   return JSON.parse(text) as T;
 }
 
-export async function getSpotBalances(creds: CexCredentials): Promise<NormalizedBalance[]> {
+export async function getSpotBalances(creds: CexCredentials, proxyUrl?: string): Promise<NormalizedBalance[]> {
   const data = await signedRequest<{ balances: Array<{ asset: string; free: string; locked: string }> }>(
     creds,
     'GET',
     SPOT_BASE,
     '/api/v3/account',
+    {},
+    proxyUrl,
   );
   return data.balances
     .map((b) => {
@@ -50,12 +63,14 @@ export async function getSpotBalances(creds: CexCredentials): Promise<Normalized
     .filter((b) => b.total > 0);
 }
 
-export async function getFundingBalances(creds: CexCredentials): Promise<NormalizedBalance[]> {
+export async function getFundingBalances(creds: CexCredentials, proxyUrl?: string): Promise<NormalizedBalance[]> {
   const rows = await signedRequest<Array<{ asset: string; free: string; locked: string; freeze: string }>>(
     creds,
     'POST',
     SPOT_BASE,
     '/sapi/v1/asset/get-funding-asset',
+    {},
+    proxyUrl,
   );
   return (rows ?? [])
     .map((b) => {
@@ -66,13 +81,15 @@ export async function getFundingBalances(creds: CexCredentials): Promise<Normali
     .filter((b) => b.total > 0);
 }
 
-export async function getFuturesBalances(creds: CexCredentials): Promise<NormalizedBalance[]> {
+export async function getFuturesBalances(creds: CexCredentials, proxyUrl?: string): Promise<NormalizedBalance[]> {
   // USDⓈ-M futures wallet balance.
   const rows = await signedRequest<Array<{ asset: string; balance: string; availableBalance: string }>>(
     creds,
     'GET',
     FUTURES_BASE,
     '/fapi/v2/balance',
+    {},
+    proxyUrl,
   );
   return (rows ?? [])
     .map((b) => {
@@ -83,7 +100,7 @@ export async function getFuturesBalances(creds: CexCredentials): Promise<Normali
     .filter((b) => b.total > 0);
 }
 
-export async function getEarnBalances(creds: CexCredentials): Promise<NormalizedBalance[]> {
+export async function getEarnBalances(creds: CexCredentials, proxyUrl?: string): Promise<NormalizedBalance[]> {
   const out: NormalizedBalance[] = [];
   // Simple Earn — Flexible
   try {
@@ -93,6 +110,7 @@ export async function getEarnBalances(creds: CexCredentials): Promise<Normalized
       SPOT_BASE,
       '/sapi/v1/simple-earn/flexible/position',
       { size: 100, current: 1 },
+      proxyUrl,
     );
     for (const r of flex.rows ?? []) {
       const total = parseFloat(r.totalAmount);
@@ -109,6 +127,7 @@ export async function getEarnBalances(creds: CexCredentials): Promise<Normalized
       SPOT_BASE,
       '/sapi/v1/simple-earn/locked/position',
       { size: 100, current: 1 },
+      proxyUrl,
     );
     for (const r of locked.rows ?? []) {
       const total = parseFloat(r.amount);
@@ -128,12 +147,12 @@ export async function getEarnBalances(creds: CexCredentials): Promise<Normalized
   return out;
 }
 
-export async function getAllBalances(creds: CexCredentials): Promise<NormalizedBalance[]> {
+export async function getAllBalances(creds: CexCredentials, proxyUrl?: string): Promise<NormalizedBalance[]> {
   const results = await Promise.allSettled([
-    getSpotBalances(creds),
-    getFuturesBalances(creds),
-    getFundingBalances(creds),
-    getEarnBalances(creds),
+    getSpotBalances(creds, proxyUrl),
+    getFuturesBalances(creds, proxyUrl),
+    getFundingBalances(creds, proxyUrl),
+    getEarnBalances(creds, proxyUrl),
   ]);
   const out: NormalizedBalance[] = [];
   for (const r of results) if (r.status === 'fulfilled') out.push(...r.value);
@@ -189,6 +208,7 @@ function normalizeDeposit(r: BinanceDepositRow): NormalizedDeposit {
 export async function getDepositHistory(
   creds: CexCredentials,
   startTime?: number,
+  proxyUrl?: string,
 ): Promise<NormalizedDeposit[]> {
   const params: Record<string, string | number> = { limit: DEPOSIT_PAGE_LIMIT };
   if (startTime) params.startTime = startTime;
@@ -198,6 +218,7 @@ export async function getDepositHistory(
     SPOT_BASE,
     '/sapi/v1/capital/deposit/hisrec',
     params,
+    proxyUrl,
   );
   return (rows ?? []).map(normalizeDeposit);
 }
@@ -210,6 +231,7 @@ export async function getDepositHistoryRange(
   creds: CexCredentials,
   startTime: number,
   endTime: number,
+  proxyUrl?: string,
 ): Promise<NormalizedDeposit[]> {
   const out: NormalizedDeposit[] = [];
   for (let page = 0; page < MAX_PAGES_PER_WINDOW; page++) {
@@ -219,6 +241,7 @@ export async function getDepositHistoryRange(
       SPOT_BASE,
       '/sapi/v1/capital/deposit/hisrec',
       { startTime, endTime, offset: page * DEPOSIT_PAGE_LIMIT, limit: DEPOSIT_PAGE_LIMIT },
+      proxyUrl,
     );
     const batch = (rows ?? []).map(normalizeDeposit);
     out.push(...batch);

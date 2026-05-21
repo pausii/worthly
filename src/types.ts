@@ -14,6 +14,9 @@ export interface Env {
   RPC_BSC_URL?: string;
   RPC_TRON_URL?: string;
   RPC_TRON_API_KEY?: string; // opsional: TronGrid TRON-PRO-API-KEY
+  // Proxy HTTP CONNECT untuk bypass geo-block Binance (format: http://user:pass@host:port).
+  // Set via: wrangler secret put BINANCE_PROXY_URL
+  BINANCE_PROXY_URL?: string;
 }
 
 export interface SessionData {

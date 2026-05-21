@@ -15,6 +15,7 @@ import { getTronBalances } from './onchain/tron';
 import { computeValuation } from './valuation';
 import { refreshOverview } from './overview';
 import { isCooling, setCooldown } from '../lib/cooldown';
+import { addEvent } from '../lib/events';
 
 const CEX_COOLDOWN_SECONDS = 900; // 15 menit setelah 451 (hindari menghantam IP yang ke-flag)
 
@@ -123,10 +124,11 @@ export async function backfillDeposits(
   if (state.done) return state;
 
   const creds = JSON.parse(await decryptSecret(acc.enc_credentials, env.MASTER_KEY)) as CexCredentials;
+  const proxyUrl = env.BINANCE_PROXY_URL || undefined;
   for (let i = 0; i < maxWindows && !state.done; i++) {
     const end = state.cursorEnd;
     const start = Math.max(end - NINETY_DAYS_MS, BACKFILL_FLOOR);
-    const deposits = await binance.getDepositHistoryRange(creds, start, end);
+    const deposits = await binance.getDepositHistoryRange(creds, start, end, proxyUrl);
     await upsertDeposits(env, acc.id, deposits);
     state.fetched += deposits.length;
     state.cursorEnd = start - 1;
@@ -173,8 +175,11 @@ async function syncCexAccount(env: Env, acc: AccountRow): Promise<void> {
   if (!acc.enc_credentials) throw new Error('Kredensial belum diisi');
   const creds = JSON.parse(await decryptSecret(acc.enc_credentials, env.MASTER_KEY)) as CexCredentials;
   const api = acc.type === 'binance' ? binance : bybit;
+  const proxyUrl = acc.type === 'binance' ? (env.BINANCE_PROXY_URL || undefined) : undefined;
 
-  const balances = await api.getAllBalances(creds);
+  const balances = proxyUrl
+    ? await binance.getAllBalances(creds, proxyUrl)
+    : await api.getAllBalances(creds);
   await upsertBalances(env, acc.id, balances);
 
   // Deposit incremental: mulai dari cursor terakhir (default 90 hari ke belakang).
@@ -182,12 +187,21 @@ async function syncCexAccount(env: Env, acc: AccountRow): Promise<void> {
   try {
     const lastTs = parseInt((await getCursor(env, acc.id, 'deposit_ts')) ?? '0', 10);
     const startTime = lastTs > 0 ? lastTs + 1 : Date.now() - 90 * 24 * 60 * 60 * 1000;
-    const deposits = await api.getDepositHistory(creds, startTime);
+    const deposits = proxyUrl
+      ? await binance.getDepositHistory(creds, startTime, proxyUrl)
+      : await api.getDepositHistory(creds, startTime);
     await upsertDeposits(env, acc.id, deposits);
     const maxTs = deposits.reduce((m, d) => Math.max(m, d.ts), lastTs);
     if (maxTs > lastTs) await setCursor(env, acc.id, 'deposit_ts', String(maxTs));
-  } catch {
-    /* abaikan kegagalan deposit; saldo sudah tersimpan */
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await addEvent(env, {
+      level: 'warning',
+      source: acc.type,
+      account_id: acc.id,
+      message: 'Fetch deposit gagal (saldo tetap tersimpan)',
+      detail: msg.slice(0, 300),
+    });
   }
 }
 
@@ -254,7 +268,17 @@ export async function syncAccount(env: Env, acc: AccountRow): Promise<void> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // 451 = geo/flag IP. Cooldown agar tick berikutnya tak ikut menghantam IP yang ke-flag.
-    if (isCex && msg.includes('451')) await setCooldown(env, `cex:${acc.type}`, CEX_COOLDOWN_SECONDS);
+    const is451 = isCex && msg.includes('451');
+    if (is451) await setCooldown(env, `cex:${acc.type}`, CEX_COOLDOWN_SECONDS);
+    await addEvent(env, {
+      level: is451 ? 'warning' : 'error',
+      source: acc.type,
+      account_id: acc.id,
+      message: is451
+        ? `451 geo-block: ${acc.label} — cooldown ${CEX_COOLDOWN_SECONDS / 60} menit`
+        : `Sync gagal: ${acc.label}`,
+      detail: msg.slice(0, 500),
+    });
     await run(
       env,
       'UPDATE accounts SET status = ?, last_error = ?, updated_at = ? WHERE id = ?',
@@ -306,8 +330,15 @@ export async function syncAll(env: Env): Promise<{ synced: number }> {
     try {
       const st = JSON.parse(raw) as { done: boolean };
       if (!st.done) await backfillDeposits(env, acc, 3);
-    } catch {
-      /* abaikan */
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await addEvent(env, {
+        level: 'warning',
+        source: 'backfill',
+        account_id: acc.id,
+        message: `Backfill deposit gagal: ${acc.label}`,
+        detail: msg.slice(0, 300),
+      });
     }
   }
   await maybeSnapshot(env);

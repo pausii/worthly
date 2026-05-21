@@ -49,7 +49,9 @@ export const appHtml = `<!doctype html>
           class="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors"
           :class="view===item.id ? 'bg-white/15 text-white shadow-sm' : 'text-indigo-100 hover:bg-white/10 hover:text-white'">
           <span x-html="item.icon" class="shrink-0"></span>
-          <span class="truncate" x-text="item.label"></span>
+          <span class="truncate flex-1" x-text="item.label"></span>
+          <span x-show="item.id==='activity' && unreadCount>0" x-text="unreadCount > 99 ? '99+' : unreadCount"
+            class="shrink-0 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none"></span>
         </button>
       </template>
     </nav>
@@ -83,6 +85,12 @@ export const appHtml = `<!doctype html>
           </div>
           <div class="text-sm font-semibold" x-text="fmtDisplay(overview.grandTotalUsd||0)"></div>
         </div>
+        <!-- Activity / notifications bell -->
+        <button @click="go('activity')" class="relative rounded-xl p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700" title="Activity">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+          <span x-show="unreadCount>0" x-text="unreadCount > 9 ? '9+' : unreadCount"
+            class="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white leading-none"></span>
+        </button>
         <!-- Hide amounts toggle -->
         <button @click="toggleHideAmounts()" class="rounded-xl p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700" :title="hideAmounts?'Tampilkan nominal':'Sembunyikan nominal'">
           <svg x-show="!hideAmounts" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
@@ -343,6 +351,124 @@ export const appHtml = `<!doctype html>
         </div>
       </section>
 
+      <!-- ACTIVITY -->
+      <section x-show="view==='activity'" class="space-y-4">
+        <!-- Tab switcher -->
+        <div class="flex gap-2">
+          <button @click="activityTab='events'"
+            class="rounded-xl px-4 py-2 text-sm font-medium transition-colors"
+            :class="activityTab==='events' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'">
+            Events
+            <span x-show="unreadCount>0" x-text="'('+unreadCount+' unread)'" class="ml-1 text-xs opacity-75"></span>
+          </button>
+          <button @click="activityTab='queue'; loadQueue()"
+            class="rounded-xl px-4 py-2 text-sm font-medium transition-colors"
+            :class="activityTab==='queue' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'">
+            System Queue
+          </button>
+        </div>
+
+        <!-- EVENTS tab -->
+        <div x-show="activityTab==='events'" class="space-y-3">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <p class="text-xs text-slate-400 dark:text-slate-500">Log event sistem — HTTP error, sync gagal, cooldown</p>
+            <div class="flex gap-2">
+              <button @click="markAllRead()" x-show="unreadCount>0"
+                class="rounded-xl px-3 py-1.5 text-xs font-medium bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600">
+                Tandai semua dibaca
+              </button>
+              <button @click="clearEvents()" x-show="systemEvents.length>0"
+                class="rounded-xl px-3 py-1.5 text-xs font-medium bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/30">
+                Hapus semua
+              </button>
+            </div>
+          </div>
+          <div class="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-700">
+            <template x-for="e in systemEvents" :key="e.id">
+              <div class="flex items-start gap-3 px-4 py-3 transition-colors"
+                :class="!e.read_at ? 'bg-slate-50 dark:bg-slate-700/30' : ''">
+                <div class="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                  :class="e.level==='error' ? 'bg-rose-500' : e.level==='warning' ? 'bg-amber-400' : 'bg-emerald-400'"></div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                      :class="e.level==='error' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400' : e.level==='warning' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'"
+                      x-text="e.level"></span>
+                    <span class="rounded px-1.5 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-mono" x-text="e.source"></span>
+                    <span class="text-[11px] text-slate-400 dark:text-slate-500" x-text="timeAgo(e.created_at)"></span>
+                  </div>
+                  <p class="mt-1 text-sm text-slate-700 dark:text-slate-300" x-text="e.message"></p>
+                  <p x-show="e.detail" x-text="e.detail"
+                    class="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500 font-mono break-all whitespace-pre-wrap leading-relaxed"></p>
+                </div>
+              </div>
+            </template>
+            <div x-show="systemEvents.length===0" class="px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+              Belum ada event. Event akan muncul saat sync gagal atau terjadi error.
+            </div>
+          </div>
+        </div>
+
+        <!-- QUEUE tab -->
+        <div x-show="activityTab==='queue'" class="space-y-3">
+          <p class="text-xs text-slate-400 dark:text-slate-500">Status sinkronisasi dan antrian kerja sistem (cron setiap 2 menit)</p>
+
+          <!-- Snapshot info card -->
+          <div x-show="queueMeta.nextSnapshot" class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 shadow-sm flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <svg class="h-4 w-4 text-indigo-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+              <span class="text-sm font-medium">Portfolio Snapshot</span>
+              <span class="text-xs text-slate-400 dark:text-slate-500" x-text="'setiap '+queueMeta.snapshotIntervalMin+' menit'"></span>
+            </div>
+            <span class="text-xs text-slate-500 dark:text-slate-400">
+              Berikutnya: <span x-text="queueMeta.nextSnapshot < Date.now() ? 'segera' : timeAgo(queueMeta.nextSnapshot).replace(' ago','')"></span>
+            </span>
+          </div>
+
+          <!-- Account queue list -->
+          <div class="space-y-3">
+            <template x-for="acc in activityQueue" :key="acc.id">
+              <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="h-2.5 w-2.5 shrink-0 rounded-full"
+                      :class="acc.cooling ? 'bg-amber-400 animate-pulse' : acc.status==='ok' ? 'bg-emerald-400' : acc.status==='error' ? 'bg-rose-500' : 'bg-slate-300 dark:bg-slate-600'"></span>
+                    <span class="font-medium text-sm truncate" x-text="acc.label"></span>
+                    <span class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400" x-text="acc.type"></span>
+                  </div>
+                  <div class="text-xs text-slate-400 dark:text-slate-500 shrink-0">
+                    <span x-show="acc.cooling" class="font-medium text-amber-600 dark:text-amber-400">Cooldown aktif</span>
+                    <span x-show="!acc.cooling && acc.last_synced_at">Synced <span x-text="timeAgo(acc.last_synced_at)"></span></span>
+                    <span x-show="!acc.cooling && !acc.last_synced_at" class="italic">Belum sync</span>
+                  </div>
+                </div>
+                <div x-show="acc.last_error"
+                  x-text="acc.last_error"
+                  class="mt-2 rounded-lg bg-rose-50 dark:bg-rose-900/20 px-2 py-1.5 text-[11px] text-rose-600 dark:text-rose-400 font-mono break-all"></div>
+                <!-- Backfill progress (hanya Binance) -->
+                <div x-show="acc.backfill" class="mt-3 space-y-1">
+                  <div class="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span class="font-medium">Backfill deposit</span>
+                    <span x-text="acc.backfill ? (acc.backfill.done ? 'Selesai — ' : 'Berjalan — ')+acc.backfill.fetched+' transaksi' : ''"></span>
+                  </div>
+                  <div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+                    <div class="h-full rounded-full bg-indigo-500 transition-all duration-500"
+                      :style="'width:'+backfillPct(acc.backfill)+'%'"></div>
+                  </div>
+                  <div class="text-[10px] text-slate-400 dark:text-slate-500">
+                    Cursor: <span x-text="acc.backfill ? fmtDateOnly(acc.backfill.cursorEnd) : '—'"></span>
+                    <span x-show="acc.backfill && !acc.backfill.done" class="ml-2 opacity-70">(dilanjutkan otomatis tiap 2 menit)</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <div x-show="activityQueue.length===0" class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 text-center text-sm text-slate-400 dark:text-slate-500">
+              Tidak ada account aktif.
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- SETTINGS -->
       <section x-show="view==='settings'" class="max-w-md space-y-4">
         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
@@ -501,6 +627,7 @@ export const appHtml = `<!doctype html>
       return {
         view: 'dashboard', sidebarOpen: false, csrf: '', username: '',
         syncing: false, toast: '', modal: null,
+        systemEvents: [], unreadCount: 0, activityQueue: [], queueMeta: {}, activityTab: 'events',
         darkMode: document.documentElement.classList.contains('dark'),
         displayCurrency: localStorage.getItem('currency') || 'USD',
         hideAmounts: localStorage.getItem('hideAmounts')==='1',
@@ -511,6 +638,7 @@ export const appHtml = `<!doctype html>
           { id:'accounts', label:'Accounts', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2m-3-7h6m-3-3v6\\'/></svg>' },
           { id:'holdings', label:'Manual Holdings', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1\\'/></svg>' },
           { id:'deposits', label:'Deposits', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4\\'/></svg>' },
+          { id:'activity', label:'Activity', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9\\'/></svg>' },
           { id:'settings', label:'Settings', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z\\'/><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M15 12a3 3 0 11-6 0 3 3 0 016 0z\\'/></svg>' }
         ],
         overview: { portfolios: [], grandTotalUsd: 0 },
@@ -540,7 +668,7 @@ export const appHtml = `<!doctype html>
 
         async init() {
           if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
-          const VIEWS = ['dashboard','portfolios','accounts','holdings','deposits','settings'];
+          const VIEWS = ['dashboard','portfolios','accounts','holdings','deposits','activity','settings'];
           const hash = window.location.hash.slice(1);
           if (VIEWS.includes(hash)) this.view = hash;
           window.addEventListener('hashchange', () => {
@@ -554,7 +682,7 @@ export const appHtml = `<!doctype html>
           if (!me) return;
           this.csrf = me.data.csrf; this.username = me.data.username;
           await this.loadPortfolios();
-          await Promise.all([this.loadOverview(), this.loadAccounts(), this.loadHoldings(), this.loadDeposits()]);
+          await Promise.all([this.loadOverview(), this.loadAccounts(), this.loadHoldings(), this.loadDeposits(), this.loadSystemEvents()]);
           await this.loadHistory();
         },
 
@@ -651,6 +779,32 @@ export const appHtml = `<!doctype html>
         async loadAccounts() { const r=await this.api('GET','/accounts'); if(r&&r.ok) this.accounts=r.data; },
         async loadHoldings() { const r=await this.api('GET','/holdings'); if(r&&r.ok) this.holdings=r.data; },
         async loadDeposits() { const r=await this.api('GET','/dashboard/deposits'); if(r&&r.ok) this.deposits=r.data; },
+        async loadSystemEvents() {
+          const r = await this.api('GET','/system/events');
+          if (r&&r.ok) { this.systemEvents=r.data.events; this.unreadCount=r.data.unreadCount; }
+        },
+        async loadQueue() {
+          const r = await this.api('GET','/system/queue');
+          if (r&&r.ok) { this.activityQueue=r.data.accounts; this.queueMeta={ nextSnapshot:r.data.nextSnapshot, snapshotIntervalMin:r.data.snapshotIntervalMin }; }
+        },
+        async markAllRead() {
+          await this.api('POST','/system/events/read-all', {});
+          await this.loadSystemEvents();
+        },
+        async clearEvents() {
+          if (!confirm('Hapus semua event? Tindakan ini tidak bisa dibatalkan.')) return;
+          await this.api('DELETE','/system/events');
+          await this.loadSystemEvents();
+        },
+        backfillPct(bf) {
+          if (!bf) return 0;
+          if (bf.done) return 100;
+          const FLOOR = 1498867200000;
+          const total = Date.now() - FLOOR;
+          const remaining = Number(bf.cursorEnd) - FLOOR;
+          if (total <= 0) return 0;
+          return Math.max(0, Math.min(100, Math.round((1 - remaining / total) * 100)));
+        },
         async loadHistory() {
           const q = '/dashboard/history?days='+this.historyRange+(this.historyPortfolio?('&portfolio_id='+this.historyPortfolio):'');
           const r = await this.api('GET', q);
