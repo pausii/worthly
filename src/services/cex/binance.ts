@@ -137,10 +137,13 @@ export async function getAllBalances(creds: CexCredentials): Promise<NormalizedB
   ]);
   const out: NormalizedBalance[] = [];
   for (const r of results) if (r.status === 'fulfilled') out.push(...r.value);
-  // Lempar error hanya bila SEMUA gagal (kemungkinan kredensial salah).
-  if (out.length === 0 && results.every((r) => r.status === 'rejected')) {
+  // Lempar error bila hasil kosong PADAHAL ada endpoint yang gagal (mis. 451 geo / rate-limit).
+  // Tanpa ini, hasil [] akan menghapus saldo lama lewat upsert (DELETE-then-insert). Hanya
+  // anggap "wallet benar-benar kosong" jika SEMUA endpoint sukses tapi memang tak ada saldo.
+  const anyRejected = results.some((r) => r.status === 'rejected');
+  if (out.length === 0 && anyRejected) {
     const first = results.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
-    throw new Error(first?.reason?.message ?? 'Semua endpoint Binance gagal');
+    throw new Error(first?.reason?.message ?? 'Sebagian/seluruh endpoint Binance gagal');
   }
   // Hindari double-count: posisi Simple Earn muncul lagi di spot sebagai "LD"+aset
   // (token Flexible Savings). Buang entri spot LDx bila underlying-nya sudah ada di earn.

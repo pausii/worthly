@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
 import { now, queryAll, queryOne, run } from '../lib/db';
 import { ok, fail } from '../lib/response';
+import { refreshOverview } from '../services/overview';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -56,6 +57,7 @@ app.post('/', async (c) => {
     now(),
     now(),
   );
+  await refreshOverview(c.env).catch(() => undefined);
   return ok(c, { id: res.meta.last_row_id }, 201);
 });
 
@@ -94,12 +96,14 @@ app.put('/:id', async (c) => {
     now(),
     id,
   );
+  await refreshOverview(c.env).catch(() => undefined);
   return ok(c, { updated: true });
 });
 
 app.delete('/:id', async (c) => {
   const id = Number(c.req.param('id'));
   await run(c.env, 'DELETE FROM manual_holdings WHERE id = ?', id);
+  await refreshOverview(c.env).catch(() => undefined);
   return ok(c, { deleted: true });
 });
 

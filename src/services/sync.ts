@@ -13,6 +13,7 @@ import * as bybit from './cex/bybit';
 import { getEvmBalances, getEvmAutoBalances } from './onchain/evm';
 import { getTronBalances } from './onchain/tron';
 import { computeValuation } from './valuation';
+import { refreshOverview } from './overview';
 
 interface AccountRow {
   id: number;
@@ -174,12 +175,17 @@ async function syncCexAccount(env: Env, acc: AccountRow): Promise<void> {
   await upsertBalances(env, acc.id, balances);
 
   // Deposit incremental: mulai dari cursor terakhir (default 90 hari ke belakang).
-  const lastTs = parseInt((await getCursor(env, acc.id, 'deposit_ts')) ?? '0', 10);
-  const startTime = lastTs > 0 ? lastTs + 1 : Date.now() - 90 * 24 * 60 * 60 * 1000;
-  const deposits = await api.getDepositHistory(creds, startTime);
-  await upsertDeposits(env, acc.id, deposits);
-  const maxTs = deposits.reduce((m, d) => Math.max(m, d.ts), lastTs);
-  if (maxTs > lastTs) await setCursor(env, acc.id, 'deposit_ts', String(maxTs));
+  // Kegagalan di sini (mis. 451 geo) TIDAK boleh menggagalkan sync saldo — abaikan & coba lagi.
+  try {
+    const lastTs = parseInt((await getCursor(env, acc.id, 'deposit_ts')) ?? '0', 10);
+    const startTime = lastTs > 0 ? lastTs + 1 : Date.now() - 90 * 24 * 60 * 60 * 1000;
+    const deposits = await api.getDepositHistory(creds, startTime);
+    await upsertDeposits(env, acc.id, deposits);
+    const maxTs = deposits.reduce((m, d) => Math.max(m, d.ts), lastTs);
+    if (maxTs > lastTs) await setCursor(env, acc.id, 'deposit_ts', String(maxTs));
+  } catch {
+    /* abaikan kegagalan deposit; saldo sudah tersimpan */
+  }
 }
 
 async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
@@ -296,6 +302,8 @@ export async function syncAll(env: Env): Promise<{ synced: number }> {
     }
   }
   await maybeSnapshot(env);
+  // Hitung & simpan overview ke DB agar UI cukup membaca dari sana (bukan hitung live).
+  await refreshOverview(env).catch(() => undefined);
   return { synced: accounts.length };
 }
 

@@ -4,6 +4,7 @@ import { now, queryAll, queryOne, run } from '../lib/db';
 import { encryptSecret } from '../lib/crypto';
 import { ok, fail } from '../lib/response';
 import { syncOne, startDepositBackfill, runDepositBackfill } from '../services/sync';
+import { refreshOverview } from '../services/overview';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -189,6 +190,7 @@ app.post('/:id/sync', async (c) => {
   const id = Number(c.req.param('id'));
   const found = await syncOne(c.env, id);
   if (!found) return fail(c, 'Account tidak ditemukan', 404);
+  await refreshOverview(c.env).catch(() => undefined);
   const row = await queryOne<AccountRow>(c.env, 'SELECT * FROM accounts WHERE id = ?', id);
   return ok(c, row ? publicView(row) : { synced: true });
 });
