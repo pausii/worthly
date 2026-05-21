@@ -87,7 +87,7 @@ app.post('/', async (c) => {
             decimals: Number(t.decimals) || 18,
           }))
       : [];
-    config = JSON.stringify({ address, trackNative: body.trackNative !== false, tokens });
+    config = JSON.stringify({ address, trackNative: body.trackNative !== false, tokens, autoDetect: body.autoDetect === true });
     const rpcUrl = (body.rpcUrl ?? '').trim();
     if (rpcUrl) encCredentials = await encryptSecret(JSON.stringify({ rpcUrl }), c.env.MASTER_KEY);
   }
@@ -133,7 +133,8 @@ app.put('/:id', async (c) => {
               decimals: Number(t.decimals) || 18,
             }))
         : prev.tokens ?? [];
-    config = JSON.stringify({ address, trackNative, tokens });
+    const autoDetect = body.autoDetect !== undefined ? body.autoDetect === true : prev.autoDetect === true;
+    config = JSON.stringify({ address, trackNative, tokens, autoDetect });
     if (body.rpcUrl) encCredentials = await encryptSecret(JSON.stringify({ rpcUrl: String(body.rpcUrl).trim() }), c.env.MASTER_KEY);
   } else {
     // Rotasi kredensial CEX hanya bila keduanya dikirim.

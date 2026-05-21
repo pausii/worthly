@@ -11,6 +11,7 @@ import portfolioRoutes from './routes/portfolios';
 import accountRoutes from './routes/accounts';
 import holdingRoutes from './routes/holdings';
 import dashboardRoutes from './routes/dashboard';
+import exportRoutes from './routes/export';
 import { syncAll } from './services/sync';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -54,6 +55,7 @@ api.route('/portfolios', portfolioRoutes);
 api.route('/accounts', accountRoutes);
 api.route('/holdings', holdingRoutes);
 api.route('/dashboard', dashboardRoutes);
+api.route('/export', exportRoutes);
 app.route('/api', api);
 
 app.notFound((c) => {

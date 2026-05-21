@@ -107,6 +107,9 @@ export const appHtml = `<!doctype html>
             <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Total Portfolio</div>
             <div class="mt-1 text-2xl font-semibold" x-text="fmtDisplay(overview.grandTotalUsd||0)"></div>
             <div x-show="displayCurrency==='IDR'" class="mt-0.5 text-xs text-slate-400 dark:text-slate-500" x-text="fmtUsd(overview.grandTotalUsd||0)"></div>
+            <div x-show="overview.grandChangePct!==null&&overview.grandChangePct!==undefined" class="mt-1 text-xs font-medium" :class="pctClass(overview.grandChangePct)">
+              <span x-text="fmtPct(overview.grandChangePct,true)"></span> <span class="font-normal text-slate-400 dark:text-slate-500">24h</span>
+            </div>
           </div>
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
             <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Groups</div>
@@ -128,7 +131,16 @@ export const appHtml = `<!doctype html>
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm lg:col-span-2">
             <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 class="text-sm font-semibold">Value History</h3>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-sm font-semibold">Value History</h3>
+                  <template x-if="historyChange()">
+                    <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                      :class="historyChange().up ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400'">
+                      <span x-text="(historyChange().up?'▲ +':'▼ ')+historyChange().pct.toFixed(2)+'%'"></span>
+                      <span class="opacity-60" x-text="historyRange+'d'"></span>
+                    </span>
+                  </template>
+                </div>
                 <p class="text-xs text-slate-400 dark:text-slate-500">From periodic snapshots</p>
               </div>
               <div class="flex items-center gap-2">
@@ -170,6 +182,7 @@ export const appHtml = `<!doctype html>
                 <div class="text-right">
                   <div class="text-lg font-semibold" x-text="fmtDisplay(p.totalUsd)"></div>
                   <div x-show="displayCurrency==='IDR'" class="text-xs text-slate-400 dark:text-slate-500" x-text="fmtUsd(p.totalUsd)"></div>
+                  <div x-show="p.change24hPct!==null&&p.change24hPct!==undefined" class="text-xs font-medium" :class="pctClass(p.change24hPct)" x-text="fmtPct(p.change24hPct,true)+' 24h'"></div>
                 </div>
               </div>
               <div class="space-y-1.5">
@@ -182,7 +195,10 @@ export const appHtml = `<!doctype html>
                       <span class="font-medium" x-text="a.asset"></span>
                       <span class="text-slate-400 dark:text-slate-500" x-text="fmtNum(a.amount)"></span>
                     </div>
-                    <span class="text-slate-600 dark:text-slate-300" x-text="fmtDisplay(a.usd)"></span>
+                    <div class="text-right">
+                      <div class="text-slate-600 dark:text-slate-300" x-text="fmtDisplay(a.usd)"></div>
+                      <div x-show="assetChg(a.asset)!==null" class="text-[10px] font-medium" :class="pctClass(assetChg(a.asset))" x-text="fmtPct(assetChg(a.asset),false)"></div>
+                    </div>
                   </div>
                 </template>
                 <p x-show="p.assets.length===0" class="text-xs text-slate-400 dark:text-slate-500">No assets yet.</p>
@@ -322,6 +338,15 @@ export const appHtml = `<!doctype html>
             <button class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Save</button>
           </form>
         </div>
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+          <h3 class="mb-1 text-sm font-semibold">Export Data (CSV)</h3>
+          <p class="mb-4 text-xs text-slate-400 dark:text-slate-500">Unduh data sebagai CSV (UTF-8, kompatibel Excel).</p>
+          <div class="flex flex-wrap gap-2">
+            <button @click="exportCsv('balances')" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Balances</button>
+            <button @click="exportCsv('holdings')" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Manual Holdings</button>
+            <button @click="exportCsv('snapshots')" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Snapshots</button>
+          </div>
+        </div>
       </section>
     </main>
   </div>
@@ -427,10 +452,20 @@ export const appHtml = `<!doctype html>
               <input type="checkbox" x-model="ac.trackNative" class="h-4 w-4 rounded accent-indigo-600" />
               <span x-text="nativeSymbol()+' (native coin)'"></span>
             </label>
-            <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-              <input type="checkbox" x-model="ac.trackUsdt" class="h-4 w-4 rounded accent-indigo-600" />
-              USDT
-            </label>
+            <div class="flex flex-wrap gap-x-5 gap-y-2">
+              <template x-for="t in (TOKEN_PRESETS[ac.type]||[])" :key="t.symbol">
+                <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <input type="checkbox" x-model="ac.tokens" :value="t.symbol" class="h-4 w-4 rounded accent-indigo-600" />
+                  <span x-text="t.symbol"></span>
+                </label>
+              </template>
+            </div>
+            <template x-if="ac.type==='eth' || ac.type==='bsc'">
+              <label class="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer border-t border-slate-200 dark:border-slate-600 pt-3">
+                <input type="checkbox" x-model="ac.autoDetect" class="mt-0.5 h-4 w-4 rounded accent-indigo-600" />
+                <span>Auto-deteksi semua token <span class="text-slate-400 dark:text-slate-500">(ERC-20/BEP-20 non-zero, via Alchemy)</span></span>
+              </label>
+            </template>
           </div>
         </template>
         <p x-show="ac.error" x-text="ac.error" class="rounded-lg bg-rose-50 dark:bg-rose-900/30 px-3 py-2 text-sm text-rose-600 dark:text-rose-400"></p>
@@ -465,12 +500,24 @@ export const appHtml = `<!doctype html>
         history: [], historyRange: 30, historyPortfolio: '', chart: null, pieChart: null,
         pf: { id:null, name:'', description:'' },
         hd: { id:null, portfolio_id:'', label:'', currency:'USD', amount:null, note:'', added_at:'' },
-        ac: { id:null, type:'binance', portfolio_id:'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, trackUsdt:false, error:'' },
+        ac: { id:null, type:'binance', portfolio_id:'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, error:'' },
         pw: { current:'', next:'' },
-        USDT_INFO: {
-          eth:{symbol:'USDT',contract:'0xdAC17F958D2ee523a2206206994597C13D831ec7',decimals:6},
-          bsc:{symbol:'USDT',contract:'0x55d398326f99059fF775485246999027B3197955',decimals:18},
-          tron:{symbol:'USDT',contract:'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',decimals:6}
+        // Preset token per jaringan. Simbol disimpan sesuai harga (BTC/ETH), bukan nama on-chain (BTCB).
+        TOKEN_PRESETS: {
+          eth:[
+            {symbol:'USDT',contract:'0xdAC17F958D2ee523a2206206994597C13D831ec7',decimals:6},
+            {symbol:'BTC',contract:'0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',decimals:8}
+          ],
+          bsc:[
+            {symbol:'USDT',contract:'0x55d398326f99059fF775485246999027B3197955',decimals:18},
+            {symbol:'BTC',contract:'0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c',decimals:18},
+            {symbol:'ETH',contract:'0x2170Ed0880ac9A755fd29B2688956BD959F933F8',decimals:18}
+          ],
+          tron:[
+            {symbol:'USDT',contract:'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',decimals:6},
+            {symbol:'BTC',contract:'TN3W4H6rK2ce4vX9YnFQHwKENnHjoxb3m9',decimals:8},
+            {symbol:'ETH',contract:'THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF',decimals:18}
+          ]
         },
 
         async init() {
@@ -525,6 +572,34 @@ export const appHtml = `<!doctype html>
         portfolioName(id) { const p=this.portfolios.find(x=>x.id===id); return p?p.name:'—'; },
         flash(msg) { this.toast = msg; setTimeout(()=>{ this.toast=''; }, 3000); },
         hasPieData() { return this.overview.portfolios.some(p=>p.assets.length>0); },
+        historyChange() {
+          const h=this.history; if(!h||h.length<2) return null;
+          const first=Number(h[0].total_usd)||0, last=Number(h[h.length-1].total_usd)||0;
+          if(first===0) return null;
+          const abs=last-first; return { pct:(abs/first)*100, abs, up:abs>=0 };
+        },
+        fmtAxis(v) {
+          const n=Number(v)||0, a=Math.abs(n);
+          const t=(x)=>{ const s=x.toFixed(1); return s.endsWith('.0')?s.slice(0,-2):s; };
+          if (this.displayCurrency==='IDR') {
+            if(a>=1e12) return 'Rp '+t(n/1e12)+'T';
+            if(a>=1e9) return 'Rp '+t(n/1e9)+'M';
+            if(a>=1e6) return 'Rp '+t(n/1e6)+'jt';
+            if(a>=1e3) return 'Rp '+Math.round(n/1e3)+'rb';
+            return 'Rp '+Math.round(n);
+          }
+          if(a>=1e9) return '$'+t(n/1e9)+'B';
+          if(a>=1e6) return '$'+t(n/1e6)+'M';
+          if(a>=1e3) return '$'+t(n/1e3)+'k';
+          return '$'+n.toFixed(0);
+        },
+        pctClass(p) { return (Number(p)||0)>=0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'; },
+        fmtPct(p, withArrow) {
+          const v=Number(p); if(!isFinite(v)) return '';
+          const arrow = withArrow ? (v>=0?'▲ ':'▼ ') : '';
+          return arrow+(v>=0?'+':'')+v.toFixed(2)+'%';
+        },
+        assetChg(sym) { const m=this.overview.assetChange; return (m && m[sym]!==undefined) ? m[sym] : null; },
 
         fmtUsd(n) { return '$'+(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); },
         fmtNum(n) { const v=Number(n)||0; return v.toLocaleString('en-US',{maximumFractionDigits:8}); },
@@ -562,24 +637,39 @@ export const appHtml = `<!doctype html>
           if (wrap.clientWidth === 0) { setTimeout(()=>this.renderChart(), 100); return; }
           const dark = this.darkMode;
           const textColor = dark ? '#94a3b8' : '#64748b';
-          const gridColor = dark ? '#334155' : '#e2e8f0';
+          const gridColor = dark ? 'rgba(148,163,184,0.14)' : 'rgba(100,116,139,0.14)';
           const currency = this.displayCurrency;
           const idrMult = currency === 'IDR' ? (this.idrRate||0) : 1;
-          const labels = this.history.map(h=>new Date(Number(h.captured_at)).toLocaleDateString('en-US',{day:'2-digit',month:'short'}));
-          const data = this.history.map(h=>Number(h.total_usd)*idrMult);
+          let labels = this.history.map(h=>new Date(Number(h.captured_at)).toLocaleDateString('en-US',{day:'2-digit',month:'short'}));
+          let data = this.history.map(h=>Number(h.total_usd)*idrMult);
+          // Downsample agar garis halus & ringan untuk rentang panjang.
+          const MAX=150;
+          if (data.length>MAX) {
+            const step=(data.length-1)/(MAX-1), nl=[], nd=[];
+            for (let i=0;i<MAX;i++){ const idx=Math.round(i*step); nl.push(labels[idx]); nd.push(data[idx]); }
+            labels=nl; data=nd;
+          }
           if (this.chart) { this.chart.destroy(); this.chart = null; }
           wrap.innerHTML = '';
           const el = document.createElement('canvas');
           wrap.appendChild(el);
+          const g = el.getContext('2d').createLinearGradient(0,0,0,wrap.clientHeight||220);
+          g.addColorStop(0,'rgba(99,102,241,0.35)'); g.addColorStop(1,'rgba(99,102,241,0)');
+          const self = this;
           this.chart = new Chart(el, {
             type:'line',
-            data:{ labels, datasets:[{ label:currency, data, borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.12)', fill:true, tension:0.3, pointRadius:2 }] },
+            data:{ labels, datasets:[{ label:currency, data, borderColor:'#6366f1', backgroundColor:g, fill:true, tension:0.35, borderWidth:2, pointRadius:0, pointHoverRadius:5, pointHoverBackgroundColor:'#6366f1', pointHoverBorderColor:dark?'#1e293b':'#fff', pointHoverBorderWidth:2 }] },
             options:{
               animation:false, responsive:true, maintainAspectRatio:false,
-              plugins:{ legend:{ display:false } },
+              interaction:{ mode:'index', intersect:false },
+              plugins:{
+                legend:{ display:false },
+                tooltip:{ backgroundColor:dark?'#0f172a':'#ffffff', titleColor:textColor, bodyColor:dark?'#e2e8f0':'#0f172a', borderColor:gridColor, borderWidth:1, padding:10, displayColors:false,
+                  callbacks:{ label:(c)=> currency==='IDR' ? 'Rp '+Math.round(c.parsed.y).toLocaleString('en-US') : '$'+c.parsed.y.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) } }
+              },
               scales:{
-                y:{ ticks:{ color:textColor, callback:(v)=>{ if(currency==='IDR') return 'Rp '+Math.round(Number(v)).toLocaleString('en-US'); return '$'+Number(v).toLocaleString('en-US'); } }, grid:{ color:gridColor } },
-                x:{ ticks:{ color:textColor }, grid:{ color:gridColor } }
+                y:{ ticks:{ color:textColor, maxTicksLimit:5, callback:(v)=>self.fmtAxis(v) }, grid:{ color:gridColor }, border:{ display:false } },
+                x:{ ticks:{ color:textColor, maxTicksLimit:7, autoSkip:true, maxRotation:0 }, grid:{ display:false }, border:{ display:false } }
               }
             }
           });
@@ -606,12 +696,29 @@ export const appHtml = `<!doctype html>
           const textColor = dark ? '#94a3b8' : '#64748b';
           const currency = this.displayCurrency;
           const idrRate = this.idrRate;
+          const self = this;
+          const centerText = {
+            id:'centerText',
+            afterDraw(chart){
+              const {ctx, chartArea}=chart; if(!chartArea) return;
+              const cx=(chartArea.left+chartArea.right)/2, cy=(chartArea.top+chartArea.bottom)/2;
+              const sum=chart.data.datasets[0].data.reduce((s,v)=>s+v,0);
+              const disp=currency==='IDR'? sum*(idrRate||0) : sum;
+              ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
+              ctx.fillStyle=textColor; ctx.font='10px ui-sans-serif,system-ui,sans-serif';
+              ctx.fillText('Total', cx, cy-9);
+              ctx.fillStyle=dark?'#e2e8f0':'#0f172a'; ctx.font='600 15px ui-sans-serif,system-ui,sans-serif';
+              ctx.fillText(self.fmtAxis(disp), cx, cy+8);
+              ctx.restore();
+            }
+          };
           wrap.innerHTML = '';
           const el = document.createElement('canvas');
           wrap.appendChild(el);
           this.pieChart = new Chart(el, {
             type:'doughnut',
-            data:{ labels, datasets:[{ data, backgroundColor:COLORS.slice(0,labels.length), borderWidth:2, borderColor:dark?'#1e293b':'#ffffff' }] },
+            plugins:[centerText],
+            data:{ labels, datasets:[{ data, backgroundColor:COLORS.slice(0,labels.length), borderWidth:2, borderColor:dark?'#1e293b':'#ffffff', borderRadius:3, hoverOffset:6 }] },
             options:{
               animation:false, responsive:true, maintainAspectRatio:false, cutout:'62%',
               plugins:{
@@ -670,11 +777,11 @@ export const appHtml = `<!doctype html>
         openAccountModal(a) {
           if (a) {
             const cfg = a.config || {};
-            const usdtAddr = (this.USDT_INFO[a.type]||{}).contract||'';
-            const trackUsdt = usdtAddr ? (cfg.tokens||[]).some(t=>t.contract.toLowerCase()===usdtAddr.toLowerCase()) : false;
-            this.ac = { id:a.id, type:a.type, portfolio_id:a.portfolio_id, label:a.label, apiKey:'', apiSecret:'', address:cfg.address||'', rpcUrl:'', trackNative:cfg.trackNative!==false, trackUsdt, error:'' };
+            const presets = this.TOKEN_PRESETS[a.type]||[];
+            const tokens = presets.filter(t=>(cfg.tokens||[]).some(ct=>(ct.contract||'').toLowerCase()===t.contract.toLowerCase())).map(t=>t.symbol);
+            this.ac = { id:a.id, type:a.type, portfolio_id:a.portfolio_id, label:a.label, apiKey:'', apiSecret:'', address:cfg.address||'', rpcUrl:'', trackNative:cfg.trackNative!==false, tokens, autoDetect:cfg.autoDetect===true, error:'' };
           } else {
-            this.ac = { id:null, type:'binance', portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, trackUsdt:false, error:'' };
+            this.ac = { id:null, type:'binance', portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, error:'' };
           }
           this.modal='account';
         },
@@ -684,8 +791,9 @@ export const appHtml = `<!doctype html>
           if (this.ac.type==='binance'||this.ac.type==='bybit') { if(this.ac.apiKey) body.apiKey=this.ac.apiKey; if(this.ac.apiSecret) body.apiSecret=this.ac.apiSecret; }
           else {
             body.address=this.ac.address; body.trackNative=this.ac.trackNative;
-            const uInfo = this.USDT_INFO[this.ac.type];
-            body.tokens = (this.ac.trackUsdt && uInfo) ? [uInfo] : [];
+            body.autoDetect=this.ac.autoDetect;
+            const presets = this.TOKEN_PRESETS[this.ac.type]||[];
+            body.tokens = presets.filter(t=>this.ac.tokens.includes(t.symbol));
             if (this.ac.rpcUrl) body.rpcUrl=this.ac.rpcUrl;
           }
           const r = this.ac.id ? await this.api('PUT','/accounts/'+this.ac.id, body) : await this.api('POST','/accounts', body);
@@ -697,6 +805,16 @@ export const appHtml = `<!doctype html>
           if (this.pw.next.length<10) { this.flash('New password must be at least 10 characters'); return; }
           const r=await this.api('POST','/auth/change-password', { current:this.pw.current, next:this.pw.next });
           if (r&&r.ok) { this.pw={current:'',next:''}; this.flash('Password changed successfully'); } else if(r) this.flash(r.error);
+        },
+        async exportCsv(type) {
+          const res = await fetch('/api/export/'+type+'.csv');
+          if (res.status===401) { location.href='/login'; return; }
+          if (!res.ok) { this.flash('Export gagal'); return; }
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href=url; a.download=type+'.csv';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(()=>URL.revokeObjectURL(url), 1000);
         },
         async logout() { await this.api('POST','/auth/logout', {}); location.href='/login'; }
       };

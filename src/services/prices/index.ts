@@ -51,7 +51,7 @@ export async function getUsdRates(env: Env, assetsRaw: string[]): Promise<Record
 
   // 2) Fetch yang belum tersedia.
   const fetched: Record<string, number> = {};
-  if (needCrypto.length) Object.assign(fetched, await fetchCryptoUsd(needCrypto));
+  if (needCrypto.length) Object.assign(fetched, await fetchCryptoUsd(env, needCrypto));
   if (needFiat.length) Object.assign(fetched, await fetchFiatUsd(needFiat));
 
   // 3) Simpan ke cache + isi hasil. Kalau gagal fetch, fallback ke cache lama bila ada.
@@ -78,27 +78,82 @@ export async function getUsdRates(env: Env, assetsRaw: string[]): Promise<Record
   return result;
 }
 
-/** Harga crypto via ticker publik Binance (anggap USDT ~= USD). */
-async function fetchCryptoUsd(assets: string[]): Promise<Record<string, number>> {
-  const out: Record<string, number> = {};
-  const symbols = assets.map((a) => `${a}USDT`);
+/**
+ * Map seluruh harga ticker Binance (symbol -> price), di-cache di KV ~60 dtk.
+ * Pakai endpoint TANPA params: satu simbol tak-valid (mis. `LD*` Flexible Savings,
+ * atau token belum listing) membuat batch `?symbols=[...]` balas 400 dan menggagalkan
+ * SEMUA harga. Ambil semua lalu lookup lokal jauh lebih tahan-banting.
+ */
+async function getBinanceTickerMap(env: Env): Promise<Record<string, number>> {
+  const KEY = 'binance:tickers';
+  let cached: { ts: number; map: Record<string, number> } | null = null;
   try {
-    const url = `https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(
+    cached = (await env.KV.get(KEY, 'json')) as { ts: number; map: Record<string, number> } | null;
+    if (cached && Date.now() - cached.ts < 60_000) return cached.map;
+    const res = await fetch('https://api.binance.com/api/v3/ticker/price', {
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const rows = (await res.json()) as Array<{ symbol: string; price: string }>;
+      const map: Record<string, number> = {};
+      for (const r of rows) {
+        const p = parseFloat(r.price);
+        if (isFinite(p) && p > 0) map[r.symbol] = p;
+      }
+      await env.KV.put(KEY, JSON.stringify({ ts: Date.now(), map }), { expirationTtl: 120 });
+      return map;
+    }
+  } catch {
+    // diamkan
+  }
+  return cached?.map ?? {};
+}
+
+/** Harga crypto -> USD (anggap USDT ~= USD), via map ticker Binance. */
+async function fetchCryptoUsd(env: Env, assets: string[]): Promise<Record<string, number>> {
+  const map = await getBinanceTickerMap(env);
+  const out: Record<string, number> = {};
+  for (const a of assets) {
+    const p = map[a.toUpperCase() + 'USDT'];
+    if (typeof p === 'number' && p > 0) out[a.toUpperCase()] = p;
+  }
+  return out;
+}
+
+/**
+ * Persentase perubahan harga 24 jam per aset crypto (Binance `/ticker/24hr`).
+ * Hanya minta simbol yang valid (ada di map ticker) agar batch tak kena 400.
+ * Hasil di-cache & di-merge di KV ~60 dtk (key stabil).
+ */
+export async function get24hChangePct(env: Env, assetsRaw: string[]): Promise<Record<string, number>> {
+  const map = await getBinanceTickerMap(env);
+  const assets = Array.from(new Set(assetsRaw.map((a) => a.toUpperCase()))).filter(
+    (a) => classifyAsset(a) === 'crypto' && map[a + 'USDT'] !== undefined,
+  );
+  const KEY = 'binance:chg24';
+  let store: { ts: number; chg: Record<string, number> } | null = null;
+  try {
+    store = (await env.KV.get(KEY, 'json')) as { ts: number; chg: Record<string, number> } | null;
+    if (store && Date.now() - store.ts < 60_000) return store.chg;
+    if (!assets.length) return store?.chg ?? {};
+    const chg: Record<string, number> = { ...(store?.chg ?? {}) };
+    const symbols = assets.map((a) => a + 'USDT');
+    const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(
       JSON.stringify(symbols),
     )}`;
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
     if (res.ok) {
-      const rows = (await res.json()) as Array<{ symbol: string; price: string }>;
-      for (const row of rows) {
-        const asset = row.symbol.replace(/USDT$/, '');
-        const p = parseFloat(row.price);
-        if (isFinite(p) && p > 0) out[asset] = p;
+      const rows = (await res.json()) as Array<{ symbol: string; priceChangePercent: string }>;
+      for (const r of rows) {
+        const p = parseFloat(r.priceChangePercent);
+        if (isFinite(p)) chg[r.symbol.replace(/USDT$/, '')] = p;
       }
+      await env.KV.put(KEY, JSON.stringify({ ts: Date.now(), chg }), { expirationTtl: 120 });
     }
+    return chg;
   } catch {
-    // diamkan; aset yang gagal akan jatuh ke fallback cache/0
+    return store?.chg ?? {};
   }
-  return out;
 }
 
 /** Rate fiat -> USD via Frankfurter (ECB). */

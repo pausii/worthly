@@ -59,3 +59,41 @@ export async function getEvmBalances(
   }
   return out;
 }
+
+/**
+ * Auto-deteksi semua token ERC-20/BEP-20 non-zero milik address.
+ * Memakai method khusus Alchemy (`alchemy_getTokenBalances` + `alchemy_getTokenMetadata`).
+ * Bila endpoint bukan Alchemy / tak mendukung, kembalikan kosong (di-skip).
+ */
+export async function getEvmAutoBalances(url: string, address: string): Promise<NormalizedBalance[]> {
+  const out: NormalizedBalance[] = [];
+  let res: { tokenBalances?: Array<{ contractAddress: string; tokenBalance: string | null }> };
+  try {
+    res = await rpc(url, 'alchemy_getTokenBalances', [address]);
+  } catch {
+    return out;
+  }
+  const nonzero = (res.tokenBalances ?? []).filter((t) => {
+    if (!t.tokenBalance) return false;
+    try {
+      return BigInt(t.tokenBalance) > 0n;
+    } catch {
+      return false;
+    }
+  });
+  // Batasi jumlah agar panggilan metadata tidak berlebihan (token spam/airdrop bisa banyak).
+  for (const t of nonzero.slice(0, 50)) {
+    try {
+      const meta = await rpc<{ symbol?: string; decimals?: number }>(url, 'alchemy_getTokenMetadata', [
+        t.contractAddress,
+      ]);
+      if (!meta || !meta.symbol || meta.decimals == null) continue;
+      const total = formatUnits(t.tokenBalance as string, meta.decimals);
+      if (total > 0)
+        out.push({ walletType: 'onchain', asset: meta.symbol.toUpperCase(), free: total, locked: 0, total });
+    } catch {
+      // token bermasalah — lanjut
+    }
+  }
+  return out;
+}

@@ -78,4 +78,5 @@ export interface OnchainConfig {
   address: string;
   trackNative: boolean;
   tokens: TrackedToken[];
+  autoDetect?: boolean; // EVM: deteksi otomatis semua token ERC-20/BEP-20 non-zero
 }

@@ -3,19 +3,57 @@ import type { Env, Variables } from '../types';
 import { queryAll } from '../lib/db';
 import { ok } from '../lib/response';
 import { computeValuation } from '../services/valuation';
-import { getUsdRates } from '../services/prices';
+import { getUsdRates, get24hChangePct } from '../services/prices';
 import { syncAll } from '../services/sync';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // Ringkasan nilai semua portofolio (live, dihitung dari saldo + harga terbaru).
 app.get('/overview', async (c) => {
-  const [valuation, rates] = await Promise.all([
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const [valuation, rates, pastRows] = await Promise.all([
     computeValuation(c.env),
     getUsdRates(c.env, ['IDR']),
+    queryAll<{ portfolio_id: number; total_usd: number }>(
+      c.env,
+      `SELECT ps.portfolio_id AS portfolio_id, ps.total_usd AS total_usd FROM portfolio_snapshots ps
+       JOIN (SELECT portfolio_id, MAX(captured_at) AS mc FROM portfolio_snapshots
+             WHERE captured_at <= ? GROUP BY portfolio_id) m
+       ON m.portfolio_id = ps.portfolio_id AND m.mc = ps.captured_at`,
+      dayAgo,
+    ),
   ]);
+
+  // Perubahan 24 jam per aset (crypto, via Binance).
+  const assets = new Set<string>();
+  for (const p of valuation.portfolios) for (const a of p.assets) assets.add(a.asset);
+  const assetChange = await get24hChangePct(c.env, [...assets]);
+
+  // Perubahan 24 jam per portofolio (dari snapshot ~24 jam lalu).
+  const pastMap = new Map(pastRows.map((r) => [r.portfolio_id, r.total_usd]));
+  let grandPast = 0;
+  let grandPastKnown = false;
+  const portfolios = valuation.portfolios.map((p) => {
+    const past = pastMap.get(p.id);
+    let change24hPct: number | null = null;
+    if (past !== undefined && past > 0) {
+      change24hPct = ((p.totalUsd - past) / past) * 100;
+      grandPast += past;
+      grandPastKnown = true;
+    }
+    return { ...p, change24hPct };
+  });
+  const grandChangePct =
+    grandPastKnown && grandPast > 0 ? ((valuation.grandTotalUsd - grandPast) / grandPast) * 100 : null;
+
   const usdPerIdr = rates['IDR'] ?? 0;
-  return ok(c, { ...valuation, idrRate: usdPerIdr > 0 ? 1 / usdPerIdr : 0 });
+  return ok(c, {
+    ...valuation,
+    portfolios,
+    assetChange,
+    grandChangePct,
+    idrRate: usdPerIdr > 0 ? 1 / usdPerIdr : 0,
+  });
 });
 
 // Data chart pergerakan nilai. ?portfolio_id= (kosong = agregat semua), ?days=30

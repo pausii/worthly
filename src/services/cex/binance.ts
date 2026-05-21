@@ -142,7 +142,17 @@ export async function getAllBalances(creds: CexCredentials): Promise<NormalizedB
     const first = results.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
     throw new Error(first?.reason?.message ?? 'Semua endpoint Binance gagal');
   }
-  return out;
+  // Hindari double-count: posisi Simple Earn muncul lagi di spot sebagai "LD"+aset
+  // (token Flexible Savings). Buang entri spot LDx bila underlying-nya sudah ada di earn.
+  const earnAssets = new Set(out.filter((b) => b.walletType === 'earn').map((b) => b.asset.toUpperCase()));
+  return out.filter(
+    (b) =>
+      !(
+        b.walletType === 'spot' &&
+        b.asset.toUpperCase().startsWith('LD') &&
+        earnAssets.has(b.asset.toUpperCase().slice(2))
+      ),
+  );
 }
 
 /** Riwayat deposit. `startTime` epoch ms (opsional). */

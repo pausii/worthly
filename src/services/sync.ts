@@ -10,7 +10,7 @@ import { now, queryAll, queryOne, run } from '../lib/db';
 import { decryptSecret } from '../lib/crypto';
 import * as binance from './cex/binance';
 import * as bybit from './cex/bybit';
-import { getEvmBalances } from './onchain/evm';
+import { getEvmBalances, getEvmAutoBalances } from './onchain/evm';
 import { getTronBalances } from './onchain/tron';
 import { computeValuation } from './valuation';
 
@@ -130,8 +130,23 @@ async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
   if (!apiKey && acc.type === 'tron') apiKey = env.RPC_TRON_API_KEY ?? '';
 
   let balances: NormalizedBalance[];
-  if (acc.type === 'tron') balances = await getTronBalances(rpcUrl, config, apiKey);
-  else balances = await getEvmBalances(rpcUrl, config, acc.type === 'eth' ? 'ETH' : 'BNB');
+  if (acc.type === 'tron') {
+    balances = await getTronBalances(rpcUrl, config, apiKey);
+  } else {
+    balances = await getEvmBalances(rpcUrl, config, acc.type === 'eth' ? 'ETH' : 'BNB');
+    // Auto-deteksi token: gabungkan, dahulukan token manual/native yang sudah ada.
+    if (config.autoDetect) {
+      const auto = await getEvmAutoBalances(rpcUrl, config.address);
+      const seen = new Set(balances.map((b) => b.asset.toUpperCase()));
+      for (const b of auto) {
+        const sym = b.asset.toUpperCase();
+        if (!seen.has(sym)) {
+          balances.push(b);
+          seen.add(sym);
+        }
+      }
+    }
+  }
 
   await upsertBalances(env, acc.id, balances);
 }
