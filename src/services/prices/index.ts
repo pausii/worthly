@@ -12,6 +12,23 @@ const FIATS = new Set([
 
 const PRICE_TTL_MS = 60_000; // anggap harga di tabel `prices` valid 60 detik
 
+// Host market-data publik Binance. data-api.binance.com lebih sering lolos geo-block (451)
+// dibanding api.binance.com; dicoba lebih dulu.
+const BINANCE_PUBLIC_HOSTS = ['https://data-api.binance.com', 'https://api.binance.com'];
+
+/** GET endpoint publik Binance; coba tiap host sampai ada yang OK (mengatasi 451 geo-block). */
+async function binancePublicGet(pathWithQuery: string): Promise<Response | null> {
+  for (const host of BINANCE_PUBLIC_HOSTS) {
+    try {
+      const res = await fetch(host + pathWithQuery, { headers: { Accept: 'application/json' } });
+      if (res.ok) return res;
+    } catch {
+      // coba host berikutnya
+    }
+  }
+  return null;
+}
+
 export function classifyAsset(asset: string): 'stable' | 'fiat' | 'crypto' {
   const a = asset.toUpperCase();
   if (STABLES.has(a)) return 'stable';
@@ -90,10 +107,8 @@ async function getBinanceTickerMap(env: Env): Promise<Record<string, number>> {
   try {
     cached = (await env.KV.get(KEY, 'json')) as { ts: number; map: Record<string, number> } | null;
     if (cached && Date.now() - cached.ts < 60_000) return cached.map;
-    const res = await fetch('https://api.binance.com/api/v3/ticker/price', {
-      headers: { Accept: 'application/json' },
-    });
-    if (res.ok) {
+    const res = await binancePublicGet('/api/v3/ticker/price');
+    if (res) {
       const rows = (await res.json()) as Array<{ symbol: string; price: string }>;
       const map: Record<string, number> = {};
       for (const r of rows) {
@@ -138,11 +153,10 @@ export async function get24hChangePct(env: Env, assetsRaw: string[]): Promise<Re
     if (!assets.length) return store?.chg ?? {};
     const chg: Record<string, number> = { ...(store?.chg ?? {}) };
     const symbols = assets.map((a) => a + 'USDT');
-    const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(
-      JSON.stringify(symbols),
-    )}`;
-    const res = await fetch(url, { headers: { Accept: 'application/json' } });
-    if (res.ok) {
+    const res = await binancePublicGet(
+      '/api/v3/ticker/24hr?symbols=' + encodeURIComponent(JSON.stringify(symbols)),
+    );
+    if (res) {
       const rows = (await res.json()) as Array<{ symbol: string; priceChangePercent: string }>;
       for (const r of rows) {
         const p = parseFloat(r.priceChangePercent);
