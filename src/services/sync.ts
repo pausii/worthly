@@ -90,6 +90,81 @@ async function upsertDeposits(env: Env, accountId: number, deposits: NormalizedD
   }
 }
 
+const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+const BACKFILL_FLOOR = Date.UTC(2017, 6, 1); // ~peluncuran Binance (Jul 2017)
+
+interface BackfillState {
+  cursorEnd: number; // batas akhir jendela berikutnya (berjalan mundur)
+  done: boolean;
+  fetched: number; // total baris deposit yang sempat diambil
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Backfill deposit untuk satu account, mundur per jendela 90 hari (batas Binance),
+ * maksimum `maxWindows` jendela per panggilan agar hemat subrequest/CPU Worker.
+ * State disimpan di sync_state sehingga bisa dilanjutkan cron pada tick berikutnya.
+ */
+export async function backfillDeposits(
+  env: Env,
+  acc: AccountRow,
+  maxWindows: number,
+): Promise<BackfillState | null> {
+  if (acc.type !== 'binance' || !acc.enc_credentials) return null;
+  const raw = await getCursor(env, acc.id, 'deposit_backfill');
+  const state: BackfillState = raw
+    ? (JSON.parse(raw) as BackfillState)
+    : { cursorEnd: Date.now(), done: false, fetched: 0 };
+  if (state.done) return state;
+
+  const creds = JSON.parse(await decryptSecret(acc.enc_credentials, env.MASTER_KEY)) as CexCredentials;
+  for (let i = 0; i < maxWindows && !state.done; i++) {
+    const end = state.cursorEnd;
+    const start = Math.max(end - NINETY_DAYS_MS, BACKFILL_FLOOR);
+    const deposits = await binance.getDepositHistoryRange(creds, start, end);
+    await upsertDeposits(env, acc.id, deposits);
+    state.fetched += deposits.length;
+    state.cursorEnd = start - 1;
+    if (start <= BACKFILL_FLOOR) state.done = true;
+    await setCursor(env, acc.id, 'deposit_backfill', JSON.stringify(state));
+    if (!state.done) await sleep(150); // ramah rate-limit
+  }
+  return state;
+}
+
+/** Mulai / reset backfill dari sekarang (dipanggil tombol UI). */
+export async function startDepositBackfill(env: Env, accountId: number): Promise<boolean> {
+  const acc = await queryOne<AccountRow>(
+    env,
+    'SELECT id, portfolio_id, type, label, enc_credentials, config FROM accounts WHERE id = ?',
+    accountId,
+  );
+  if (!acc || acc.type !== 'binance') return false;
+  await setCursor(
+    env,
+    acc.id,
+    'deposit_backfill',
+    JSON.stringify({ cursorEnd: Date.now(), done: false, fetched: 0 }),
+  );
+  return true;
+}
+
+/** Jalankan backfill untuk satu account by id (dipakai endpoint lewat waitUntil). */
+export async function runDepositBackfill(
+  env: Env,
+  accountId: number,
+  maxWindows: number,
+): Promise<BackfillState | null> {
+  const acc = await queryOne<AccountRow>(
+    env,
+    'SELECT id, portfolio_id, type, label, enc_credentials, config FROM accounts WHERE id = ?',
+    accountId,
+  );
+  if (!acc) return null;
+  return backfillDeposits(env, acc, maxWindows);
+}
+
 async function syncCexAccount(env: Env, acc: AccountRow): Promise<void> {
   if (!acc.enc_credentials) throw new Error('Kredensial belum diisi');
   const creds = JSON.parse(await decryptSecret(acc.enc_credentials, env.MASTER_KEY)) as CexCredentials;
@@ -208,6 +283,18 @@ export async function syncAll(env: Env): Promise<{ synced: number }> {
   );
   // Sekuensial agar ramah rate-limit API eksternal.
   for (const acc of accounts) await syncAccount(env, acc);
+  // Lanjutkan backfill deposit yang sedang berjalan (hanya bila sudah dimulai via tombol).
+  for (const acc of accounts) {
+    if (acc.type !== 'binance') continue;
+    const raw = await getCursor(env, acc.id, 'deposit_backfill');
+    if (!raw) continue;
+    try {
+      const st = JSON.parse(raw) as { done: boolean };
+      if (!st.done) await backfillDeposits(env, acc, 5);
+    } catch {
+      /* abaikan */
+    }
+  }
   await maybeSnapshot(env);
   return { synced: accounts.length };
 }

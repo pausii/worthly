@@ -3,7 +3,7 @@ import type { AccountType, Env, Variables } from '../types';
 import { now, queryAll, queryOne, run } from '../lib/db';
 import { encryptSecret } from '../lib/crypto';
 import { ok, fail } from '../lib/response';
-import { syncOne } from '../services/sync';
+import { syncOne, startDepositBackfill, runDepositBackfill } from '../services/sync';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -52,7 +52,26 @@ function publicView(row: AccountRow) {
 
 app.get('/', async (c) => {
   const rows = await queryAll<AccountRow>(c.env, 'SELECT * FROM accounts ORDER BY portfolio_id, id');
-  return ok(c, rows.map(publicView));
+  const states = await queryAll<{ account_id: number; value: string }>(
+    c.env,
+    "SELECT account_id, value FROM sync_state WHERE key = 'deposit_backfill'",
+  );
+  const stateMap = new Map(states.map((s) => [s.account_id, s.value]));
+  return ok(
+    c,
+    rows.map((r) => {
+      let backfill: unknown = null;
+      const v = stateMap.get(r.id);
+      if (v) {
+        try {
+          backfill = JSON.parse(v);
+        } catch {
+          backfill = null;
+        }
+      }
+      return { ...publicView(r), deposit_backfill: backfill };
+    }),
+  );
 });
 
 app.post('/', async (c) => {
@@ -172,6 +191,19 @@ app.post('/:id/sync', async (c) => {
   if (!found) return fail(c, 'Account tidak ditemukan', 404);
   const row = await queryOne<AccountRow>(c.env, 'SELECT * FROM accounts WHERE id = ?', id);
   return ok(c, row ? publicView(row) : { synced: true });
+});
+
+// Mulai backfill full-history deposit (Binance): mundur per jendela 90 hari sampai transaksi terlama.
+// Sebagian besar diproses di latar belakang (waitUntil), sisanya dilanjutkan cron tiap 2 menit.
+app.post('/:id/backfill-deposits', async (c) => {
+  const id = Number(c.req.param('id'));
+  const acc = await queryOne<AccountRow>(c.env, 'SELECT * FROM accounts WHERE id = ?', id);
+  if (!acc) return fail(c, 'Account tidak ditemukan', 404);
+  if (acc.type !== 'binance') return fail(c, 'Backfill saat ini hanya untuk Binance');
+  const started = await startDepositBackfill(c.env, id);
+  if (!started) return fail(c, 'Gagal memulai backfill');
+  c.executionCtx.waitUntil(runDepositBackfill(c.env, id, 30).catch(() => undefined));
+  return ok(c, { started: true });
 });
 
 // Saldo terkini untuk satu account.

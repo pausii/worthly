@@ -155,33 +155,71 @@ export async function getAllBalances(creds: CexCredentials): Promise<NormalizedB
   );
 }
 
-/** Riwayat deposit. `startTime` epoch ms (opsional). */
-export async function getDepositHistory(
-  creds: CexCredentials,
-  startTime?: number,
-): Promise<NormalizedDeposit[]> {
-  const params: Record<string, string | number> = { limit: 1000 };
-  if (startTime) params.startTime = startTime;
-  const rows = await signedRequest<
-    Array<{
-      amount: string;
-      coin: string;
-      network: string;
-      status: number;
-      address: string;
-      txId: string;
-      insertTime: number;
-    }>
-  >(creds, 'GET', SPOT_BASE, '/sapi/v1/capital/deposit/hisrec', params);
-  const statusMap: Record<number, string> = { 0: 'pending', 6: 'credited', 1: 'success' };
-  return (rows ?? []).map((r) => ({
+interface BinanceDepositRow {
+  amount: string;
+  coin: string;
+  network: string;
+  status: number;
+  address: string;
+  txId: string;
+  insertTime: number;
+}
+
+const DEPOSIT_STATUS: Record<number, string> = { 0: 'pending', 6: 'credited', 1: 'success' };
+const DEPOSIT_PAGE_LIMIT = 1000; // maksimum Binance per halaman
+const MAX_PAGES_PER_WINDOW = 20; // pengaman: 20k deposit / 90 hari sudah jauh lebih dari cukup
+
+function normalizeDeposit(r: BinanceDepositRow): NormalizedDeposit {
+  return {
     txId: r.txId || `${r.coin}-${r.insertTime}-${r.amount}`,
     asset: r.coin,
     amount: parseFloat(r.amount),
     network: r.network,
     address: r.address,
-    status: statusMap[r.status] ?? String(r.status),
+    status: DEPOSIT_STATUS[r.status] ?? String(r.status),
     ts: r.insertTime,
     raw: r,
-  }));
+  };
+}
+
+/** Riwayat deposit. `startTime` epoch ms (opsional). Tanpa startTime → 90 hari terakhir. */
+export async function getDepositHistory(
+  creds: CexCredentials,
+  startTime?: number,
+): Promise<NormalizedDeposit[]> {
+  const params: Record<string, string | number> = { limit: DEPOSIT_PAGE_LIMIT };
+  if (startTime) params.startTime = startTime;
+  const rows = await signedRequest<BinanceDepositRow[]>(
+    creds,
+    'GET',
+    SPOT_BASE,
+    '/sapi/v1/capital/deposit/hisrec',
+    params,
+  );
+  return (rows ?? []).map(normalizeDeposit);
+}
+
+/**
+ * Riwayat deposit dalam satu jendela [startTime, endTime] (Binance membatasi <= 90 hari),
+ * dengan paginasi `offset` sampai halaman terakhir. Dipakai untuk backfill full history.
+ */
+export async function getDepositHistoryRange(
+  creds: CexCredentials,
+  startTime: number,
+  endTime: number,
+): Promise<NormalizedDeposit[]> {
+  const out: NormalizedDeposit[] = [];
+  for (let page = 0; page < MAX_PAGES_PER_WINDOW; page++) {
+    const rows = await signedRequest<BinanceDepositRow[]>(
+      creds,
+      'GET',
+      SPOT_BASE,
+      '/sapi/v1/capital/deposit/hisrec',
+      { startTime, endTime, offset: page * DEPOSIT_PAGE_LIMIT, limit: DEPOSIT_PAGE_LIMIT },
+    );
+    const batch = (rows ?? []).map(normalizeDeposit);
+    out.push(...batch);
+    if (batch.length < DEPOSIT_PAGE_LIMIT) break; // halaman terakhir
+  }
+  return out;
 }

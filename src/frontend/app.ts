@@ -83,6 +83,11 @@ export const appHtml = `<!doctype html>
           </div>
           <div class="text-sm font-semibold" x-text="fmtDisplay(overview.grandTotalUsd||0)"></div>
         </div>
+        <!-- Hide amounts toggle -->
+        <button @click="toggleHideAmounts()" class="rounded-xl p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700" :title="hideAmounts?'Tampilkan nominal':'Sembunyikan nominal'">
+          <svg x-show="!hideAmounts" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          <svg x-show="hideAmounts" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+        </button>
         <!-- Dark mode toggle -->
         <button @click="toggleDark()" class="rounded-xl p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700" :title="darkMode?'Switch to light':'Switch to dark'">
           <svg x-show="!darkMode" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
@@ -261,9 +266,21 @@ export const appHtml = `<!doctype html>
                 <span x-show="!a.last_synced_at">Never synced</span>
               </div>
               <p x-show="a.last_error" x-text="a.last_error" class="mt-2 rounded-lg bg-rose-50 dark:bg-rose-900/30 px-2 py-1 text-[11px] text-rose-600 dark:text-rose-400"></p>
-              <div class="mt-3 flex gap-2">
+              <div x-show="a.type==='binance'" class="mt-2 text-xs">
+                <template x-if="a.deposit_backfill && a.deposit_backfill.done">
+                  <span class="text-emerald-600 dark:text-emerald-400">Riwayat deposit lengkap<span class="text-slate-400 dark:text-slate-500" x-text="' ('+(a.deposit_backfill.fetched||0)+' baris)'"></span></span>
+                </template>
+                <template x-if="a.deposit_backfill && !a.deposit_backfill.done">
+                  <span class="text-amber-600 dark:text-amber-400">Backfill berjalan… s/d <span x-text="fmtDateOnly(a.deposit_backfill.cursorEnd)"></span></span>
+                </template>
+                <template x-if="!a.deposit_backfill">
+                  <span class="text-slate-400 dark:text-slate-500">Deposit: 90 hari terakhir</span>
+                </template>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2">
                 <button @click="syncAccount(a.id)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Sync</button>
                 <button @click="openAccountModal(a)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Edit</button>
+                <button x-show="a.type==='binance'" @click="backfillDeposits(a.id)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Riwayat Penuh</button>
                 <button @click="deleteAccount(a.id)" class="ml-auto rounded-lg px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20">Delete</button>
               </div>
             </div>
@@ -486,6 +503,7 @@ export const appHtml = `<!doctype html>
         syncing: false, toast: '', modal: null,
         darkMode: document.documentElement.classList.contains('dark'),
         displayCurrency: localStorage.getItem('currency') || 'USD',
+        hideAmounts: localStorage.getItem('hideAmounts')==='1',
         idrRate: 0,
         nav: [
           { id:'dashboard', label:'Dashboard', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6\\'/></svg>' },
@@ -553,6 +571,12 @@ export const appHtml = `<!doctype html>
           if (this.view === 'dashboard') this.$nextTick(()=>{ this.renderChart(); this.renderPieChart(); });
         },
 
+        toggleHideAmounts() {
+          this.hideAmounts = !this.hideAmounts;
+          localStorage.setItem('hideAmounts', this.hideAmounts ? '1' : '0');
+          if (this.view === 'dashboard') this.$nextTick(()=>{ this.renderChart(); this.renderPieChart(); });
+        },
+
         async api(method, path, body) {
           const opts = { method, headers: {} };
           if (body !== undefined) { opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(body); }
@@ -579,6 +603,7 @@ export const appHtml = `<!doctype html>
           const abs=last-first; return { pct:(abs/first)*100, abs, up:abs>=0 };
         },
         fmtAxis(v) {
+          if (this.hideAmounts) return '';
           const n=Number(v)||0, a=Math.abs(n);
           const t=(x)=>{ const s=x.toFixed(1); return s.endsWith('.0')?s.slice(0,-2):s; };
           if (this.displayCurrency==='IDR') {
@@ -601,13 +626,14 @@ export const appHtml = `<!doctype html>
         },
         assetChg(sym) { const m=this.overview.assetChange; return (m && m[sym]!==undefined) ? m[sym] : null; },
 
-        fmtUsd(n) { return '$'+(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); },
-        fmtNum(n) { const v=Number(n)||0; return v.toLocaleString('en-US',{maximumFractionDigits:8}); },
+        fmtUsd(n) { if (this.hideAmounts) return '$ ••••••'; return '$'+(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); },
+        fmtNum(n) { if (this.hideAmounts) return '••••'; const v=Number(n)||0; return v.toLocaleString('en-US',{maximumFractionDigits:8}); },
         fmtDate(ts) { if(!ts) return '—'; return new Date(Number(ts)).toLocaleString('en-US'); },
         fmtDateOnly(ts) { if(!ts) return '—'; return new Date(Number(ts)).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}); },
         toDateInput(ts) { const d=ts?new Date(Number(ts)):new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); },
         timeAgo(ts) { if(!ts) return '—'; const s=Math.floor((Date.now()-Number(ts))/1000); if(s<60) return s+'s ago'; if(s<3600) return Math.floor(s/60)+'m ago'; if(s<86400) return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago'; },
         fmtDisplay(usd) {
+          if (this.hideAmounts) return this.displayCurrency === 'IDR' ? 'Rp ••••••' : '$ ••••••';
           const v = Number(usd)||0;
           if (this.displayCurrency === 'IDR') return 'Rp ' + Math.round(v * (this.idrRate||0)).toLocaleString('en-US');
           return '$' + v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -665,7 +691,7 @@ export const appHtml = `<!doctype html>
               plugins:{
                 legend:{ display:false },
                 tooltip:{ backgroundColor:dark?'#0f172a':'#ffffff', titleColor:textColor, bodyColor:dark?'#e2e8f0':'#0f172a', borderColor:gridColor, borderWidth:1, padding:10, displayColors:false,
-                  callbacks:{ label:(c)=> currency==='IDR' ? 'Rp '+Math.round(c.parsed.y).toLocaleString('en-US') : '$'+c.parsed.y.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) } }
+                  callbacks:{ label:(c)=> self.hideAmounts ? (currency==='IDR'?'Rp ••••••':'$ ••••••') : (currency==='IDR' ? 'Rp '+Math.round(c.parsed.y).toLocaleString('en-US') : '$'+c.parsed.y.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})) } }
               },
               scales:{
                 y:{ ticks:{ color:textColor, maxTicksLimit:5, callback:(v)=>self.fmtAxis(v) }, grid:{ color:gridColor }, border:{ display:false } },
@@ -708,7 +734,7 @@ export const appHtml = `<!doctype html>
               ctx.fillStyle=textColor; ctx.font='10px ui-sans-serif,system-ui,sans-serif';
               ctx.fillText('Total', cx, cy-9);
               ctx.fillStyle=dark?'#e2e8f0':'#0f172a'; ctx.font='600 15px ui-sans-serif,system-ui,sans-serif';
-              ctx.fillText(self.fmtAxis(disp), cx, cy+8);
+              ctx.fillText(self.hideAmounts ? '••••' : self.fmtAxis(disp), cx, cy+8);
               ctx.restore();
             }
           };
@@ -729,7 +755,7 @@ export const appHtml = `<!doctype html>
                       const usd = ctx.parsed;
                       const total = ctx.dataset.data.reduce((s,v)=>s+v, 0);
                       const pct = total > 0 ? ((usd/total)*100).toFixed(1) : '0.0';
-                      const fmt = currency==='IDR' ? 'Rp '+Math.round(usd*(idrRate||0)).toLocaleString('en-US') : '$'+usd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+                      const fmt = self.hideAmounts ? '••••' : (currency==='IDR' ? 'Rp '+Math.round(usd*(idrRate||0)).toLocaleString('en-US') : '$'+usd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
                       return ' '+ctx.label+': '+fmt+' ('+pct+'%)';
                     }
                   }
@@ -749,6 +775,12 @@ export const appHtml = `<!doctype html>
         async syncAccount(id) {
           const r=await this.api('POST','/accounts/'+id+'/sync', {});
           if (r&&r.ok) { this.flash('Account synced'); await Promise.all([this.loadAccounts(),this.loadOverview()]); }
+        },
+        async backfillDeposits(id) {
+          if (!confirm('Ambil SELURUH riwayat deposit dari awal? Proses berjalan di latar belakang Worker (bisa beberapa menit) dan dilanjutkan otomatis tiap 2 menit.')) return;
+          const r=await this.api('POST','/accounts/'+id+'/backfill-deposits', {});
+          if (r&&r.ok) { this.flash('Backfill dimulai — berjalan di latar belakang. Pantau status di kartu akun / tab Deposits.'); await this.loadAccounts(); }
+          else if(r) this.flash(r.error);
         },
 
         openPortfolioModal(p) { this.pf = p ? { id:p.id, name:p.name, description:p.description||'' } : { id:null, name:'', description:'' }; this.modal='portfolio'; },
