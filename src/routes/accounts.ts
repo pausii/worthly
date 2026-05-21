@@ -5,6 +5,7 @@ import { encryptSecret } from '../lib/crypto';
 import { ok, fail } from '../lib/response';
 import { syncOne, startDepositBackfill, runDepositBackfill } from '../services/sync';
 import { refreshOverview } from '../services/overview';
+import { isCooling } from '../lib/cooldown';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -202,9 +203,12 @@ app.post('/:id/backfill-deposits', async (c) => {
   const acc = await queryOne<AccountRow>(c.env, 'SELECT * FROM accounts WHERE id = ?', id);
   if (!acc) return fail(c, 'Account tidak ditemukan', 404);
   if (acc.type !== 'binance') return fail(c, 'Backfill saat ini hanya untuk Binance');
+  if (await isCooling(c.env, 'cex:binance'))
+    return fail(c, 'Binance sedang cooldown (geo-block 451). Coba lagi setelah ~15 menit.');
   const started = await startDepositBackfill(c.env, id);
   if (!started) return fail(c, 'Gagal memulai backfill');
-  c.executionCtx.waitUntil(runDepositBackfill(c.env, id, 30).catch(() => undefined));
+  // Burst awal kecil (8 jendela, jeda 1 dtk) agar tak memicu flag IP; sisanya disebar cron 3/tick.
+  c.executionCtx.waitUntil(runDepositBackfill(c.env, id, 8).catch(() => undefined));
   return ok(c, { started: true });
 });
 

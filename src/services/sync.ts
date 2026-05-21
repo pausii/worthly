@@ -14,6 +14,9 @@ import { getEvmBalances, getEvmAutoBalances } from './onchain/evm';
 import { getTronBalances } from './onchain/tron';
 import { computeValuation } from './valuation';
 import { refreshOverview } from './overview';
+import { isCooling, setCooldown } from '../lib/cooldown';
+
+const CEX_COOLDOWN_SECONDS = 900; // 15 menit setelah 451 (hindari menghantam IP yang ke-flag)
 
 interface AccountRow {
   id: number;
@@ -129,7 +132,7 @@ export async function backfillDeposits(
     state.cursorEnd = start - 1;
     if (start <= BACKFILL_FLOOR) state.done = true;
     await setCursor(env, acc.id, 'deposit_backfill', JSON.stringify(state));
-    if (!state.done) await sleep(150); // ramah rate-limit
+    if (!state.done) await sleep(1000); // ramah rate-limit / hindari burst yang memicu flag IP
   }
   return state;
 }
@@ -234,8 +237,11 @@ async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
 
 /** Sinkronkan satu account dan update status. */
 export async function syncAccount(env: Env, acc: AccountRow): Promise<void> {
+  const isCex = acc.type === 'binance' || acc.type === 'bybit';
+  // Circuit breaker: kalau penyedia lagi cooldown (habis 451), lewati tanpa menyentuh data/status.
+  if (isCex && (await isCooling(env, `cex:${acc.type}`))) return;
   try {
-    if (acc.type === 'binance' || acc.type === 'bybit') await syncCexAccount(env, acc);
+    if (isCex) await syncCexAccount(env, acc);
     else await syncOnchainAccount(env, acc);
     await run(
       env,
@@ -247,6 +253,8 @@ export async function syncAccount(env: Env, acc: AccountRow): Promise<void> {
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    // 451 = geo/flag IP. Cooldown agar tick berikutnya tak ikut menghantam IP yang ke-flag.
+    if (isCex && msg.includes('451')) await setCooldown(env, `cex:${acc.type}`, CEX_COOLDOWN_SECONDS);
     await run(
       env,
       'UPDATE accounts SET status = ?, last_error = ?, updated_at = ? WHERE id = ?',
@@ -292,11 +300,12 @@ export async function syncAll(env: Env): Promise<{ synced: number }> {
   // Lanjutkan backfill deposit yang sedang berjalan (hanya bila sudah dimulai via tombol).
   for (const acc of accounts) {
     if (acc.type !== 'binance') continue;
+    if (await isCooling(env, 'cex:binance')) break; // lagi cooldown — jangan poke IP yang ke-flag
     const raw = await getCursor(env, acc.id, 'deposit_backfill');
     if (!raw) continue;
     try {
       const st = JSON.parse(raw) as { done: boolean };
-      if (!st.done) await backfillDeposits(env, acc, 5);
+      if (!st.done) await backfillDeposits(env, acc, 3);
     } catch {
       /* abaikan */
     }

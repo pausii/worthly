@@ -1,5 +1,9 @@
 import type { Env } from '../../types';
 import { now, queryAll, run } from '../../lib/db';
+import { isCooling, setCooldown } from '../../lib/cooldown';
+
+const BINANCE_COOLDOWN = 'cex:binance';
+const BINANCE_COOLDOWN_SECONDS = 900; // 15 menit setelah 451
 
 // Stablecoin yang dianggap = 1 USD.
 const STABLES = new Set(['USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'USDD', 'USDP', 'USD']);
@@ -16,12 +20,21 @@ const PRICE_TTL_MS = 60_000; // anggap harga di tabel `prices` valid 60 detik
 // dibanding api.binance.com; dicoba lebih dulu.
 const BINANCE_PUBLIC_HOSTS = ['https://data-api.binance.com', 'https://api.binance.com'];
 
-/** GET endpoint publik Binance; coba tiap host sampai ada yang OK (mengatasi 451 geo-block). */
-async function binancePublicGet(pathWithQuery: string): Promise<Response | null> {
+/**
+ * GET endpoint publik Binance; coba tiap host sampai ada yang OK (mengatasi 451 geo-block).
+ * Hormati circuit breaker: lewati bila sedang cooldown; set cooldown bila kena 451 (hindari
+ * terus menghantam IP yang ke-flag).
+ */
+async function binancePublicGet(env: Env, pathWithQuery: string): Promise<Response | null> {
+  if (await isCooling(env, BINANCE_COOLDOWN)) return null;
   for (const host of BINANCE_PUBLIC_HOSTS) {
     try {
       const res = await fetch(host + pathWithQuery, { headers: { Accept: 'application/json' } });
       if (res.ok) return res;
+      if (res.status === 451) {
+        await setCooldown(env, BINANCE_COOLDOWN, BINANCE_COOLDOWN_SECONDS);
+        return null;
+      }
     } catch {
       // coba host berikutnya
     }
@@ -107,7 +120,7 @@ async function getBinanceTickerMap(env: Env): Promise<Record<string, number>> {
   try {
     cached = (await env.KV.get(KEY, 'json')) as { ts: number; map: Record<string, number> } | null;
     if (cached && Date.now() - cached.ts < 60_000) return cached.map;
-    const res = await binancePublicGet('/api/v3/ticker/price');
+    const res = await binancePublicGet(env, '/api/v3/ticker/price');
     if (res) {
       const rows = (await res.json()) as Array<{ symbol: string; price: string }>;
       const map: Record<string, number> = {};
@@ -154,6 +167,7 @@ export async function get24hChangePct(env: Env, assetsRaw: string[]): Promise<Re
     const chg: Record<string, number> = { ...(store?.chg ?? {}) };
     const symbols = assets.map((a) => a + 'USDT');
     const res = await binancePublicGet(
+      env,
       '/api/v3/ticker/24hr?symbols=' + encodeURIComponent(JSON.stringify(symbols)),
     );
     if (res) {
