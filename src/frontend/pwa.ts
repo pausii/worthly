@@ -23,7 +23,14 @@ export const manifestJson = JSON.stringify({
   icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
 });
 
-// Minimal service worker — pass-through fetch, enough for PWA installability.
+// Minimal service worker untuk installability PWA.
+// PENTING: hanya cegat request same-origin GET. Request lintas-origin (CDN Tailwind/Alpine/
+// Chart.js, Google Fonts) dibiarkan ditangani browser langsung — kalau di-fetch ulang dari SW,
+// fetch-nya tunduk pada CSP connect-src dan akan diblokir (mematahkan pemuatan CDN).
 export const swJs = `self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
-self.addEventListener('fetch',e=>e.respondWith(fetch(e.request)));`;
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET')return;
+  if(new URL(e.request.url).origin!==self.location.origin)return;
+  e.respondWith(fetch(e.request));
+});`;

@@ -50,7 +50,7 @@ export const securityHeaders: M = async (c, next) => {
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
       "img-src 'self' data: https:",
-      "connect-src 'self' https://cdn.jsdelivr.net",
+      "connect-src 'self' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.gstatic.com",
       "worker-src 'self'",
       "base-uri 'self'",
       "form-action 'self'",
