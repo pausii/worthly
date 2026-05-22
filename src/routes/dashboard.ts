@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
-import { queryAll } from '../lib/db';
+import { queryAll, queryOne } from '../lib/db';
 import { ok } from '../lib/response';
 import { syncAll } from '../services/sync';
 import { getStoredOverview, refreshOverview } from '../services/overview';
@@ -44,20 +44,29 @@ app.get('/history', async (c) => {
   return ok(c, rows);
 });
 
-// Riwayat deposit terbaru (semua account).
+// Riwayat deposit dengan server-side pagination.
 app.get('/deposits', async (c) => {
-  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 100, 1), 500);
-  const rows = await queryAll(
-    c.env,
-    `SELECT d.id, d.asset, d.amount, d.network, d.address, d.status, d.ts,
-            a.label AS account_label, a.type AS account_type, p.name AS portfolio_name
-     FROM deposits d
+  const page  = Math.max(Number(c.req.query('page'))  || 1,  1);
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 25, 1), 100);
+  const offset = (page - 1) * limit;
+
+  const BASE_FROM = `FROM deposits d
      JOIN accounts a ON a.id = d.account_id
-     JOIN portfolios p ON p.id = a.portfolio_id
-     ORDER BY d.ts DESC LIMIT ?`,
-    limit,
-  );
-  return ok(c, rows);
+     JOIN portfolios p ON p.id = a.portfolio_id`;
+
+  const [countRow, rows] = await Promise.all([
+    queryOne<{ total: number }>(c.env, `SELECT COUNT(*) AS total ${BASE_FROM}`),
+    queryAll(c.env,
+      `SELECT d.id, d.asset, d.amount, d.network, d.address, d.status, d.ts,
+              a.label AS account_label, a.type AS account_type, p.name AS portfolio_name
+       ${BASE_FROM}
+       ORDER BY d.ts DESC LIMIT ? OFFSET ?`,
+      limit, offset,
+    ),
+  ]);
+
+  const total = countRow?.total ?? 0;
+  return ok(c, { data: rows, total, page, limit, pages: Math.ceil(total / limit) || 1 });
 });
 
 // Trigger sinkronisasi penuh secara manual.

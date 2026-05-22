@@ -54,7 +54,7 @@ export const securityHeaders: M = async (c, next) => {
       `script-src 'self' 'unsafe-eval' 'nonce-${nonce}'`,
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
-      "img-src 'self' data:",
+      "img-src 'self' data: https://assets.coincap.io",
       "connect-src 'self'",
       "worker-src 'self'",
       "base-uri 'self'",

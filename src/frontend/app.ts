@@ -10,11 +10,12 @@ export const appHtml = `<!doctype html>
   <meta name="apple-mobile-web-app-title" content="Wallet Tracker" />
   <meta name="theme-color" content="#4f46e5" />
   <link rel="manifest" href="/manifest.json" />
-  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/favicon.svg" />
   <title>Dashboard — Wallet Tracker</title>
   <link rel="stylesheet" href="/app.css" />
   <script nonce="__CSP_NONCE__">if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark')</script>
-  <script defer src="/vendor/chart.js"></script>
+  <script defer src="/vendor/apexcharts.js"></script>
   <script defer src="/vendor/alpine.js"></script>
   <style>
     [x-cloak]{display:none!important}
@@ -204,6 +205,10 @@ export const appHtml = `<!doctype html>
                       <span class="inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium"
                         :class="a.origin==='manual' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : a.origin==='onchain' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'"
                         x-text="a.origin"></span>
+                      <span class="relative h-5 w-5 shrink-0">
+                        <span class="absolute inset-0 rounded-full flex items-center justify-center text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(a.asset)" x-text="tokenInitial(a.asset)"></span>
+                        <img :src="tokenIcon(a.asset)" class="absolute inset-0 h-5 w-5 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                      </span>
                       <span class="font-medium" x-text="a.asset"></span>
                       <span class="text-slate-400 dark:text-slate-500" x-text="fmtNum(a.amount)"></span>
                     </div>
@@ -227,7 +232,7 @@ export const appHtml = `<!doctype html>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 class="text-sm font-semibold">Performance</h2>
-            <p class="text-xs text-slate-400 dark:text-slate-500">Pergerakan nilai & alokasi portofolio</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500">Portfolio value movement & allocation</p>
           </div>
           <div class="flex flex-wrap gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
             <template x-for="p in PERIODS" :key="p.k">
@@ -242,20 +247,20 @@ export const appHtml = `<!doctype html>
         <!-- Performance summary -->
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Perubahan Periode</div>
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Period Change</div>
             <div class="mt-1 text-lg font-semibold" :class="perf().pct===null ? 'text-slate-400 dark:text-slate-500' : pctClass(perf().pct)" x-text="perf().pct===null ? '—' : fmtPct(perf().pct,true)"></div>
             <div class="text-xs" :class="pctClass(perf().abs)" x-show="perf().has" x-text="(perf().abs>=0?'+':'')+fmtDisplay(perf().abs)"></div>
           </div>
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Nilai Awal</div>
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Start Value</div>
             <div class="mt-1 text-lg font-semibold" x-text="perf().has ? fmtDisplay(perf().start) : '—'"></div>
           </div>
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Tertinggi</div>
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Peak</div>
             <div class="mt-1 text-lg font-semibold text-emerald-600 dark:text-emerald-400" x-text="perf().has ? fmtDisplay(perf().peak) : '—'"></div>
           </div>
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Terendah</div>
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Low</div>
             <div class="mt-1 text-lg font-semibold text-rose-600 dark:text-rose-400" x-text="perf().has ? fmtDisplay(perf().low) : '—'"></div>
           </div>
         </div>
@@ -265,7 +270,7 @@ export const appHtml = `<!doctype html>
           <h3 class="mb-3 text-sm font-semibold">Value Over Time</h3>
           <div class="relative h-64">
             <div x-ref="anaChartWrap" class="w-full h-full"></div>
-            <div x-show="analysisHistory.length===0" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">Belum ada snapshot untuk periode ini.</div>
+            <div x-show="analysisHistory.length===0" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">No snapshots for this period.</div>
           </div>
         </div>
 
@@ -275,7 +280,7 @@ export const appHtml = `<!doctype html>
           <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div class="relative h-56">
               <div x-ref="allocWrap" class="w-full h-full"></div>
-              <div x-show="totalAssets()===0" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">Belum ada aset.</div>
+              <div x-show="totalAssets()===0" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">No assets yet.</div>
             </div>
             <div class="flex flex-col justify-center space-y-3">
               <template x-for="(t,i) in top5()" :key="t.asset">
@@ -283,6 +288,10 @@ export const appHtml = `<!doctype html>
                   <div class="flex items-center justify-between text-sm">
                     <div class="flex items-center gap-2 min-w-0">
                       <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="'background:'+ALLOC_COLORS[i]"></span>
+                      <span class="relative h-5 w-5 shrink-0">
+                        <span class="absolute inset-0 rounded-full flex items-center justify-center text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(t.asset)" x-text="tokenInitial(t.asset)"></span>
+                        <img :src="tokenIcon(t.asset)" class="absolute inset-0 h-5 w-5 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                      </span>
                       <span class="font-medium truncate" x-text="t.asset"></span>
                     </div>
                     <div class="text-right shrink-0">
@@ -295,7 +304,7 @@ export const appHtml = `<!doctype html>
                   </div>
                 </div>
               </template>
-              <p x-show="totalAssets()===0" class="text-xs text-slate-400 dark:text-slate-500">Belum ada aset.</p>
+              <p x-show="totalAssets()===0" class="text-xs text-slate-400 dark:text-slate-500">No assets yet.</p>
             </div>
           </div>
         </div>
@@ -303,7 +312,7 @@ export const appHtml = `<!doctype html>
         <!-- Composition / Stablecoin / Movers -->
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <h3 class="mb-4 text-sm font-semibold">Komposisi Sumber</h3>
+            <h3 class="mb-4 text-sm font-semibold">Source Composition</h3>
             <div class="space-y-3">
               <template x-for="src in [{k:'cex',label:'Exchange (CEX)',c:'#6366f1'},{k:'onchain',label:'On-chain',c:'#10b981'},{k:'manual',label:'Manual',c:'#f59e0b'}]" :key="src.k">
                 <div>
@@ -317,21 +326,21 @@ export const appHtml = `<!doctype html>
                   <div class="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500" x-text="fmtDisplay(composition()[src.k])"></div>
                 </div>
               </template>
-              <p x-show="composition().total===0" class="text-xs text-slate-400 dark:text-slate-500">Belum ada data.</p>
+              <p x-show="composition().total===0" class="text-xs text-slate-400 dark:text-slate-500">No data yet.</p>
             </div>
           </div>
 
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <h3 class="mb-1 text-sm font-semibold">Stabil vs Volatil</h3>
-            <p class="mb-4 text-xs text-slate-400 dark:text-slate-500">Stablecoin &amp; fiat vs aset volatil ("dry powder")</p>
+            <h3 class="mb-1 text-sm font-semibold">Stable vs Volatile</h3>
+            <p class="mb-4 text-xs text-slate-400 dark:text-slate-500">Stablecoin &amp; fiat vs volatile assets ("dry powder")</p>
             <div class="flex items-end justify-between">
               <div>
                 <div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400" x-text="stableStats().stablePct.toFixed(1)+'%'"></div>
-                <div class="text-xs text-slate-400 dark:text-slate-500">stabil / cash</div>
+                <div class="text-xs text-slate-400 dark:text-slate-500">stable / cash</div>
               </div>
               <div class="text-right text-xs text-slate-500 dark:text-slate-400">
-                <div x-text="'Stabil: '+fmtDisplay(stableStats().stable)"></div>
-                <div x-text="'Volatil: '+fmtDisplay(stableStats().risky)"></div>
+                <div x-text="'Stable: '+fmtDisplay(stableStats().stable)"></div>
+                <div x-text="'Volatile: '+fmtDisplay(stableStats().risky)"></div>
               </div>
             </div>
             <div class="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
@@ -341,13 +350,19 @@ export const appHtml = `<!doctype html>
           </div>
 
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <h3 class="mb-4 text-sm font-semibold">Pergerakan 24 Jam</h3>
+            <h3 class="mb-4 text-sm font-semibold">24h Movers</h3>
             <div class="space-y-3">
               <div>
                 <div class="mb-1 text-[11px] uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Top Gainers</div>
                 <template x-for="m in movers().best" :key="'g'+m.asset">
                   <div class="flex items-center justify-between text-sm">
-                    <span class="font-medium" x-text="m.asset"></span>
+                    <div class="flex items-center gap-1.5">
+                      <span class="relative h-4 w-4 shrink-0">
+                        <span class="absolute inset-0 rounded-full flex items-center justify-center text-[7px] font-semibold text-white" :style="'background:'+tokenGradient(m.asset)" x-text="tokenInitial(m.asset)"></span>
+                        <img :src="tokenIcon(m.asset)" class="absolute inset-0 h-4 w-4 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                      </span>
+                      <span class="font-medium" x-text="m.asset"></span>
+                    </div>
                     <span class="font-medium text-emerald-600 dark:text-emerald-400" x-text="fmtPct(m.pct,false)"></span>
                   </div>
                 </template>
@@ -357,7 +372,13 @@ export const appHtml = `<!doctype html>
                 <div class="mb-1 text-[11px] uppercase tracking-wide text-rose-600 dark:text-rose-400">Top Losers</div>
                 <template x-for="m in movers().worst" :key="'l'+m.asset">
                   <div class="flex items-center justify-between text-sm">
-                    <span class="font-medium" x-text="m.asset"></span>
+                    <div class="flex items-center gap-1.5">
+                      <span class="relative h-4 w-4 shrink-0">
+                        <span class="absolute inset-0 rounded-full flex items-center justify-center text-[7px] font-semibold text-white" :style="'background:'+tokenGradient(m.asset)" x-text="tokenInitial(m.asset)"></span>
+                        <img :src="tokenIcon(m.asset)" class="absolute inset-0 h-4 w-4 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                      </span>
+                      <span class="font-medium" x-text="m.asset"></span>
+                    </div>
                     <span class="font-medium text-rose-600 dark:text-rose-400" x-text="fmtPct(m.pct,false)"></span>
                   </div>
                 </template>
@@ -370,26 +391,34 @@ export const appHtml = `<!doctype html>
         <!-- Top assets table -->
         <div class="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
           <div class="flex items-center justify-between px-4 py-3">
-            <h3 class="text-sm font-semibold">Top Aset</h3>
-            <span class="text-xs text-slate-400 dark:text-slate-500" x-text="'Menampilkan '+Math.min(topLimit,totalAssets())+' dari '+totalAssets()"></span>
+            <h3 class="text-sm font-semibold">Top Assets</h3>
+            <span class="text-xs text-slate-400 dark:text-slate-500" x-text="'Showing '+Math.min(topLimit,totalAssets())+' of '+totalAssets()"></span>
           </div>
           <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm">
               <thead class="bg-slate-50 dark:bg-slate-700/50 text-left text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                <tr><th class="px-4 py-3">#</th><th class="px-4 py-3">Aset</th><th class="px-4 py-3 text-right">Jumlah</th><th class="px-4 py-3 text-right">Nilai</th><th class="px-4 py-3 text-right">Alokasi</th><th class="px-4 py-3 text-right">24h</th></tr>
+                <tr><th class="px-4 py-3">#</th><th class="px-4 py-3">Asset</th><th class="px-4 py-3 text-right">Amount</th><th class="px-4 py-3 text-right">Value</th><th class="px-4 py-3 text-right">Allocation</th><th class="px-4 py-3 text-right">24h</th></tr>
               </thead>
               <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
                 <template x-for="(a,i) in topAssets()" :key="a.asset">
                   <tr>
                     <td class="px-4 py-3 text-slate-400 dark:text-slate-500" x-text="i+1"></td>
-                    <td class="px-4 py-3 font-medium" x-text="a.asset"></td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <span class="relative h-5 w-5 shrink-0">
+                        <span class="absolute inset-0 rounded-full flex items-center justify-center text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(a.asset)" x-text="tokenInitial(a.asset)"></span>
+                        <img :src="tokenIcon(a.asset)" class="absolute inset-0 h-5 w-5 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                      </span>
+                        <span class="font-medium" x-text="a.asset"></span>
+                      </div>
+                    </td>
                     <td class="px-4 py-3 text-right text-slate-500 dark:text-slate-400" x-text="fmtNum(a.amount)"></td>
                     <td class="px-4 py-3 text-right font-medium" x-text="fmtDisplay(a.usd)"></td>
                     <td class="px-4 py-3 text-right text-slate-500 dark:text-slate-400" x-text="allocPct(a.usd).toFixed(1)+'%'"></td>
                     <td class="px-4 py-3 text-right" :class="assetChg(a.asset)===null ? 'text-slate-400 dark:text-slate-500' : pctClass(assetChg(a.asset))" x-text="assetChg(a.asset)===null ? '—' : fmtPct(assetChg(a.asset),false)"></td>
                   </tr>
                 </template>
-                <tr x-show="totalAssets()===0"><td colspan="6" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">Belum ada aset.</td></tr>
+                <tr x-show="totalAssets()===0"><td colspan="6" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No assets yet.</td></tr>
               </tbody>
             </table>
           </div>
@@ -453,19 +482,19 @@ export const appHtml = `<!doctype html>
               <p x-show="a.last_error" x-text="a.last_error" class="mt-2 rounded-lg bg-rose-50 dark:bg-rose-900/30 px-2 py-1 text-[11px] text-rose-600 dark:text-rose-400"></p>
               <div x-show="a.type==='binance'" class="mt-2 text-xs">
                 <template x-if="a.deposit_backfill && a.deposit_backfill.done">
-                  <span class="text-emerald-600 dark:text-emerald-400">Riwayat deposit lengkap<span class="text-slate-400 dark:text-slate-500" x-text="' ('+(a.deposit_backfill.fetched||0)+' baris)'"></span></span>
+                  <span class="text-emerald-600 dark:text-emerald-400">Full deposit history<span class="text-slate-400 dark:text-slate-500" x-text="' ('+(a.deposit_backfill.fetched||0)+' rows)'"></span></span>
                 </template>
                 <template x-if="a.deposit_backfill && !a.deposit_backfill.done">
-                  <span class="text-amber-600 dark:text-amber-400">Backfill berjalan… s/d <span x-text="fmtDateOnly(a.deposit_backfill.cursorEnd)"></span></span>
+                  <span class="text-amber-600 dark:text-amber-400">Backfill running… up to <span x-text="fmtDateOnly(a.deposit_backfill.cursorEnd)"></span></span>
                 </template>
                 <template x-if="!a.deposit_backfill">
-                  <span class="text-slate-400 dark:text-slate-500">Deposit: 90 hari terakhir</span>
+                  <span class="text-slate-400 dark:text-slate-500">Deposits: last 90 days</span>
                 </template>
               </div>
               <div class="mt-3 flex flex-wrap gap-2">
                 <button @click="syncAccount(a.id)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Sync</button>
                 <button @click="openAccountModal(a)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Edit</button>
-                <button x-show="a.type==='binance'" @click="backfillDeposits(a.id)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Riwayat Penuh</button>
+                <button x-show="a.type==='binance'" @click="backfillDeposits(a.id)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Full History</button>
                 <button @click="deleteAccount(a.id)" class="ml-auto rounded-lg px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20">Delete</button>
               </div>
             </div>
@@ -489,7 +518,16 @@ export const appHtml = `<!doctype html>
                 <tr>
                   <td class="px-4 py-3 font-medium" x-text="h.label"></td>
                   <td class="px-4 py-3 text-slate-500 dark:text-slate-400" x-text="portfolioName(h.portfolio_id)"></td>
-                  <td class="px-4 py-3"><span class="rounded bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 text-[11px]" x-text="h.currency"></span> <span class="text-[11px]" :class="h.amount<0 ? 'text-rose-500 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500'" x-text="h.amount<0 ? 'pengeluaran' : h.asset_class"></span></td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <span class="relative h-5 w-5 shrink-0">
+                        <span class="absolute inset-0 rounded-full flex items-center justify-center text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(h.currency)" x-text="tokenInitial(h.currency)"></span>
+                        <img :src="tokenIcon(h.currency)" class="absolute inset-0 h-5 w-5 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                      </span>
+                      <span class="rounded bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 text-[11px]" x-text="h.currency"></span>
+                      <span class="text-[11px]" :class="h.amount<0 ? 'text-rose-500 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500'" x-text="h.amount<0 ? 'expense' : h.asset_class"></span>
+                    </div>
+                  </td>
                   <td class="px-4 py-3 text-right font-medium" :class="h.amount<0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'" x-text="fmtNum(h.amount)"></td>
                   <td class="px-4 py-3 text-sm text-slate-500 dark:text-slate-400" x-text="fmtDateOnly(h.added_at||h.created_at)"></td>
                   <td class="px-4 py-3 text-right">
@@ -516,7 +554,15 @@ export const appHtml = `<!doctype html>
                 <tr>
                   <td class="px-4 py-3 text-slate-500 dark:text-slate-400" x-text="fmtDate(d.ts)"></td>
                   <td class="px-4 py-3"><span x-text="d.account_label"></span> <span class="text-[11px] text-slate-400 dark:text-slate-500" x-text="d.portfolio_name"></span></td>
-                  <td class="px-4 py-3 font-medium" x-text="d.asset"></td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <span class="relative h-5 w-5 shrink-0">
+                        <span class="absolute inset-0 rounded-full flex items-center justify-center text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(d.asset)" x-text="tokenInitial(d.asset)"></span>
+                        <img :src="tokenIcon(d.asset)" class="absolute inset-0 h-5 w-5 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                      </span>
+                      <span class="font-medium" x-text="d.asset"></span>
+                    </div>
+                  </td>
                   <td class="px-4 py-3 text-right" x-text="fmtNum(d.amount)"></td>
                   <td class="px-4 py-3 text-slate-500 dark:text-slate-400" x-text="d.network||'—'"></td>
                   <td class="px-4 py-3"><span class="rounded-full px-2 py-0.5 text-[11px]" :class="d.status==='success'||d.status==='credited' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400':'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'" x-text="d.status"></span></td>
@@ -525,6 +571,26 @@ export const appHtml = `<!doctype html>
               <tr x-show="deposits.length===0"><td colspan="6" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No deposit data yet.</td></tr>
             </tbody>
           </table>
+          <!-- Pagination -->
+          <div x-show="depositTotal>0" class="flex items-center justify-between border-t border-slate-100 dark:border-slate-700 px-4 py-3">
+            <span class="text-xs text-slate-500 dark:text-slate-400" x-text="depositFrom()+' – '+depositTo()+' of '+depositTotal"></span>
+            <div class="flex items-center gap-1">
+              <button @click="loadDeposits(1)" :disabled="depositPage===1"
+                class="rounded-lg px-2 py-1.5 text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600">«</button>
+              <button @click="loadDeposits(depositPage-1)" :disabled="depositPage===1"
+                class="rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600">Prev</button>
+              <template x-for="p in Array.from({length:depositPages()},(_,i)=>i+1).filter(p=>p===1||p===depositPages()||Math.abs(p-depositPage)<=1)" :key="p">
+                <button @click="loadDeposits(p)"
+                  class="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                  :class="p===depositPage?'bg-indigo-600 text-white':'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300'"
+                  x-text="p"></button>
+              </template>
+              <button @click="loadDeposits(depositPage+1)" :disabled="depositPage>=depositPages()"
+                class="rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600">Next</button>
+              <button @click="loadDeposits(depositPages())" :disabled="depositPage>=depositPages()"
+                class="rounded-lg px-2 py-1.5 text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600">»</button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -548,15 +614,15 @@ export const appHtml = `<!doctype html>
         <!-- EVENTS tab -->
         <div x-show="activityTab==='events'" class="space-y-3">
           <div class="flex items-center justify-between gap-2 flex-wrap">
-            <p class="text-xs text-slate-400 dark:text-slate-500">Log event sistem — HTTP error, sync gagal, cooldown</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500">System event log — HTTP errors, sync failures, cooldown</p>
             <div class="flex gap-2">
               <button @click="markAllRead()" x-show="unreadCount>0"
                 class="rounded-xl px-3 py-1.5 text-xs font-medium bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600">
-                Tandai semua dibaca
+                Mark all read
               </button>
               <button @click="clearEvents()" x-show="systemEvents.length>0"
                 class="rounded-xl px-3 py-1.5 text-xs font-medium bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/30">
-                Hapus semua
+                Clear all
               </button>
             </div>
           </div>
@@ -581,24 +647,24 @@ export const appHtml = `<!doctype html>
               </div>
             </template>
             <div x-show="systemEvents.length===0" class="px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
-              Belum ada event. Event akan muncul saat sync gagal atau terjadi error.
+              No events yet. Events will appear when sync fails or an error occurs.
             </div>
           </div>
         </div>
 
         <!-- QUEUE tab -->
         <div x-show="activityTab==='queue'" class="space-y-3">
-          <p class="text-xs text-slate-400 dark:text-slate-500">Status sinkronisasi dan antrian kerja sistem (cron setiap 2 menit)</p>
+          <p class="text-xs text-slate-400 dark:text-slate-500">Sync status and system work queue (cron every 2 minutes)</p>
 
           <!-- Snapshot info card -->
           <div x-show="queueMeta.nextSnapshot" class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 shadow-sm flex items-center justify-between gap-3">
             <div class="flex items-center gap-2">
               <svg class="h-4 w-4 text-indigo-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
               <span class="text-sm font-medium">Portfolio Snapshot</span>
-              <span class="text-xs text-slate-400 dark:text-slate-500" x-text="'setiap '+queueMeta.snapshotIntervalMin+' menit'"></span>
+              <span class="text-xs text-slate-400 dark:text-slate-500" x-text="'every '+queueMeta.snapshotIntervalMin+' min'"></span>
             </div>
             <span class="text-xs text-slate-500 dark:text-slate-400">
-              Berikutnya: <span x-text="queueMeta.nextSnapshot < Date.now() ? 'segera' : timeAgo(queueMeta.nextSnapshot).replace(' ago','')"></span>
+              Next: <span x-text="queueMeta.nextSnapshot < Date.now() ? 'soon' : timeAgo(queueMeta.nextSnapshot).replace(' ago','')"></span>
             </span>
           </div>
 
@@ -614,9 +680,9 @@ export const appHtml = `<!doctype html>
                     <span class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400" x-text="acc.type"></span>
                   </div>
                   <div class="text-xs text-slate-400 dark:text-slate-500 shrink-0">
-                    <span x-show="acc.cooling" class="font-medium text-amber-600 dark:text-amber-400">Cooldown aktif</span>
+                    <span x-show="acc.cooling" class="font-medium text-amber-600 dark:text-amber-400">Cooldown active</span>
                     <span x-show="!acc.cooling && acc.last_synced_at">Synced <span x-text="timeAgo(acc.last_synced_at)"></span></span>
-                    <span x-show="!acc.cooling && !acc.last_synced_at" class="italic">Belum sync</span>
+                    <span x-show="!acc.cooling && !acc.last_synced_at" class="italic">Not synced</span>
                   </div>
                 </div>
                 <div x-show="acc.last_error"
@@ -626,7 +692,7 @@ export const appHtml = `<!doctype html>
                 <div x-show="acc.backfill" class="mt-3 space-y-1">
                   <div class="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
                     <span class="font-medium">Backfill deposit</span>
-                    <span x-text="acc.backfill ? (acc.backfill.done ? 'Selesai — ' : 'Berjalan — ')+acc.backfill.fetched+' transaksi' : ''"></span>
+                    <span x-text="acc.backfill ? (acc.backfill.done ? 'Done — ' : 'Running — ')+acc.backfill.fetched+' txns' : ''"></span>
                   </div>
                   <div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
                     <div class="h-full rounded-full bg-indigo-500 transition-all duration-500"
@@ -634,13 +700,13 @@ export const appHtml = `<!doctype html>
                   </div>
                   <div class="text-[10px] text-slate-400 dark:text-slate-500">
                     Cursor: <span x-text="acc.backfill ? fmtDateOnly(acc.backfill.cursorEnd) : '—'"></span>
-                    <span x-show="acc.backfill && !acc.backfill.done" class="ml-2 opacity-70">(dilanjutkan otomatis tiap 2 menit)</span>
+                    <span x-show="acc.backfill && !acc.backfill.done" class="ml-2 opacity-70">(auto-resumes every 2 min)</span>
                   </div>
                 </div>
               </div>
             </template>
             <div x-show="activityQueue.length===0" class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 text-center text-sm text-slate-400 dark:text-slate-500">
-              Tidak ada account aktif.
+              No active accounts.
             </div>
           </div>
         </div>
@@ -660,7 +726,7 @@ export const appHtml = `<!doctype html>
         </div>
         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
           <h3 class="mb-1 text-sm font-semibold">Export Data (CSV)</h3>
-          <p class="mb-4 text-xs text-slate-400 dark:text-slate-500">Unduh data sebagai CSV (UTF-8, kompatibel Excel).</p>
+          <p class="mb-4 text-xs text-slate-400 dark:text-slate-500">Download data as CSV (UTF-8, Excel-compatible).</p>
           <div class="flex flex-wrap gap-2">
             <button @click="exportCsv('balances')" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Balances</button>
             <button @click="exportCsv('holdings')" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Manual Holdings</button>
@@ -703,10 +769,10 @@ export const appHtml = `<!doctype html>
         <div class="grid grid-cols-2 gap-2">
           <button type="button" @click="hd.direction='in'"
             class="rounded-xl border px-3 py-2 text-sm font-medium transition-colors"
-            :class="hd.direction!=='out' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'">+ Pemasukan</button>
+            :class="hd.direction!=='out' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'">+ Income</button>
           <button type="button" @click="hd.direction='out'"
             class="rounded-xl border px-3 py-2 text-sm font-medium transition-colors"
-            :class="hd.direction==='out' ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'">− Pengeluaran</button>
+            :class="hd.direction==='out' ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'">− Expense</button>
         </div>
         <input x-model="hd.label" placeholder="Label (e.g. BCA Savings)"
           class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
@@ -727,7 +793,9 @@ export const appHtml = `<!doctype html>
               class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
           </div>
         </div>
-        <input x-model.number="hd.amount" type="number" step="any" placeholder="Amount (e.g. 100000000)"
+        <input type="text" x-model="hd.amountDisplay"
+          @blur="{ const n=parseFloat((hd.amountDisplay||'').replace(/,/g,'')); hd.amountDisplay = n ? n.toLocaleString('en-US',{maximumFractionDigits:8}) : ''; }"
+          placeholder="Amount (e.g. 100,000,000)"
           class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
         <input x-model="hd.note" placeholder="Note (optional)"
           class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
@@ -829,6 +897,7 @@ export const appHtml = `<!doctype html>
         ],
         overview: { portfolios: [], grandTotalUsd: 0 },
         portfolios: [], accounts: [], holdings: [], deposits: [],
+        depositPage: 1, depositTotal: 0, depositLimit: 25,
         history: [], historyRange: 30, historyPortfolio: '', chart: null, pieChart: null,
         analysisPeriod: '1M', analysisHistory: [], analysisLoading: false, analysisChart: null, analysisPie: null, topLimit: 10,
         STABLES_SET: ['USDT','USDC','BUSD','DAI','TUSD','FDUSD','USDD','USDP','USD'],
@@ -949,6 +1018,9 @@ export const appHtml = `<!doctype html>
           return arrow+(v>=0?'+':'')+v.toFixed(2)+'%';
         },
         assetChg(sym) { const m=this.overview.assetChange; return (m && m[sym]!==undefined) ? m[sym] : null; },
+        tokenIcon(sym) { return 'https://assets.coincap.io/assets/icons/'+(sym||'').toLowerCase().replace(/[^a-z0-9]/g,'')+'@2x.png'; },
+        tokenGradient(sym) { let h=0; for(const c of (sym||'?').toUpperCase()) h=(h*31+c.charCodeAt(0))&0xffff; const h1=h%360, h2=(h1+45)%360; return 'linear-gradient(135deg,hsl('+h1+',65%,58%),hsl('+h2+',65%,42%))'; },
+        tokenInitial(sym) { const s=(sym||'?').toUpperCase(); return s.length===3 ? s.slice(0,2) : s.charAt(0); },
 
         fmtUsd(n) { if (this.hideAmounts) return '$ ••••••'; return '$'+(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); },
         fmtNum(n) { if (this.hideAmounts) return '••••'; const v=Number(n)||0; return v.toLocaleString('en-US',{maximumFractionDigits:8}); },
@@ -974,7 +1046,14 @@ export const appHtml = `<!doctype html>
         async loadPortfolios() { const r=await this.api('GET','/portfolios'); if(r&&r.ok) this.portfolios=r.data; },
         async loadAccounts() { const r=await this.api('GET','/accounts'); if(r&&r.ok) this.accounts=r.data; },
         async loadHoldings() { const r=await this.api('GET','/holdings'); if(r&&r.ok) this.holdings=r.data; },
-        async loadDeposits() { const r=await this.api('GET','/dashboard/deposits'); if(r&&r.ok) this.deposits=r.data; },
+        async loadDeposits(page=1) {
+          this.depositPage=page;
+          const r=await this.api('GET','/dashboard/deposits?page='+page+'&limit='+this.depositLimit);
+          if(r&&r.ok){ this.deposits=r.data.data; this.depositTotal=r.data.total; }
+        },
+        depositPages() { return Math.max(1,Math.ceil(this.depositTotal/this.depositLimit)); },
+        depositFrom() { return this.depositTotal===0?0:(this.depositPage-1)*this.depositLimit+1; },
+        depositTo() { return Math.min(this.depositPage*this.depositLimit,this.depositTotal); },
         async loadSystemEvents() {
           const r = await this.api('GET','/system/events');
           if (r&&r.ok) { this.systemEvents=r.data.events; this.unreadCount=r.data.unreadCount; }
@@ -1009,110 +1088,62 @@ export const appHtml = `<!doctype html>
 
         renderChart() {
           const wrap = this.$refs.chartWrap;
-          if (!wrap || typeof Chart==='undefined' || !wrap.isConnected) return;
-          if (wrap.clientWidth === 0) { setTimeout(()=>this.renderChart(), 100); return; }
-          const dark = this.darkMode;
-          const textColor = dark ? '#94a3b8' : '#64748b';
-          const gridColor = dark ? 'rgba(148,163,184,0.14)' : 'rgba(100,116,139,0.14)';
-          const currency = this.displayCurrency;
-          const idrMult = currency === 'IDR' ? (this.idrRate||0) : 1;
-          let labels = this.history.map(h=>new Date(Number(h.captured_at)).toLocaleDateString('en-US',{day:'2-digit',month:'short'}));
-          let data = this.history.map(h=>Number(h.total_usd)*idrMult);
-          // Downsample agar garis halus & ringan untuk rentang panjang.
+          if (!wrap || typeof ApexCharts==='undefined' || !wrap.isConnected) return;
+          if (wrap.clientWidth===0) { setTimeout(()=>this.renderChart(),100); return; }
+          const dark=this.darkMode, currency=this.displayCurrency, idrMult=currency==='IDR'?(this.idrRate||0):1, self=this;
+          let pts=this.history.map(h=>[Number(h.captured_at),Number(h.total_usd)*idrMult]);
           const MAX=150;
-          if (data.length>MAX) {
-            const step=(data.length-1)/(MAX-1), nl=[], nd=[];
-            for (let i=0;i<MAX;i++){ const idx=Math.round(i*step); nl.push(labels[idx]); nd.push(data[idx]); }
-            labels=nl; data=nd;
-          }
-          if (this.chart) { this.chart.destroy(); this.chart = null; }
-          wrap.innerHTML = '';
-          const el = document.createElement('canvas');
-          wrap.appendChild(el);
-          const g = el.getContext('2d').createLinearGradient(0,0,0,wrap.clientHeight||220);
-          g.addColorStop(0,'rgba(99,102,241,0.35)'); g.addColorStop(1,'rgba(99,102,241,0)');
-          const self = this;
-          this.chart = new Chart(el, {
-            type:'line',
-            data:{ labels, datasets:[{ label:currency, data, borderColor:'#6366f1', backgroundColor:g, fill:true, tension:0.35, borderWidth:2, pointRadius:0, pointHoverRadius:5, pointHoverBackgroundColor:'#6366f1', pointHoverBorderColor:dark?'#1e293b':'#fff', pointHoverBorderWidth:2 }] },
-            options:{
-              animation:false, responsive:true, maintainAspectRatio:false,
-              interaction:{ mode:'index', intersect:false },
-              plugins:{
-                legend:{ display:false },
-                tooltip:{ backgroundColor:dark?'#0f172a':'#ffffff', titleColor:textColor, bodyColor:dark?'#e2e8f0':'#0f172a', borderColor:gridColor, borderWidth:1, padding:10, displayColors:false,
-                  callbacks:{ label:(c)=> self.hideAmounts ? (currency==='IDR'?'Rp ••••••':'$ ••••••') : (currency==='IDR' ? 'Rp '+Math.round(c.parsed.y).toLocaleString('en-US') : '$'+c.parsed.y.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})) } }
-              },
-              scales:{
-                y:{ ticks:{ color:textColor, maxTicksLimit:5, callback:(v)=>self.fmtAxis(v) }, grid:{ color:gridColor }, border:{ display:false } },
-                x:{ ticks:{ color:textColor, maxTicksLimit:7, autoSkip:true, maxRotation:0 }, grid:{ display:false }, border:{ display:false } }
-              }
-            }
+          if (pts.length>MAX){ const step=(pts.length-1)/(MAX-1); pts=Array.from({length:MAX},(_,i)=>pts[Math.round(i*step)]); }
+          if (this.chart){ this.chart.destroy(); this.chart=null; }
+          this.chart=new ApexCharts(wrap,{
+            chart:{ type:'area', height:'100%', background:'transparent', animations:{enabled:false}, toolbar:{show:false}, zoom:{enabled:false}, fontFamily:'ui-sans-serif,system-ui,sans-serif', sparkline:{enabled:false} },
+            theme:{ mode:dark?'dark':'light' },
+            series:[{ name:currency, data:pts }],
+            xaxis:{ type:'datetime', labels:{ style:{colors:dark?'#94a3b8':'#64748b',fontSize:'11px'}, datetimeUTC:false, format:'dd MMM' }, axisBorder:{show:false}, axisTicks:{show:false}, tooltip:{enabled:false} },
+            yaxis:{ labels:{ style:{colors:dark?'#94a3b8':'#64748b',fontSize:'11px'}, formatter:(v)=>self.fmtAxis(v) }, tickAmount:4 },
+            stroke:{ curve:'smooth', width:2, colors:['#6366f1'] },
+            fill:{ type:'gradient', gradient:{ shade:'dark', type:'vertical', shadeIntensity:0.1, gradientToColors:['#6366f1'], inverseColors:false, opacityFrom:0.35, opacityTo:0, stops:[0,100] } },
+            colors:['#6366f1'],
+            grid:{ borderColor:dark?'rgba(148,163,184,0.14)':'rgba(100,116,139,0.14)', strokeDashArray:0, xaxis:{lines:{show:false}} },
+            markers:{ size:0, hover:{size:5} },
+            tooltip:{ theme:dark?'dark':'light', x:{format:'dd MMM yyyy HH:mm'}, y:{ formatter:(v)=>self.hideAmounts?(currency==='IDR'?'Rp ••••••':'$ ••••••'):(currency==='IDR'?'Rp '+Math.round(v).toLocaleString('en-US'):'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})) } },
+            dataLabels:{enabled:false}, legend:{show:false},
           });
+          this.chart.render();
         },
 
         renderPieChart() {
-          const wrap = this.$refs.pieWrap;
-          if (!wrap || typeof Chart==='undefined' || !wrap.isConnected) return;
-          if (wrap.clientWidth === 0) { setTimeout(()=>this.renderPieChart(), 100); return; }
-          const totals = {};
-          for (const p of this.overview.portfolios) {
-            for (const a of p.assets) { if (a.usd > 0) totals[a.asset] = (totals[a.asset]||0) + a.usd; }
-          }
-          const entries = Object.entries(totals).sort((a,b)=>b[1]-a[1]);
-          if (this.pieChart) { this.pieChart.destroy(); this.pieChart = null; }
-          if (entries.length === 0) return;
-          const top = entries.slice(0,8);
-          const othersVal = entries.slice(8).reduce((s,e)=>s+e[1], 0);
-          if (othersVal > 0) top.push(['Others', othersVal]);
-          const labels = top.map(e=>e[0]);
-          const data = top.map(e=>e[1]);
-          const COLORS = ['#6366f1','#8b5cf6','#f59e0b','#10b981','#ef4444','#3b82f6','#f97316','#ec4899','#14b8a6','#a855f7'];
-          const dark = this.darkMode;
-          const textColor = dark ? '#94a3b8' : '#64748b';
-          const currency = this.displayCurrency;
-          const idrRate = this.idrRate;
-          const self = this;
-          const centerText = {
-            id:'centerText',
-            afterDraw(chart){
-              const {ctx, chartArea}=chart; if(!chartArea) return;
-              const cx=(chartArea.left+chartArea.right)/2, cy=(chartArea.top+chartArea.bottom)/2;
-              const sum=chart.data.datasets[0].data.reduce((s,v)=>s+v,0);
-              const disp=currency==='IDR'? sum*(idrRate||0) : sum;
-              ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
-              ctx.fillStyle=textColor; ctx.font='10px ui-sans-serif,system-ui,sans-serif';
-              ctx.fillText('Total', cx, cy-9);
-              ctx.fillStyle=dark?'#e2e8f0':'#0f172a'; ctx.font='600 15px ui-sans-serif,system-ui,sans-serif';
-              ctx.fillText(self.hideAmounts ? '••••' : self.fmtAxis(disp), cx, cy+8);
-              ctx.restore();
-            }
-          };
-          wrap.innerHTML = '';
-          const el = document.createElement('canvas');
-          wrap.appendChild(el);
-          this.pieChart = new Chart(el, {
-            type:'doughnut',
-            plugins:[centerText],
-            data:{ labels, datasets:[{ data, backgroundColor:COLORS.slice(0,labels.length), borderWidth:2, borderColor:dark?'#1e293b':'#ffffff', borderRadius:3, hoverOffset:6 }] },
-            options:{
-              animation:false, responsive:true, maintainAspectRatio:false, cutout:'62%',
-              plugins:{
-                legend:{ position:'bottom', labels:{ color:textColor, padding:8, font:{ size:10 }, boxWidth:10, boxHeight:10 } },
-                tooltip:{
-                  callbacks:{
-                    label:(ctx)=>{
-                      const usd = ctx.parsed;
-                      const total = ctx.dataset.data.reduce((s,v)=>s+v, 0);
-                      const pct = total > 0 ? ((usd/total)*100).toFixed(1) : '0.0';
-                      const fmt = self.hideAmounts ? '••••' : (currency==='IDR' ? 'Rp '+Math.round(usd*(idrRate||0)).toLocaleString('en-US') : '$'+usd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
-                      return ' '+ctx.label+': '+fmt+' ('+pct+'%)';
-                    }
-                  }
-                }
-              }
-            }
+          const wrap=this.$refs.pieWrap;
+          if (!wrap || typeof ApexCharts==='undefined' || !wrap.isConnected) return;
+          if (wrap.clientWidth===0){ setTimeout(()=>this.renderPieChart(),100); return; }
+          const totals={};
+          for (const p of this.overview.portfolios) for (const a of p.assets) { if(a.usd>0) totals[a.asset]=(totals[a.asset]||0)+a.usd; }
+          const entries=Object.entries(totals).sort((a,b)=>b[1]-a[1]);
+          if (this.pieChart){ this.pieChart.destroy(); this.pieChart=null; }
+          if (entries.length===0) return;
+          const top=entries.slice(0,8); const othersVal=entries.slice(8).reduce((s,e)=>s+e[1],0);
+          if (othersVal>0) top.push(['Others',othersVal]);
+          const labels=top.map(e=>e[0]), data=top.map(e=>e[1]);
+          const COLORS=['#6366f1','#8b5cf6','#f59e0b','#10b981','#ef4444','#3b82f6','#f97316','#ec4899','#14b8a6','#a855f7'];
+          const dark=this.darkMode, currency=this.displayCurrency, idrRate=this.idrRate, self=this;
+          const totalUsd=data.reduce((s,v)=>s+v,0);
+          const totalDisp=currency==='IDR'?totalUsd*(idrRate||0):totalUsd;
+          this.pieChart=new ApexCharts(wrap,{
+            chart:{ type:'donut', height:'100%', background:'transparent', animations:{enabled:false}, fontFamily:'ui-sans-serif,system-ui,sans-serif' },
+            theme:{ mode:dark?'dark':'light' },
+            series:data, labels,
+            colors:COLORS.slice(0,labels.length),
+            plotOptions:{ pie:{ expandOnClick:false, donut:{ size:'62%', labels:{ show:true,
+              name:{ show:true, fontSize:'11px', color:dark?'#94a3b8':'#64748b', offsetY:-10 },
+              value:{ show:true, fontSize:'20px', fontWeight:700, color:dark?'#e2e8f0':'#0f172a', offsetY:6, formatter:(v)=>{ if(self.hideAmounts) return '••••'; const n=Number(v); const d=currency==='IDR'?n*(idrRate||0):n; return self.fmtAxis(d); } },
+              total:{ show:true, showAlways:true, label:'Total', fontSize:'11px', fontWeight:400, color:dark?'#94a3b8':'#64748b', formatter:(w)=>{ if(self.hideAmounts) return '••••'; const sum=w.globals.seriesTotals.reduce((a,b)=>a+b,0); return self.fmtAxis(currency==='IDR'?sum*(idrRate||0):sum); } }
+            } } } },
+            dataLabels:{ enabled:false },
+            legend:{ position:'bottom', fontSize:'10px', labels:{colors:dark?'#94a3b8':'#64748b'}, markers:{size:5}, itemMargin:{horizontal:4} },
+            tooltip:{ theme:dark?'dark':'light', y:{ formatter:(v)=>{ const pct=totalUsd>0?((v/totalUsd)*100).toFixed(1):'0.0'; const fmt=self.hideAmounts?'••••':(currency==='IDR'?'Rp '+Math.round(v*(idrRate||0)).toLocaleString('en-US'):'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})); return fmt+' ('+pct+'%)'; } } },
+            stroke:{ width:2, colors:[dark?'#1e293b':'#ffffff'] },
           });
+          this.pieChart.render();
         },
 
         // ---- Analysis ----
@@ -1182,46 +1213,58 @@ export const appHtml = `<!doctype html>
         },
         renderAnalysisChart() {
           const wrap=this.$refs.anaChartWrap;
-          if (!wrap || typeof Chart==='undefined' || !wrap.isConnected) return;
+          if (!wrap || typeof ApexCharts==='undefined' || !wrap.isConnected) return;
           if (wrap.clientWidth===0){ setTimeout(()=>this.renderAnalysisChart(),100); return; }
-          const dark=this.darkMode, textColor=dark?'#94a3b8':'#64748b', gridColor=dark?'rgba(148,163,184,0.14)':'rgba(100,116,139,0.14)';
-          const currency=this.displayCurrency, idrMult= currency==='IDR'?(this.idrRate||0):1;
-          let labels=this.analysisHistory.map(h=>new Date(Number(h.captured_at)).toLocaleDateString('en-US',{day:'2-digit',month:'short'}));
-          let data=this.analysisHistory.map(h=>Number(h.total_usd)*idrMult);
+          const dark=this.darkMode, currency=this.displayCurrency, idrMult=currency==='IDR'?(this.idrRate||0):1, self=this;
+          let pts=this.analysisHistory.map(h=>[Number(h.captured_at),Number(h.total_usd)*idrMult]);
           const MAX=150;
-          if (data.length>MAX){ const step=(data.length-1)/(MAX-1), nl=[], nd=[]; for(let i=0;i<MAX;i++){ const idx=Math.round(i*step); nl.push(labels[idx]); nd.push(data[idx]); } labels=nl; data=nd; }
+          if (pts.length>MAX){ const step=(pts.length-1)/(MAX-1); pts=Array.from({length:MAX},(_,i)=>pts[Math.round(i*step)]); }
           if (this.analysisChart){ this.analysisChart.destroy(); this.analysisChart=null; }
-          if (data.length===0) return;
-          wrap.innerHTML=''; const el=document.createElement('canvas'); wrap.appendChild(el);
-          const g=el.getContext('2d').createLinearGradient(0,0,0,wrap.clientHeight||240);
-          g.addColorStop(0,'rgba(99,102,241,0.35)'); g.addColorStop(1,'rgba(99,102,241,0)');
-          const self=this;
-          this.analysisChart=new Chart(el,{ type:'line',
-            data:{ labels:labels, datasets:[{ data:data, borderColor:'#6366f1', backgroundColor:g, fill:true, tension:0.35, borderWidth:2, pointRadius:0, pointHoverRadius:5, pointHoverBackgroundColor:'#6366f1', pointHoverBorderColor:dark?'#1e293b':'#fff', pointHoverBorderWidth:2 }] },
-            options:{ animation:false, responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
-              plugins:{ legend:{display:false}, tooltip:{ backgroundColor:dark?'#0f172a':'#ffffff', titleColor:textColor, bodyColor:dark?'#e2e8f0':'#0f172a', borderColor:gridColor, borderWidth:1, padding:10, displayColors:false, callbacks:{ label:(c)=> self.hideAmounts ? (currency==='IDR'?'Rp ••••••':'$ ••••••') : (currency==='IDR'?'Rp '+Math.round(c.parsed.y).toLocaleString('en-US'):'$'+c.parsed.y.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})) } } },
-              scales:{ y:{ ticks:{ color:textColor, maxTicksLimit:5, callback:(v)=>self.fmtAxis(v) }, grid:{ color:gridColor }, border:{display:false} }, x:{ ticks:{ color:textColor, maxTicksLimit:7, autoSkip:true, maxRotation:0 }, grid:{display:false}, border:{display:false} } }
-            }
+          if (pts.length===0) return;
+          this.analysisChart=new ApexCharts(wrap,{
+            chart:{ type:'area', height:'100%', background:'transparent', animations:{enabled:false}, toolbar:{ show:true, autoSelected:'zoom', tools:{ download:false, selection:false, zoom:true, zoomin:true, zoomout:true, pan:true, reset:true } }, zoom:{enabled:true,type:'x'}, fontFamily:'ui-sans-serif,system-ui,sans-serif' },
+            theme:{ mode:dark?'dark':'light' },
+            series:[{ name:currency, data:pts }],
+            xaxis:{ type:'datetime', labels:{ style:{colors:dark?'#94a3b8':'#64748b',fontSize:'11px'}, datetimeUTC:false }, axisBorder:{show:false}, axisTicks:{show:false}, tooltip:{enabled:false} },
+            yaxis:{ labels:{ style:{colors:dark?'#94a3b8':'#64748b',fontSize:'11px'}, formatter:(v)=>self.fmtAxis(v) }, tickAmount:4 },
+            stroke:{ curve:'smooth', width:2, colors:['#6366f1'] },
+            fill:{ type:'gradient', gradient:{ shade:'dark', type:'vertical', shadeIntensity:0.1, gradientToColors:['#6366f1'], inverseColors:false, opacityFrom:0.35, opacityTo:0, stops:[0,100] } },
+            colors:['#6366f1'],
+            grid:{ borderColor:dark?'rgba(148,163,184,0.14)':'rgba(100,116,139,0.14)', xaxis:{lines:{show:false}} },
+            markers:{ size:0, hover:{size:5} },
+            tooltip:{ theme:dark?'dark':'light', x:{format:'dd MMM yyyy HH:mm'}, y:{ formatter:(v)=>self.hideAmounts?(currency==='IDR'?'Rp ••••••':'$ ••••••'):(currency==='IDR'?'Rp '+Math.round(v).toLocaleString('en-US'):'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})) } },
+            dataLabels:{enabled:false}, legend:{show:false},
           });
+          this.analysisChart.render();
         },
         renderAllocPie() {
           const wrap=this.$refs.allocWrap;
-          if (!wrap || typeof Chart==='undefined' || !wrap.isConnected) return;
+          if (!wrap || typeof ApexCharts==='undefined' || !wrap.isConnected) return;
           if (wrap.clientWidth===0){ setTimeout(()=>this.renderAllocPie(),100); return; }
           const items=this.top5();
           if (this.analysisPie){ this.analysisPie.destroy(); this.analysisPie=null; }
           if (items.length===0) return;
           const labels=items.map(x=>x.asset), data=items.map(x=>x.usd);
           const COLORS=this.ALLOC_COLORS;
-          const dark=this.darkMode, textColor=dark?'#94a3b8':'#64748b', currency=this.displayCurrency, idrRate=this.idrRate, self=this;
-          const centerText={ id:'anaCenter', afterDraw(chart){ const ca=chart.chartArea; if(!ca)return; const ctx=chart.ctx; const cx=(ca.left+ca.right)/2, cy=(ca.top+ca.bottom)/2; const sum=chart.data.datasets[0].data.reduce((s,v)=>s+v,0); const disp=currency==='IDR'?sum*(idrRate||0):sum; ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle=textColor; ctx.font='10px ui-sans-serif,system-ui,sans-serif'; ctx.fillText('Total',cx,cy-9); ctx.fillStyle=dark?'#e2e8f0':'#0f172a'; ctx.font='600 15px ui-sans-serif,system-ui,sans-serif'; ctx.fillText(self.hideAmounts?'••••':self.fmtAxis(disp),cx,cy+8); ctx.restore(); } };
-          wrap.innerHTML=''; const el=document.createElement('canvas'); wrap.appendChild(el);
-          this.analysisPie=new Chart(el,{ type:'doughnut', plugins:[centerText],
-            data:{ labels:labels, datasets:[{ data:data, backgroundColor:COLORS.slice(0,labels.length), borderWidth:2, borderColor:dark?'#1e293b':'#ffffff', borderRadius:3, hoverOffset:6 }] },
-            options:{ animation:false, responsive:true, maintainAspectRatio:false, cutout:'62%',
-              plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>{ const usd=ctx.parsed; const total=ctx.dataset.data.reduce((s,v)=>s+v,0); const pct=total>0?((usd/total)*100).toFixed(1):'0.0'; const fmt=self.hideAmounts?'••••':(currency==='IDR'?'Rp '+Math.round(usd*(idrRate||0)).toLocaleString('en-US'):'$'+usd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})); return ' '+ctx.label+': '+fmt+' ('+pct+'%)'; } } } }
-            }
+          const dark=this.darkMode, currency=this.displayCurrency, idrRate=this.idrRate, self=this;
+          const totalUsd=data.reduce((s,v)=>s+v,0);
+          const totalDisp=currency==='IDR'?totalUsd*(idrRate||0):totalUsd;
+          this.analysisPie=new ApexCharts(wrap,{
+            chart:{ type:'donut', height:'100%', background:'transparent', animations:{enabled:false}, fontFamily:'ui-sans-serif,system-ui,sans-serif' },
+            theme:{ mode:dark?'dark':'light' },
+            series:data, labels,
+            colors:COLORS.slice(0,labels.length),
+            plotOptions:{ pie:{ expandOnClick:false, donut:{ size:'62%', labels:{ show:true,
+              name:{ show:true, fontSize:'11px', color:dark?'#94a3b8':'#64748b', offsetY:-10 },
+              value:{ show:true, fontSize:'20px', fontWeight:700, color:dark?'#e2e8f0':'#0f172a', offsetY:6, formatter:(v)=>{ if(self.hideAmounts) return '••••'; const n=Number(v); const d=currency==='IDR'?n*(idrRate||0):n; return self.fmtAxis(d); } },
+              total:{ show:true, showAlways:true, label:'Total', fontSize:'11px', fontWeight:400, color:dark?'#94a3b8':'#64748b', formatter:(w)=>{ if(self.hideAmounts) return '••••'; const sum=w.globals.seriesTotals.reduce((a,b)=>a+b,0); return self.fmtAxis(currency==='IDR'?sum*(idrRate||0):sum); } }
+            } } } },
+            dataLabels:{enabled:false},
+            legend:{show:false},
+            tooltip:{ theme:dark?'dark':'light', y:{ formatter:(v)=>{ const pct=totalUsd>0?((v/totalUsd)*100).toFixed(1):'0.0'; const fmt=self.hideAmounts?'••••':(currency==='IDR'?'Rp '+Math.round(v*(idrRate||0)).toLocaleString('en-US'):'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})); return fmt+' ('+pct+'%)'; } } },
+            stroke:{ width:2, colors:[dark?'#1e293b':'#ffffff'] },
           });
+          this.analysisPie.render();
         },
 
         async syncAll() {
@@ -1236,9 +1279,9 @@ export const appHtml = `<!doctype html>
           if (r&&r.ok) { this.flash('Account synced'); await Promise.all([this.loadAccounts(),this.loadOverview()]); }
         },
         async backfillDeposits(id) {
-          if (!confirm('Ambil SELURUH riwayat deposit dari awal? Proses berjalan di latar belakang Worker (bisa beberapa menit) dan dilanjutkan otomatis tiap 2 menit.')) return;
+          if (!confirm('Fetch FULL deposit history from the beginning? This runs in the background Worker (may take several minutes) and auto-resumes every 2 minutes.')) return;
           const r=await this.api('POST','/accounts/'+id+'/backfill-deposits', {});
-          if (r&&r.ok) { this.flash('Backfill dimulai — berjalan di latar belakang. Pantau status di kartu akun / tab Deposits.'); await this.loadAccounts(); }
+          if (r&&r.ok) { this.flash('Backfill started — running in the background. Monitor status in the account card / Deposits tab.'); await this.loadAccounts(); }
           else if(r) this.flash(r.error);
         },
 
@@ -1250,9 +1293,9 @@ export const appHtml = `<!doctype html>
         },
         async deletePortfolio(id) { if(!confirm('Delete this portfolio and all its contents?')) return; const r=await this.api('DELETE','/portfolios/'+id); if(r&&r.ok){ await this.loadPortfolios(); await this.loadOverview(); } },
 
-        openHoldingModal(h) { this.hd = h ? { id:h.id, portfolio_id:h.portfolio_id, label:h.label, currency:h.currency||'USD', amount:Math.abs(Number(h.amount)||0), direction:(Number(h.amount)<0?'out':'in'), note:h.note||'', added_at:this.toDateInput(h.added_at||h.created_at) } : { id:null, portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', label:'', currency:'USD', amount:null, direction:'in', note:'', added_at:this.toDateInput(null) }; this.modal='holding'; },
+        openHoldingModal(h) { const amt=h?Math.abs(Number(h.amount)||0):null; this.hd = h ? { id:h.id, portfolio_id:h.portfolio_id, label:h.label, currency:h.currency||'USD', amountDisplay:amt?amt.toLocaleString('en-US',{maximumFractionDigits:8}):'', direction:(Number(h.amount)<0?'out':'in'), note:h.note||'', added_at:this.toDateInput(h.added_at||h.created_at) } : { id:null, portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', label:'', currency:'USD', amountDisplay:'', direction:'in', note:'', added_at:this.toDateInput(null) }; this.modal='holding'; },
         async saveHolding() {
-          const mag = Math.abs(Number(this.hd.amount)||0);
+          const mag = Math.abs(parseFloat((this.hd.amountDisplay||'').replace(/,/g,''))||0);
           const amount = this.hd.direction==='out' ? -mag : mag;
           const body={ portfolio_id:this.hd.portfolio_id, label:this.hd.label, currency:this.hd.currency, amount, note:this.hd.note, added_at:this.hd.added_at?new Date(this.hd.added_at).getTime():null };
           const r = this.hd.id ? await this.api('PUT','/holdings/'+this.hd.id, body) : await this.api('POST','/holdings', body);
