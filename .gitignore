@@ -1,6 +1,7 @@
 node_modules/
 .wrangler/
 dist/
+public/
 .dev.vars
 .dev.vars.*
 !.dev.vars.example

@@ -24,9 +24,8 @@ export const manifestJson = JSON.stringify({
 });
 
 // Minimal service worker untuk installability PWA.
-// PENTING: hanya cegat request same-origin GET. Request lintas-origin (CDN Tailwind/Alpine/
-// Chart.js, Google Fonts) dibiarkan ditangani browser langsung — kalau di-fetch ulang dari SW,
-// fetch-nya tunduk pada CSP connect-src dan akan diblokir (mematahkan pemuatan CDN).
+// Hanya cegat request same-origin GET (pass-through). Seluruh aset kini di-self-host
+// (Tailwind/Alpine/Chart.js via Workers Assets), jadi tak ada lagi request lintas-origin.
 export const swJs = `self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch',e=>{

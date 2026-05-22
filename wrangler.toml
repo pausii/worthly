@@ -3,6 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2025-05-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Aset statis frontend yang di-self-host (Tailwind CSS + Alpine + Chart.js),
+# di-build oleh `npm run build:assets` ke ./public. Permintaan non-aset jatuh ke Worker.
+[assets]
+directory = "./public"
+
 # Jalankan sinkronisasi CEX/on-chain tiap 2 menit.
 [triggers]
 crons = ["*/2 * * * *"]

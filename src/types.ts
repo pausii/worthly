@@ -32,6 +32,7 @@ export interface SessionData {
 export type Variables = {
   session: SessionData;
   sid: string;
+  cspNonce: string;
 };
 
 export type AppContext = Context<{ Bindings: Env; Variables: Variables }>;

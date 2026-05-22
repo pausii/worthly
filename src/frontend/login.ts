@@ -12,10 +12,9 @@ export const loginHtml = `<!doctype html>
   <link rel="apple-touch-icon" href="/icon.svg" />
   <title>Sign In — Wallet Tracker</title>
   <!-- Apply dark class before CSS renders to prevent flash -->
-  <script>if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark')</script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>tailwind.config={darkMode:'class'}</script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="/app.css" />
+  <script nonce="__CSP_NONCE__">if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark')</script>
+  <script defer src="/vendor/alpine.js"></script>
   <style>
     [x-cloak]{display:none!important}
     /* Smooth dark mode transitions — enabled after first paint to avoid load flash */
@@ -25,7 +24,7 @@ export const loginHtml = `<!doctype html>
 <body class="h-full bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
 
   <!-- Dark mode toggle -->
-  <button onclick="toggleDark()" aria-label="Toggle dark mode"
+  <button id="darkToggle" aria-label="Toggle dark mode"
     class="fixed top-4 right-4 z-50 rounded-xl p-2.5 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-transparent hover:border-slate-300 dark:hover:border-slate-700">
     <!-- Moon — shown in light mode -->
     <svg class="h-5 w-5 dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -74,11 +73,13 @@ export const loginHtml = `<!doctype html>
     </div>
   </div>
 
-  <script>
+  <script nonce="__CSP_NONCE__">
     function toggleDark() {
       const isDark = document.documentElement.classList.toggle('dark');
       localStorage.setItem('theme', isDark ? 'dark' : 'light');
     }
+    var __dt = document.getElementById('darkToggle');
+    if (__dt) __dt.addEventListener('click', toggleDark);
     // Enable smooth transitions after first paint (avoids transition on initial dark apply)
     requestAnimationFrame(()=>requestAnimationFrame(()=>document.body.classList.add('theme-ready')));
 

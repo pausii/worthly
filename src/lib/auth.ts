@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import type { Env, Variables } from '../types';
 import { getSession, readSessionCookie } from './session';
+import { randomToken } from './crypto';
 
 type M = MiddlewareHandler<{ Bindings: Env; Variables: Variables }>;
 
@@ -33,6 +34,9 @@ export const requireCsrf: M = async (c, next) => {
 
 /** Security headers untuk semua response. */
 export const securityHeaders: M = async (c, next) => {
+  // Nonce per-request untuk skrip inline (theme-init & app()/login()), agar CSP tak perlu 'unsafe-inline'.
+  const nonce = randomToken(16);
+  c.set('cspNonce', nonce);
   await next();
   const h = c.res.headers;
   h.set('X-Content-Type-Options', 'nosniff');
@@ -40,17 +44,18 @@ export const securityHeaders: M = async (c, next) => {
   h.set('Referrer-Policy', 'no-referrer');
   h.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   h.set('Cross-Origin-Opener-Policy', 'same-origin');
-  // CSP: izinkan CDN yang dipakai frontend (Tailwind, Alpine, Chart.js, Google Fonts).
-  // Alpine & Tailwind CDN butuh 'unsafe-eval'/'unsafe-inline'. Ini trade-off dari syarat "full CDN".
+  // Frontend kini di-self-host (Tailwind precompiled + Alpine + Chart.js via Workers Assets) —
+  // tidak ada CDN pihak ketiga & tanpa 'unsafe-inline'. Skrip inline diizinkan lewat nonce.
+  // 'unsafe-eval' tetap dibutuhkan: Alpine mengevaluasi ekspresi atribut via Function().
   h.set(
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
-      "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com data:",
-      "img-src 'self' data: https:",
-      "connect-src 'self' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.gstatic.com",
+      `script-src 'self' 'unsafe-eval' 'nonce-${nonce}'`,
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
+      "img-src 'self' data:",
+      "connect-src 'self'",
       "worker-src 'self'",
       "base-uri 'self'",
       "form-action 'self'",

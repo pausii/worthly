@@ -39,17 +39,20 @@ app.post('/', async (c) => {
   if (!portfolioId) return fail(c, 'Portfolio is required');
   if (!label) return fail(c, 'Label is required');
   if (!ALLOWED_CURRENCIES.has(currency)) return fail(c, 'Invalid currency');
-  if (!isFinite(amount) || amount <= 0) return fail(c, 'Amount must be a number greater than 0');
+  if (!isFinite(amount) || amount === 0) return fail(c, 'Amount cannot be zero');
 
   const pf = await queryOne(c.env, 'SELECT id FROM portfolios WHERE id = ?', portfolioId);
   if (!pf) return fail(c, 'Portfolio not found', 404);
 
+  // Nominal negatif = pengeluaran (mengurangi total). Tandai via asset_class agar UI bisa membedakan.
+  const assetClass = amount < 0 ? 'expense' : 'fiat';
   const res = await run(
     c.env,
     `INSERT INTO manual_holdings (portfolio_id, label, asset_class, currency, amount, note, added_at, created_at, updated_at)
-     VALUES (?, ?, 'fiat', ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     portfolioId,
     label,
+    assetClass,
     currency,
     amount,
     body.note ?? null,
@@ -78,19 +81,26 @@ app.put('/:id', async (c) => {
 
   const addedAt = body.added_at && isFinite(Number(body.added_at)) ? Number(body.added_at) : null;
 
+  const amountVal = isFinite(Number(body.amount)) ? Number(body.amount) : null;
+  if (amountVal === 0) return fail(c, 'Amount cannot be zero');
+  // Sinkronkan penanda pengeluaran dengan tanda nominal yang baru (negatif = pengeluaran).
+  const assetClass = amountVal === null ? null : amountVal < 0 ? 'expense' : 'fiat';
+
   await run(
     c.env,
     `UPDATE manual_holdings
      SET label = COALESCE(?, label),
          currency = COALESCE(?, currency),
          amount = COALESCE(?, amount),
+         asset_class = COALESCE(?, asset_class),
          note = ?,
          added_at = COALESCE(?, added_at),
          updated_at = ?
      WHERE id = ?`,
     body.label?.trim() || null,
     currency,
-    isFinite(Number(body.amount)) ? Number(body.amount) : null,
+    amountVal,
+    assetClass,
     body.note ?? null,
     addedAt,
     now(),

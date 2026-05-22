@@ -19,8 +19,11 @@ app.get('/overview', async (c) => {
 // Data chart pergerakan nilai. ?portfolio_id= (kosong = agregat semua), ?days=30
 app.get('/history', async (c) => {
   const pid = c.req.query('portfolio_id');
-  const days = Math.min(Math.max(Number(c.req.query('days')) || 30, 1), 365);
-  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+  const daysParam = c.req.query('days');
+  const all = daysParam === 'all';
+  // 'all' = seluruh riwayat (since 0). Selain itu clamp 1..3650 hari.
+  const days = all ? 0 : Math.min(Math.max(Number(daysParam) || 30, 1), 3650);
+  const since = all ? 0 : Date.now() - days * 24 * 60 * 60 * 1000;
 
   if (pid) {
     const rows = await queryAll<{ captured_at: number; total_usd: number }>(

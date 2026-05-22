@@ -20,13 +20,16 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 app.use('*', securityHeaders);
 
 // --- Halaman ---
-app.get('/login', (c) => c.html(loginHtml));
+// Sisipkan nonce CSP per-request ke placeholder skrip inline.
+const withNonce = (html: string, nonce: string) => html.replace(/__CSP_NONCE__/g, nonce);
+
+app.get('/login', (c) => c.html(withNonce(loginHtml, c.get('cspNonce'))));
 
 app.get('/', async (c) => {
   const sid = readSessionCookie(c);
   const session = sid ? await getSession(c.env, sid) : null;
   if (!session) return c.redirect('/login', 302);
-  return c.html(appHtml);
+  return c.html(withNonce(appHtml, c.get('cspNonce')));
 });
 
 app.get('/healthz', (c) => c.json({ ok: true }));
