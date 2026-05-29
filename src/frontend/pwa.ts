@@ -1,14 +1,26 @@
 export const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#6366f1"/>
-      <stop offset="100%" stop-color="#7c3aed"/>
+      <stop offset="55%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="30%" cy="22%" r="80%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="60%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.40"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
   </defs>
-  <rect width="192" height="192" rx="40" fill="url(#g)"/>
-  <svg x="28" y="28" width="136" height="136" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M3 7h18M3 7l2 12a2 2 0 002 2h10a2 2 0 002-2l2-12M3 7l1-3h16l1 3M9 11v6m6-6v6"/>
-  </svg>
+  <rect width="192" height="192" rx="44" fill="url(#bg)"/>
+  <rect width="192" height="192" rx="44" fill="url(#glow)"/>
+  <path d="M38 138 L70 116 L98 128 L128 90 L156 58 L156 150 L38 150 Z" fill="url(#area)"/>
+  <line x1="36" y1="150" x2="156" y2="150" stroke="#ffffff" stroke-width="4" stroke-linecap="round" opacity="0.30"/>
+  <path d="M38 138 L70 116 L98 128 L128 90 L156 58" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="156" cy="58" r="12" fill="#ffffff"/>
+  <circle cx="156" cy="58" r="5.5" fill="#7c3aed"/>
 </svg>`;
 
 export const manifestJson = JSON.stringify({
@@ -20,7 +32,7 @@ export const manifestJson = JSON.stringify({
   display: 'standalone',
   background_color: '#f1f5f9',
   theme_color: '#4f46e5',
-  icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+  icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }],
 });
 
 // Minimal service worker untuk installability PWA.
