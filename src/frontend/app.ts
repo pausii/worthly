@@ -28,12 +28,8 @@ export const appHtml = `<!doctype html>
 <body class="h-full bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100 antialiased">
 <div x-data="app()" x-init="init()" x-cloak class="flex h-full">
 
-  <!-- Mobile overlay -->
-  <div x-show="sidebarOpen" @click="sidebarOpen=false" class="fixed inset-0 z-20 bg-slate-900/50 lg:hidden"></div>
-
-  <!-- Sidebar -->
-  <aside class="fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-gradient-to-b from-indigo-700 via-indigo-700 to-violet-900 text-indigo-50 transition-transform lg:static lg:translate-x-0"
-         :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'">
+  <!-- Sidebar (desktop only; mobile pakai bottom nav) -->
+  <aside class="hidden w-64 flex-col bg-gradient-to-b from-indigo-700 via-indigo-700 to-violet-900 text-indigo-50 lg:flex">
     <div class="flex items-center gap-3 px-5 pt-5 pb-4">
       <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M3 7l2 12a2 2 0 002 2h10a2 2 0 002-2l2-12M9 11v6m6-6v6"/></svg>
@@ -70,9 +66,6 @@ export const appHtml = `<!doctype html>
   <div class="flex min-w-0 flex-1 flex-col">
     <!-- Topbar -->
     <header class="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 px-4 py-3 backdrop-blur lg:px-6">
-      <button @click="sidebarOpen=!sidebarOpen" class="rounded-lg p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 lg:hidden">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
       <h1 class="text-base font-semibold capitalize" x-text="navLabel()"></h1>
       <div class="ml-auto flex items-center gap-2">
         <!-- Total value + currency toggle -->
@@ -109,7 +102,7 @@ export const appHtml = `<!doctype html>
       </div>
     </header>
 
-    <main class="flex-1 overflow-y-auto p-4 lg:p-6">
+    <main class="flex-1 overflow-y-auto p-4 pb-24 lg:p-6 lg:pb-6">
       <p x-show="toast" x-text="toast" class="mb-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/40 px-4 py-2 text-sm text-indigo-700 dark:text-indigo-300"></p>
 
       <!-- DASHBOARD -->
@@ -748,6 +741,49 @@ export const appHtml = `<!doctype html>
     </main>
   </div>
 
+  <!-- Mobile bottom navigation -->
+  <nav class="fixed inset-x-0 bottom-0 z-30 flex border-t border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 backdrop-blur lg:hidden" style="padding-bottom:env(safe-area-inset-bottom)">
+    <template x-for="item in nav.slice(0,4)" :key="item.id">
+      <button @click="go(item.id)"
+        class="flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors"
+        :class="view===item.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'">
+        <span x-html="item.icon"></span>
+        <span class="truncate max-w-full px-0.5" x-text="item.label"></span>
+      </button>
+    </template>
+    <button @click="moreOpen=true"
+      class="relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors"
+      :class="['holdings','deposits','activity','settings'].includes(view) ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h6v6H4zM14 6h6v6h-6zM4 16h6v4H4zM14 16h6v4h-6z"/></svg>
+      <span>More</span>
+      <span x-show="unreadCount>0" class="absolute right-[30%] top-1 h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+    </button>
+  </nav>
+
+  <!-- More sheet (mobile) -->
+  <div x-show="moreOpen" class="fixed inset-0 z-40 lg:hidden">
+    <div @click="moreOpen=false" class="absolute inset-0 bg-slate-900/50"></div>
+    <div class="absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-xl"
+         style="padding-bottom:calc(env(safe-area-inset-bottom) + 1rem)"
+         x-transition:enter="transition ease-out duration-200" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0"
+         x-transition:leave="transition ease-in duration-150" x-transition:leave-start="translate-y-0" x-transition:leave-end="translate-y-full">
+      <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600"></div>
+      <div class="grid grid-cols-4 gap-2">
+        <template x-for="item in nav.slice(4)" :key="item.id">
+          <button @click="go(item.id)"
+            class="relative flex flex-col items-center gap-1.5 rounded-xl p-3 text-[11px] font-medium transition-colors"
+            :class="view===item.id ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'">
+            <span x-html="item.icon"></span>
+            <span class="text-center leading-tight" x-text="item.label"></span>
+            <span x-show="item.id==='activity' && unreadCount>0" x-text="unreadCount>99?'99+':unreadCount"
+              class="absolute right-1 top-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold leading-none text-white"></span>
+          </button>
+        </template>
+      </div>
+      <button @click="logout()" class="mt-3 w-full rounded-xl bg-slate-100 dark:bg-slate-700 py-2.5 text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-slate-200 dark:hover:bg-slate-600">Sign Out</button>
+    </div>
+  </div>
+
   <!-- MODAL: Portfolio -->
   <div x-show="modal==='portfolio'" class="fixed inset-0 z-40 flex items-center justify-center p-4">
     <div @click="modal=null" class="absolute inset-0 bg-slate-900/50"></div>
@@ -889,7 +925,7 @@ export const appHtml = `<!doctype html>
 
     function app() {
       return {
-        view: 'dashboard', sidebarOpen: false, csrf: '', username: '',
+        view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
         syncing: false, toast: '', modal: null,
         systemEvents: [], unreadCount: 0, activityQueue: [], queueMeta: {}, activityTab: 'events',
         darkMode: document.documentElement.classList.contains('dark'),
@@ -992,7 +1028,7 @@ export const appHtml = `<!doctype html>
         },
 
         go(id) {
-          this.view = id; this.sidebarOpen = false;
+          this.view = id; this.sidebarOpen = false; this.moreOpen = false;
           window.location.hash = id;
           if (id==='dashboard') this.$nextTick(()=>{ this.renderChart(); this.renderPieChart(); });
           if (id==='analysis') this.loadAnalysis();
