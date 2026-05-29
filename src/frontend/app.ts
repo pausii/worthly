@@ -15,7 +15,8 @@ export const appHtml = `<!doctype html>
   <link rel="apple-touch-icon" href="/favicon.svg" />
   <title>Dashboard — Wallet Tracker</title>
   <link rel="stylesheet" href="/app.css" />
-  <script nonce="__CSP_NONCE__">if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark')</script>
+  <script nonce="__CSP_NONCE__">if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark');
+    window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__bip=e;window.dispatchEvent(new Event('bip-ready'));});</script>
   <script defer src="/vendor/apexcharts.js"></script>
   <script defer src="/vendor/alpine.js"></script>
   <style>
@@ -272,10 +273,59 @@ export const appHtml = `<!doctype html>
                 :class="valueMode==='holdings' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'">Holdings (sim)</button>
             </div>
           </div>
-          <p x-show="valueMode==='holdings'" class="mb-3 text-xs text-slate-400 dark:text-slate-500">Simulasi: jumlah aset Anda saat ini × harga historis (bukan saldo nyata di masa lalu).</p>
+          <p x-show="valueMode==='holdings'" class="mb-3 text-xs text-slate-400 dark:text-slate-500">Simulated: your current holdings &times; historical prices (not your actual past balance).</p>
           <div class="relative h-64">
             <div x-ref="anaChartWrap" class="w-full h-full"></div>
             <div x-show="analysisHistory.length===0 && !analysisLoading" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500" x-text="valueMode==='holdings' ? 'No price history available.' : 'No snapshots for this period.'"></div>
+          </div>
+          <!-- Per-asset price peaks (holdings sim only) -->
+          <div x-show="valueMode==='holdings' && assetPeaks.length>0" class="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
+            <button @click="peaksOpen=!peaksOpen" class="flex w-full items-center justify-between gap-2 text-left">
+              <h4 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Asset Peaks — this period</h4>
+              <svg class="h-4 w-4 shrink-0 text-slate-400 transition-transform dark:text-slate-500" :class="peaksOpen ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div x-show="peaksOpen" x-transition class="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+              <template x-for="p in assetPeaks" :key="p.asset">
+                <div class="flex items-center justify-between gap-2 text-sm">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="relative h-5 w-5 shrink-0">
+                      <span class="absolute inset-0 flex items-center justify-center rounded-full text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(p.asset)" x-text="tokenInitial(p.asset)"></span>
+                      <img :src="tokenIcon(p.asset)" class="absolute inset-0 h-5 w-5 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                    </span>
+                    <span class="truncate font-medium" x-text="p.asset"></span>
+                  </div>
+                  <div class="flex shrink-0 items-center gap-2 text-right">
+                    <span class="font-medium" x-text="fmtDisplay(p.peak)"></span>
+                    <span class="text-[11px] text-slate-400 dark:text-slate-500" x-text="new Date(p.peakAt).toLocaleDateString('en-US',{day:'2-digit',month:'short'})"></span>
+                    <span class="w-14 text-[11px] font-medium" :class="p.fromPeakPct >= -0.05 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'"
+                      x-text="p.fromPeakPct >= -0.05 ? 'at peak' : fmtPct(p.fromPeakPct,false)"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+            <!-- All assets: total, highest, lowest, below peak (dari kurva portofolio) -->
+            <div x-show="perf().has" class="mt-3 border-t border-slate-100 dark:border-slate-700 pt-3">
+              <div class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">All Assets</div>
+              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div>
+                  <div class="text-[11px] text-slate-400 dark:text-slate-500">Total</div>
+                  <div class="text-sm font-semibold" x-text="fmtDisplay(perf().end)"></div>
+                </div>
+                <div>
+                  <div class="text-[11px] text-slate-400 dark:text-slate-500">Highest</div>
+                  <div class="text-sm font-semibold text-emerald-600 dark:text-emerald-400" x-text="fmtDisplay(perf().peak)"></div>
+                </div>
+                <div>
+                  <div class="text-[11px] text-slate-400 dark:text-slate-500">Lowest</div>
+                  <div class="text-sm font-semibold text-rose-600 dark:text-rose-400" x-text="fmtDisplay(perf().low)"></div>
+                </div>
+                <div>
+                  <div class="text-[11px] text-slate-400 dark:text-slate-500">Below peak</div>
+                  <div class="text-sm font-semibold" :class="(perf().peak-perf().end) > 0.005 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'"
+                    x-text="(perf().peak-perf().end) > 0.005 ? '−'+fmtDisplay(perf().peak-perf().end) : 'at peak'"></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -720,6 +770,30 @@ export const appHtml = `<!doctype html>
       <!-- SETTINGS -->
       <section x-show="view==='settings'" class="max-w-md space-y-4">
         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+          <h3 class="mb-1 text-sm font-semibold">Install App</h3>
+          <p class="mb-4 text-xs text-slate-400 dark:text-slate-500">Add Wallet Tracker to your home screen for a full-screen, app-like experience.</p>
+          <!-- Sudah terpasang -->
+          <div x-show="installed" class="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+            <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span>App is installed on this device.</span>
+          </div>
+          <!-- Bisa install langsung (Android/Chrome) -->
+          <button x-show="!installed && installPrompt" @click="installApp()"
+            class="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"/></svg>
+            <span>Install app</span>
+          </button>
+          <!-- Tidak bisa otomatis: iOS atau prompt belum tersedia -->
+          <div x-show="!installed && !installPrompt" class="text-xs text-slate-500 dark:text-slate-400">
+            <template x-if="isIOS">
+              <p>On iPhone/iPad: tap the <span class="font-medium">Share</span> button, then <span class="font-medium">Add to Home Screen</span>.</p>
+            </template>
+            <template x-if="!isIOS">
+              <p>If no install button appears: open your browser menu (<span class="font-medium">&#8942;</span>) and tap <span class="font-medium">Install app</span> / <span class="font-medium">Add to Home screen</span>.</p>
+            </template>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
           <h3 class="mb-4 text-sm font-semibold">Change Password</h3>
           <form @submit.prevent="changePassword()" class="space-y-3">
             <input x-model="pw.current" type="password" placeholder="Current password"
@@ -936,6 +1010,7 @@ export const appHtml = `<!doctype html>
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
         syncing: false, toast: '', modal: null, updateReady: false, appVersion: '',
+        installPrompt: null, installed: false, isIOS: false,
         systemEvents: [], unreadCount: 0, activityQueue: [], queueMeta: {}, activityTab: 'events',
         darkMode: document.documentElement.classList.contains('dark'),
         displayCurrency: localStorage.getItem('currency') || 'USD',
@@ -957,6 +1032,7 @@ export const appHtml = `<!doctype html>
         history: [], historyRange: 30, historyPortfolio: '', chart: null, pieChart: null,
         analysisPeriod: '1M', analysisHistory: [], analysisLoading: false, analysisChart: null, analysisPie: null, topLimit: 10,
         valueMode: 'snapshot', // 'snapshot' = riwayat snapshot nyata; 'holdings' = simulasi holdings kini × harga historis
+        assetPeaks: [], peaksOpen: true, // ringkasan peak harga per-aset (mode holdings); peaksOpen = panel buka/tutup
         STABLES_SET: ['USDT','USDC','BUSD','DAI','TUSD','FDUSD','USDD','USDP','USD'],
         FIATS_SET: ['IDR','EUR','JPY','GBP','AUD','CAD','CHF','CNY','HKD','SGD','KRW','INR','MYR','THB','PHP','NZD','SEK','NOK','DKK','ZAR','TRY','BRL','MXN'],
         ALLOC_COLORS: ['#6366f1','#8b5cf6','#f59e0b','#10b981','#94a3b8'],
@@ -987,6 +1063,12 @@ export const appHtml = `<!doctype html>
           const mv = document.querySelector('meta[name=app-version]');
           this.appVersion = mv ? mv.getAttribute('content') : '';
           this.startVersionWatch();
+          // PWA install: tangkap prompt (sudah distash di window.__bip oleh script head).
+          this.isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+          this.installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
+          if (window.__bip) this.installPrompt = window.__bip;
+          window.addEventListener('bip-ready', ()=>{ this.installPrompt = window.__bip; });
+          window.addEventListener('appinstalled', ()=>{ this.installPrompt = null; this.installed = true; this.flash('App installed'); });
           const VIEWS = ['dashboard','analysis','portfolios','accounts','holdings','deposits','activity','settings'];
           const hash = window.location.hash.slice(1);
           if (VIEWS.includes(hash)) this.view = hash;
@@ -1048,6 +1130,12 @@ export const appHtml = `<!doctype html>
         navLabel() { const n=this.nav.find(x=>x.id===this.view); return n?n.label:''; },
         portfolioName(id) { const p=this.portfolios.find(x=>x.id===id); return p?p.name:'—'; },
         flash(msg) { this.toast = msg; setTimeout(()=>{ this.toast=''; }, 3000); },
+        async installApp() {
+          if (!this.installPrompt) return;
+          this.installPrompt.prompt();
+          try { await this.installPrompt.userChoice; } catch {}
+          this.installPrompt = null;
+        },
         startVersionWatch() {
           if (!this.appVersion || this.appVersion==='dev') return;
           const check = async () => {
@@ -1228,7 +1316,10 @@ export const appHtml = `<!doctype html>
           const ep = this.valueMode==='holdings' ? '/dashboard/asset-history' : '/dashboard/history';
           const r=await this.api('GET',ep+'?days='+this.periodDays());
           this.analysisLoading=false;
-          if (r&&r.ok) this.analysisHistory=r.data;
+          if (r&&r.ok) {
+            if (this.valueMode==='holdings') { this.analysisHistory=(r.data&&r.data.points)||[]; this.assetPeaks=(r.data&&r.data.peaks)||[]; }
+            else { this.analysisHistory=r.data; this.assetPeaks=[]; }
+          }
         },
         setValueMode(m) {
           if (this.valueMode===m) return;

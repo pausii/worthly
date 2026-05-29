@@ -105,7 +105,30 @@ app.get('/asset-history', async (c) => {
     return { captured_at: t, total_usd: total };
   });
 
-  return ok(c, rows);
+  // Ringkasan harga per-aset: puncak harga di periode + harga terkini + jarak dari puncak.
+  const allPeaks = series
+    .map((s) => {
+      let peak = 0, peakAt = 0, current = 0, currentAt = -1;
+      for (const [t, close] of s.m) {
+        if (close > peak) { peak = close; peakAt = t; }
+        if (t >= currentAt) { current = close; currentAt = t; }
+      }
+      return {
+        asset: s.sym,
+        peak,
+        peakAt,
+        current,
+        fromPeakPct: peak > 0 ? ((current - peak) / peak) * 100 : 0,
+        usd: usdValue.get(s.sym) || 0,
+      };
+    })
+    .filter((p) => p.peak > 0);
+
+  // Tampilkan per-aset diurut nilai terbesar, dibatasi agar ringkas.
+  // Total/highest/lowest gabungan dihitung di frontend dari `points` (kurva portofolio).
+  const peaks = allPeaks.slice().sort((a, b) => b.usd - a.usd).slice(0, 6);
+
+  return ok(c, { points: rows, peaks });
 });
 
 // Riwayat deposit dengan server-side pagination.
