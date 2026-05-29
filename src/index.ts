@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import type { Env, Variables } from './types';
+import type { Env, Variables, AppContext } from './types';
 import { securityHeaders, requireAuth, requireCsrf } from './lib/auth';
 import { getSession, readSessionCookie } from './lib/session';
 import { loginHtml } from './frontend/login';
@@ -25,14 +25,23 @@ const withNonce = (html: string, nonce: string) => html.replace(/__CSP_NONCE__/g
 
 app.get('/login', (c) => c.html(withNonce(loginHtml, c.get('cspNonce'))));
 
+const appVersion = (c: AppContext) => c.env.CF_VERSION_METADATA?.id ?? 'dev';
+
 app.get('/', async (c) => {
   const sid = readSessionCookie(c);
   const session = sid ? await getSession(c.env, sid) : null;
   if (!session) return c.redirect('/login', 302);
-  return c.html(withNonce(appHtml, c.get('cspNonce')));
+  const html = withNonce(appHtml, c.get('cspNonce')).replace(/__APP_VERSION__/g, appVersion(c));
+  return c.html(html);
 });
 
 app.get('/healthz', (c) => c.json({ ok: true }));
+
+// Id versi deploy terkini — dipakai PWA untuk deteksi update (selalu fresh).
+app.get('/version', (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ id: appVersion(c) });
+});
 
 // PWA assets
 app.get('/manifest.json', (c) => {

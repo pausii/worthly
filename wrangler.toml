@@ -8,6 +8,10 @@ compatibility_flags = ["nodejs_compat"]
 [assets]
 directory = "./public"
 
+# Metadata versi deploy (id berubah tiap deploy) — dipakai untuk deteksi update PWA.
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
 # Jalankan sinkronisasi CEX/on-chain tiap 2 menit.
 [triggers]
 crons = ["*/2 * * * *"]

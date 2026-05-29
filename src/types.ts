@@ -4,6 +4,9 @@ export interface Env {
   DB: D1Database;
   KV: KVNamespace;
 
+  // Binding metadata versi Worker (Cloudflare) — id unik per deploy.
+  CF_VERSION_METADATA?: { id: string; tag?: string; timestamp?: string };
+
   // Secrets / vars
   MASTER_KEY: string; // base64, 32 byte — kunci enkripsi kredensial
   ENVIRONMENT?: string;

@@ -9,6 +9,7 @@ export const appHtml = `<!doctype html>
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Wallet Tracker" />
   <meta name="theme-color" content="#4f46e5" />
+  <meta name="app-version" content="__APP_VERSION__" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/favicon.svg" />
@@ -784,6 +785,14 @@ export const appHtml = `<!doctype html>
     </div>
   </div>
 
+  <!-- Update tersedia (PWA) -->
+  <div x-show="updateReady" x-transition class="fixed inset-x-0 bottom-20 z-40 flex justify-center px-4 lg:bottom-6">
+    <button @click="location.reload()" class="flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg ring-1 ring-black/5 hover:bg-indigo-700">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      <span>Versi baru tersedia — ketuk untuk muat ulang</span>
+    </button>
+  </div>
+
   <!-- MODAL: Portfolio -->
   <div x-show="modal==='portfolio'" class="fixed inset-0 z-40 flex items-center justify-center p-4">
     <div @click="modal=null" class="absolute inset-0 bg-slate-900/50"></div>
@@ -926,7 +935,7 @@ export const appHtml = `<!doctype html>
     function app() {
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
-        syncing: false, toast: '', modal: null,
+        syncing: false, toast: '', modal: null, updateReady: false, appVersion: '',
         systemEvents: [], unreadCount: 0, activityQueue: [], queueMeta: {}, activityTab: 'events',
         darkMode: document.documentElement.classList.contains('dark'),
         displayCurrency: localStorage.getItem('currency') || 'USD',
@@ -975,6 +984,9 @@ export const appHtml = `<!doctype html>
 
         async init() {
           if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+          const mv = document.querySelector('meta[name=app-version]');
+          this.appVersion = mv ? mv.getAttribute('content') : '';
+          this.startVersionWatch();
           const VIEWS = ['dashboard','analysis','portfolios','accounts','holdings','deposits','activity','settings'];
           const hash = window.location.hash.slice(1);
           if (VIEWS.includes(hash)) this.view = hash;
@@ -1036,6 +1048,20 @@ export const appHtml = `<!doctype html>
         navLabel() { const n=this.nav.find(x=>x.id===this.view); return n?n.label:''; },
         portfolioName(id) { const p=this.portfolios.find(x=>x.id===id); return p?p.name:'—'; },
         flash(msg) { this.toast = msg; setTimeout(()=>{ this.toast=''; }, 3000); },
+        startVersionWatch() {
+          if (!this.appVersion || this.appVersion==='dev') return;
+          const check = async () => {
+            if (document.visibilityState!=='visible' || this.updateReady) return;
+            try {
+              const r = await fetch('/version', { cache:'no-store' });
+              if (!r.ok) return;
+              const d = await r.json();
+              if (d && d.id && d.id!==this.appVersion) this.updateReady = true;
+            } catch {}
+          };
+          document.addEventListener('visibilitychange', check);
+          setInterval(check, 5*60*1000); // cek tiap 5 menit saat app aktif
+        },
         hasPieData() { return this.overview.portfolios.some(p=>p.assets.length>0); },
         historyChange() {
           const h=this.history; if(!h||h.length<2) return null;
