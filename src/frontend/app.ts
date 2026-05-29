@@ -267,10 +267,21 @@ export const appHtml = `<!doctype html>
 
         <!-- Value over time -->
         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-          <h3 class="mb-3 text-sm font-semibold">Value Over Time</h3>
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-sm font-semibold">Value Over Time</h3>
+            <div class="flex gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
+              <button @click="setValueMode('snapshot')"
+                class="rounded-lg px-3 py-1 text-xs font-medium transition-colors"
+                :class="valueMode==='snapshot' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'">Snapshots</button>
+              <button @click="setValueMode('holdings')"
+                class="rounded-lg px-3 py-1 text-xs font-medium transition-colors"
+                :class="valueMode==='holdings' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'">Holdings (sim)</button>
+            </div>
+          </div>
+          <p x-show="valueMode==='holdings'" class="mb-3 text-xs text-slate-400 dark:text-slate-500">Simulasi: jumlah aset Anda saat ini × harga historis (bukan saldo nyata di masa lalu).</p>
           <div class="relative h-64">
             <div x-ref="anaChartWrap" class="w-full h-full"></div>
-            <div x-show="analysisHistory.length===0" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">No snapshots for this period.</div>
+            <div x-show="analysisHistory.length===0 && !analysisLoading" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500" x-text="valueMode==='holdings' ? 'No price history available.' : 'No snapshots for this period.'"></div>
           </div>
         </div>
 
@@ -900,6 +911,7 @@ export const appHtml = `<!doctype html>
         depositPage: 1, depositTotal: 0, depositLimit: 25,
         history: [], historyRange: 30, historyPortfolio: '', chart: null, pieChart: null,
         analysisPeriod: '1M', analysisHistory: [], analysisLoading: false, analysisChart: null, analysisPie: null, topLimit: 10,
+        valueMode: 'snapshot', // 'snapshot' = riwayat snapshot nyata; 'holdings' = simulasi holdings kini × harga historis
         STABLES_SET: ['USDT','USDC','BUSD','DAI','TUSD','FDUSD','USDD','USDP','USD'],
         FIATS_SET: ['IDR','EUR','JPY','GBP','AUD','CAD','CHF','CNY','HKD','SGD','KRW','INR','MYR','THB','PHP','NZD','SEK','NOK','DKK','ZAR','TRY','BRL','MXN'],
         ALLOC_COLORS: ['#6366f1','#8b5cf6','#f59e0b','#10b981','#94a3b8'],
@@ -1151,9 +1163,15 @@ export const appHtml = `<!doctype html>
         periodDays() { const p=this.PERIODS.find(x=>x.k===this.analysisPeriod); return p?p.d:30; },
         async loadAnalysisHistory() {
           this.analysisLoading=true;
-          const r=await this.api('GET','/dashboard/history?days='+this.periodDays());
+          const ep = this.valueMode==='holdings' ? '/dashboard/asset-history' : '/dashboard/history';
+          const r=await this.api('GET',ep+'?days='+this.periodDays());
           this.analysisLoading=false;
           if (r&&r.ok) this.analysisHistory=r.data;
+        },
+        setValueMode(m) {
+          if (this.valueMode===m) return;
+          this.valueMode=m;
+          this.loadAnalysisHistory().then(()=>this.$nextTick(()=>this.renderAnalysisChart()));
         },
         async loadAnalysis() {
           await this.loadAnalysisHistory();

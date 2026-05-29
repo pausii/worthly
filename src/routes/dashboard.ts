@@ -4,6 +4,7 @@ import { queryAll, queryOne } from '../lib/db';
 import { ok } from '../lib/response';
 import { syncAll } from '../services/sync';
 import { getStoredOverview, refreshOverview } from '../services/overview';
+import { classifyAsset, getDailyCloses, getUsdRates } from '../services/prices';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -41,6 +42,69 @@ app.get('/history', async (c) => {
      WHERE captured_at >= ? GROUP BY captured_at ORDER BY captured_at`,
     since,
   );
+  return ok(c, rows);
+});
+
+// Chart "what-if": nilai portofolio bila holdings SAAT INI dipegang sepanjang periode.
+// Ambil jumlah aset terkini (overview cache) × harga historis harian (Binance klines).
+// Berguna saat snapshot belum punya riwayat panjang (mis. baru deposit hari ini).
+app.get('/asset-history', async (c) => {
+  const daysParam = c.req.query('days');
+  const all = daysParam === 'all';
+  // interval harian; Binance klines max 1000 candle. 'all' = ambil sebanyak mungkin.
+  const days = all ? 1000 : Math.min(Math.max(Number(daysParam) || 30, 1), 1000);
+
+  const overview = (await getStoredOverview(c.env)) || (await refreshOverview(c.env));
+
+  // Agregasi jumlah + nilai USD per aset (gabungan semua portofolio), sama seperti aggAssets() di UI.
+  const amounts = new Map<string, number>();
+  const usdValue = new Map<string, number>();
+  for (const p of overview.portfolios) {
+    for (const a of p.assets) {
+      const amt = Number(a.amount);
+      if (!isFinite(amt) || amt === 0) continue;
+      const sym = a.asset.toUpperCase();
+      amounts.set(sym, (amounts.get(sym) || 0) + amt);
+      usdValue.set(sym, (usdValue.get(sym) || 0) + (Number(a.usd) || 0));
+    }
+  }
+
+  // Crypto → butuh klines. Stable/fiat → dinilai konstan pada kurs USD terkini.
+  // Worker punya batas subrequest (≈50/permintaan) & banyak dust token tak punya pair USDT —
+  // jadi hanya ambil klines untuk crypto bernilai signifikan; dust diabaikan (kontribusi ~0).
+  const MIN_CRYPTO_USD = 1;
+  const cryptoAssets: string[] = [];
+  const constAssets: string[] = [];
+  for (const sym of amounts.keys()) {
+    if (classifyAsset(sym) !== 'crypto') constAssets.push(sym);
+    else if ((usdValue.get(sym) || 0) >= MIN_CRYPTO_USD) cryptoAssets.push(sym);
+  }
+  const constRates = constAssets.length ? await getUsdRates(c.env, constAssets) : {};
+
+  const series = await Promise.all(
+    cryptoAssets.map(async (sym) => ({ sym, m: new Map((await getDailyCloses(c.env, sym + 'USDT', days)).map((p) => [p.t, p.c])) })),
+  );
+
+  // Timeline = union semua tanggal kline yang tersedia.
+  const daySet = new Set<number>();
+  for (const s of series) for (const t of s.m.keys()) daySet.add(t);
+  const timeline = [...daySet].sort((a, b) => a - b);
+
+  // Nilai per hari: Σ(jumlah × harga). Harga di-carry-forward dari close terakhir yang diketahui
+  // (sebelum aset pertama kali ada di Binance, kontribusinya 0). Stable/fiat konstan.
+  const constUsd = constAssets.reduce((s, a) => s + (amounts.get(a) || 0) * (constRates[a] || 0), 0);
+  const last: Record<string, number> = {};
+  const rows = timeline.map((t) => {
+    let total = constUsd;
+    for (const s of series) {
+      const close = s.m.get(t);
+      if (close !== undefined) last[s.sym] = close;
+      const price = last[s.sym];
+      if (price !== undefined) total += (amounts.get(s.sym) || 0) * price;
+    }
+    return { captured_at: t, total_usd: total };
+  });
+
   return ok(c, rows);
 });
 

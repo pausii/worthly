@@ -42,6 +42,41 @@ async function binancePublicGet(env: Env, pathWithQuery: string): Promise<Respon
   return null;
 }
 
+export interface PricePoint {
+  t: number; // openTime kline (epoch ms, UTC midnight untuk interval 1d)
+  c: number; // harga close USDT
+}
+
+/**
+ * Daily close (USDT) untuk satu simbol via Binance `/api/v3/klines`.
+ * Di-cache di KV ~6 jam (data harian jarang berubah intraday). `limit` = jumlah hari (max 1000).
+ * Mengembalikan [] bila simbol tak ada / ter-geo-block.
+ */
+export async function getDailyCloses(env: Env, symbol: string, limit: number): Promise<PricePoint[]> {
+  const lim = Math.min(Math.max(limit, 1), 1000);
+  const KEY = `klines:${symbol}:1d:${lim}`;
+  let cached: { ts: number; pts: PricePoint[] } | null = null;
+  try {
+    cached = (await env.KV.get(KEY, 'json')) as { ts: number; pts: PricePoint[] } | null;
+    if (cached && Date.now() - cached.ts < 6 * 60 * 60 * 1000) return cached.pts;
+    const res = await binancePublicGet(env, `/api/v3/klines?symbol=${symbol}&interval=1d&limit=${lim}`);
+    if (res) {
+      const rows = (await res.json()) as unknown[][];
+      const pts: PricePoint[] = [];
+      for (const r of rows) {
+        const t = Number(r[0]);
+        const c = parseFloat(String(r[4]));
+        if (isFinite(t) && isFinite(c) && c > 0) pts.push({ t, c });
+      }
+      await env.KV.put(KEY, JSON.stringify({ ts: Date.now(), pts }), { expirationTtl: 21600 });
+      return pts;
+    }
+  } catch {
+    // diamkan
+  }
+  return cached?.pts ?? [];
+}
+
 export function classifyAsset(asset: string): 'stable' | 'fiat' | 'crypto' {
   const a = asset.toUpperCase();
   if (STABLES.has(a)) return 'stable';
