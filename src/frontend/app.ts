@@ -1033,6 +1033,7 @@ export const appHtml = `<!doctype html>
         analysisPeriod: '1M', analysisHistory: [], analysisLoading: false, analysisChart: null, analysisPie: null, topLimit: 10,
         valueMode: 'snapshot', // 'snapshot' = riwayat snapshot nyata; 'holdings' = simulasi holdings kini × harga historis
         assetPeaks: [], peaksOpen: true, // ringkasan peak harga per-aset (mode holdings); peaksOpen = panel buka/tutup
+        chartRange: null, // {min,max} ms saat chart di-zoom/pan; perf() mengikuti rentang ini
         STABLES_SET: ['USDT','USDC','BUSD','DAI','TUSD','FDUSD','USDD','USDP','USD'],
         FIATS_SET: ['IDR','EUR','JPY','GBP','AUD','CAD','CHF','CNY','HKD','SGD','KRW','INR','MYR','THB','PHP','NZD','SEK','NOK','DKK','ZAR','TRY','BRL','MXN'],
         ALLOC_COLORS: ['#6366f1','#8b5cf6','#f59e0b','#10b981','#94a3b8'],
@@ -1373,7 +1374,12 @@ export const appHtml = `<!doctype html>
           return { best: s.filter(x=>x.pct>0).slice(0,3), worst: s.filter(x=>x.pct<0).slice(-3).reverse() };
         },
         perf() {
-          const h=this.analysisHistory||[];
+          let h=this.analysisHistory||[];
+          // Ikuti rentang yang sedang ditampilkan di chart (zoom/pan).
+          if (this.chartRange){
+            const mn=this.chartRange.min, mx=this.chartRange.max;
+            h=h.filter(x=>{ const t=Number(x.captured_at); return (mn==null||t>=mn)&&(mx==null||t<=mx); });
+          }
           if (h.length<1) return { has:false, start:0, end:0, peak:0, low:0, abs:0, pct:null, up:true };
           const v=h.map(x=>Number(x.total_usd)||0);
           const start=v[0], end=v[v.length-1];
@@ -1392,8 +1398,9 @@ export const appHtml = `<!doctype html>
           if (pts.length>MAX){ const step=(pts.length-1)/(MAX-1); pts=Array.from({length:MAX},(_,i)=>pts[Math.round(i*step)]); }
           if (this.analysisChart){ this.analysisChart.destroy(); this.analysisChart=null; }
           if (pts.length===0) return;
+          this.chartRange=null; // chart baru selalu mulai full-range
           this.analysisChart=new ApexCharts(wrap,{
-            chart:{ type:'area', height:'100%', background:'transparent', animations:{ enabled:true, easing:'easeinout', speed:550, animateGradually:{enabled:false}, dynamicAnimation:{enabled:true,speed:400} }, toolbar:{ show:true, autoSelected:'zoom', tools:{ download:false, selection:false, zoom:true, zoomin:true, zoomout:true, pan:true, reset:true } }, zoom:{enabled:true,type:'x'}, fontFamily:'ui-sans-serif,system-ui,sans-serif' },
+            chart:{ type:'area', height:'100%', background:'transparent', animations:{ enabled:true, easing:'easeinout', speed:550, animateGradually:{enabled:false}, dynamicAnimation:{enabled:true,speed:400} }, toolbar:{ show:true, autoSelected:'zoom', tools:{ download:false, selection:false, zoom:true, zoomin:true, zoomout:true, pan:true, reset:true } }, zoom:{enabled:true,type:'x'}, events:{ zoomed:(ctx,o)=>{ const x=o&&o.xaxis; self.chartRange=(x&&(x.min!=null||x.max!=null))?{min:x.min,max:x.max}:null; }, scrolled:(ctx,o)=>{ const x=o&&o.xaxis; if(x&&(x.min!=null||x.max!=null)) self.chartRange={min:x.min,max:x.max}; }, beforeResetZoom:()=>{ self.chartRange=null; } }, fontFamily:'ui-sans-serif,system-ui,sans-serif' },
             theme:{ mode:dark?'dark':'light' },
             series:[{ name:currency, data:pts }],
             xaxis:{ type:'datetime', labels:{ style:{colors:dark?'#94a3b8':'#64748b',fontSize:'11px'}, datetimeUTC:false }, axisBorder:{show:false}, axisTicks:{show:false}, tooltip:{enabled:false} },
