@@ -1240,7 +1240,7 @@ export const appHtml = `<!doctype html>
           if (this.analysisChart){ this.analysisChart.destroy(); this.analysisChart=null; }
           if (pts.length===0) return;
           this.analysisChart=new ApexCharts(wrap,{
-            chart:{ type:'area', height:'100%', background:'transparent', animations:{enabled:false}, toolbar:{ show:true, autoSelected:'zoom', tools:{ download:false, selection:false, zoom:true, zoomin:true, zoomout:true, pan:true, reset:true } }, zoom:{enabled:true,type:'x'}, fontFamily:'ui-sans-serif,system-ui,sans-serif' },
+            chart:{ type:'area', height:'100%', background:'transparent', animations:{ enabled:true, easing:'easeinout', speed:550, animateGradually:{enabled:false}, dynamicAnimation:{enabled:true,speed:400} }, toolbar:{ show:true, autoSelected:'zoom', tools:{ download:false, selection:false, zoom:true, zoomin:true, zoomout:true, pan:true, reset:true } }, zoom:{enabled:true,type:'x'}, fontFamily:'ui-sans-serif,system-ui,sans-serif' },
             theme:{ mode:dark?'dark':'light' },
             series:[{ name:currency, data:pts }],
             xaxis:{ type:'datetime', labels:{ style:{colors:dark?'#94a3b8':'#64748b',fontSize:'11px'}, datetimeUTC:false }, axisBorder:{show:false}, axisTicks:{show:false}, tooltip:{enabled:false} },
