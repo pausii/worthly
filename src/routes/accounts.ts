@@ -197,7 +197,7 @@ app.post('/:id/sync', async (c) => {
 });
 
 // Mulai backfill full-history deposit (Binance): mundur per jendela 90 hari sampai transaksi terlama.
-// Sebagian besar diproses di latar belakang (waitUntil), sisanya dilanjutkan cron tiap 2 menit.
+// Sebagian besar diproses di latar belakang (waitUntil), sisanya dilanjutkan cron tiap 10 menit.
 app.post('/:id/backfill-deposits', async (c) => {
   const id = Number(c.req.param('id'));
   const acc = await queryOne<AccountRow>(c.env, 'SELECT * FROM accounts WHERE id = ?', id);

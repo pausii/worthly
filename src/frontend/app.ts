@@ -261,7 +261,7 @@ export const appHtml = `<!doctype html>
         <!-- Value over time -->
         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 class="text-sm font-semibold">Value Over Time</h3>
+            <h3 class="text-sm font-semibold">Your Portfolio Over Time</h3>
             <div class="flex gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
               <button @click="setValueMode('snapshot')"
                 class="rounded-lg px-3 py-1 text-xs font-medium transition-colors"
@@ -715,7 +715,7 @@ export const appHtml = `<!doctype html>
 
         <!-- QUEUE tab -->
         <div x-show="activityTab==='queue'" class="space-y-3">
-          <p class="text-xs text-slate-400 dark:text-slate-500">Sync status and system work queue (cron every 2 minutes)</p>
+          <p class="text-xs text-slate-400 dark:text-slate-500">Sync status and system work queue (cron every 10 minutes)</p>
 
           <!-- Snapshot info card -->
           <div x-show="queueMeta.nextSnapshot" class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 shadow-sm flex items-center justify-between gap-3">
@@ -761,7 +761,7 @@ export const appHtml = `<!doctype html>
                   </div>
                   <div class="text-[10px] text-slate-400 dark:text-slate-500">
                     Cursor: <span x-text="acc.backfill ? fmtDateOnly(acc.backfill.cursorEnd) : '—'"></span>
-                    <span x-show="acc.backfill && !acc.backfill.done" class="ml-2 opacity-70">(auto-resumes every 2 min)</span>
+                    <span x-show="acc.backfill && !acc.backfill.done" class="ml-2 opacity-70">(auto-resumes every 10 min)</span>
                   </div>
                 </div>
               </div>
@@ -1483,7 +1483,7 @@ export const appHtml = `<!doctype html>
           if (r&&r.ok) { this.flash('Account synced'); await Promise.all([this.loadAccounts(),this.loadOverview()]); }
         },
         async backfillDeposits(id) {
-          if (!confirm('Fetch FULL deposit history from the beginning? This runs in the background Worker (may take several minutes) and auto-resumes every 2 minutes.')) return;
+          if (!confirm('Fetch FULL deposit history from the beginning? This runs in the background Worker (may take several minutes) and auto-resumes every 10 minutes.')) return;
           const r=await this.api('POST','/accounts/'+id+'/backfill-deposits', {});
           if (r&&r.ok) { this.flash('Backfill started — running in the background. Monitor status in the account card / Deposits tab.'); await this.loadAccounts(); }
           else if(r) this.flash(r.error);

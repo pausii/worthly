@@ -6,14 +6,14 @@ Personal crypto / CEX portfolio tracker yang berjalan di **Cloudflare Workers**.
 - **Frontend:** Alpine.js + Tailwind CSS + Chart.js (semua via CDN), responsif
 - **CEX:** Binance & Bybit (saldo SPOT / FUTURES / EARN / FUNDING + riwayat deposit) via API resmi
 - **On-chain:** Ethereum, BSC (native + token) via Alchemy; TRON via TronGrid
-- **Sinkronisasi otomatis:** Cron Trigger tiap 2 menit
+- **Sinkronisasi otomatis:** Cron Trigger tiap 10 menit
 - **Keamanan:** login single-user (PBKDF2 600k iterasi), sesi httpOnly+Secure+SameSite=Strict,
   rate-limit login, proteksi CSRF, security headers, kredensial CEX/RPC **dienkripsi AES-GCM** di D1.
 
 ## Arsitektur singkat
 
 ```
-Cron (2 mnt) ─┐
+Cron (10 mnt) ─┐
               ├─► syncAll() ─► tiap account: ambil saldo + deposit ─► D1
 HTTP request ─┘                 └─► snapshot nilai portofolio (interval) ─► chart
 

@@ -85,7 +85,7 @@ app.onError((err, c) => {
 export default {
   fetch: app.fetch,
 
-  // Cron Trigger Cloudflare (tiap 2 menit, lihat wrangler.toml).
+  // Cron Trigger Cloudflare (tiap 10 menit, lihat wrangler.toml).
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
       syncAll(env).catch((e) => console.error('Cron syncAll error:', e)),
