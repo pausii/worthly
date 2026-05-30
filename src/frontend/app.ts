@@ -281,21 +281,29 @@ export const appHtml = `<!doctype html>
             <!-- All assets: total, highest, lowest, below peak (dari kurva portofolio) — strip ringkas nempel di bawah chart -->
             <div x-show="perf().has" class="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-100 bg-slate-100 dark:border-slate-700 dark:bg-slate-700 sm:grid-cols-4">
               <div class="bg-white px-3 py-2 dark:bg-slate-800">
-                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Total</div>
+                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Current</div>
                 <div class="text-sm font-semibold" x-text="fmtDisplay(perf().end)"></div>
+                <div class="text-[11px] font-medium" :class="perf().pct===null ? 'text-slate-400 dark:text-slate-500' : pctClass(perf().pct)"
+                  x-text="perf().pct===null ? '—' : fmtPct(perf().pct,true)"></div>
               </div>
               <div class="bg-white px-3 py-2 dark:bg-slate-800">
-                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Highest</div>
+                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">High</div>
                 <div class="text-sm font-semibold text-emerald-600 dark:text-emerald-400" x-text="fmtDisplay(perf().peak)"></div>
+                <div class="text-[11px] font-medium text-slate-400 dark:text-slate-500"
+                  x-text="perf().peak>0 ? fmtPct((perf().end-perf().peak)/perf().peak*100,true)+' vs now' : ''"></div>
               </div>
               <div class="bg-white px-3 py-2 dark:bg-slate-800">
-                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Lowest</div>
+                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Low</div>
                 <div class="text-sm font-semibold text-rose-600 dark:text-rose-400" x-text="fmtDisplay(perf().low)"></div>
+                <div class="text-[11px] font-medium text-slate-400 dark:text-slate-500"
+                  x-text="perf().low>0 ? '+'+fmtPct((perf().end-perf().low)/perf().low*100,false)+' vs now' : ''"></div>
               </div>
               <div class="bg-white px-3 py-2 dark:bg-slate-800">
-                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Below peak</div>
+                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Drawdown</div>
                 <div class="text-sm font-semibold" :class="(perf().peak-perf().end) > 0.005 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'"
                   x-text="(perf().peak-perf().end) > 0.005 ? '−'+fmtDisplay(perf().peak-perf().end) : 'at peak'"></div>
+                <div class="text-[11px] font-medium" :class="(perf().peak-perf().end) > 0.005 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'"
+                  x-text="perf().peak>0 && (perf().peak-perf().end) > 0.005 ? fmtPct((perf().end-perf().peak)/perf().peak*100,false) : ''"></div>
               </div>
             </div>
             <!-- Per-asset price peaks -->
