@@ -1407,7 +1407,23 @@ export const appHtml = `<!doctype html>
           if (this.analysisChart){ this.analysisChart.destroy(); this.analysisChart=null; }
           if (pts.length===0) return;
           this.chartRange=null; // chart baru selalu mulai full-range
+          // Cari titik puncak & terendah untuk anotasi.
+          let peakPt=pts[0], lowPt=pts[0];
+          for (const p of pts){ if(p[1]>peakPt[1]) peakPt=p; if(p[1]<lowPt[1]) lowPt=p; }
+          const annLabel=(v)=>self.hideAmounts?'••••':self.fmtAxis(v);
+          const samePt = peakPt[0]===lowPt[0];
+          const pointAnns=[
+            { x:peakPt[0], y:peakPt[1], marker:{ size:5, fillColor:'#10b981', strokeColor:dark?'#0f172a':'#ffffff', strokeWidth:2 },
+              label:{ text:'▲ '+annLabel(peakPt[1]), borderColor:'#10b981', borderWidth:0, offsetY:-4,
+                style:{ background:'#10b981', color:'#ffffff', fontSize:'10px', fontWeight:600, padding:{left:5,right:5,top:2,bottom:2} } } },
+          ];
+          if(!samePt) pointAnns.push(
+            { x:lowPt[0], y:lowPt[1], marker:{ size:5, fillColor:'#ef4444', strokeColor:dark?'#0f172a':'#ffffff', strokeWidth:2 },
+              label:{ text:'▼ '+annLabel(lowPt[1]), borderColor:'#ef4444', borderWidth:0, offsetY:18,
+                style:{ background:'#ef4444', color:'#ffffff', fontSize:'10px', fontWeight:600, padding:{left:5,right:5,top:2,bottom:2} } } }
+          );
           this.analysisChart=new ApexCharts(wrap,{
+            annotations:{ points: pointAnns },
             chart:{ type:'area', height:'100%', background:'transparent', animations:{ enabled:true, easing:'easeinout', speed:550, animateGradually:{enabled:false}, dynamicAnimation:{enabled:true,speed:400} }, toolbar:{ show:true, autoSelected:'zoom', tools:{ download:false, selection:false, zoom:true, zoomin:true, zoomout:true, pan:true, reset:true } }, zoom:{enabled:true,type:'x'}, events:{ zoomed:(ctx,o)=>{ const x=o&&o.xaxis; self.chartRange=(x&&(x.min!=null||x.max!=null))?{min:x.min,max:x.max}:null; }, scrolled:(ctx,o)=>{ const x=o&&o.xaxis; if(x&&(x.min!=null||x.max!=null)) self.chartRange={min:x.min,max:x.max}; }, beforeResetZoom:()=>{ self.chartRange=null; } }, fontFamily:'ui-sans-serif,system-ui,sans-serif' },
             theme:{ mode:dark?'dark':'light' },
             series:[{ name:currency, data:pts }],
