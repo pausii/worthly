@@ -38,12 +38,12 @@ app.get('/status', async (c) => {
 
 // Setup user pertama (hanya jika belum ada user).
 app.post('/setup', async (c) => {
-  if ((await userCount(c.env)) > 0) return fail(c, 'Setup sudah dilakukan', 409);
+  if ((await userCount(c.env)) > 0) return fail(c, 'Setup already completed', 409);
   const body = (await c.req.json().catch(() => ({}))) as { username?: string; password?: string };
   const username = (body.username ?? '').trim();
   const password = body.password ?? '';
-  if (username.length < 3) return fail(c, 'Username minimal 3 karakter');
-  if (password.length < 10) return fail(c, 'Password minimal 10 karakter');
+  if (username.length < 3) return fail(c, 'Username must be at least 3 characters');
+  if (password.length < 10) return fail(c, 'Password must be at least 10 characters');
 
   const { hash, salt, iterations } = await hashPassword(password, undefined, undefined, c.env.MASTER_KEY);
   await run(
@@ -64,7 +64,7 @@ app.post('/login', async (c) => {
   const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
   // Rate limit per IP: 10 percobaan / 5 menit.
   const rl = await rateLimit(c.env, `login:${ip}`, 10, 300);
-  if (!rl.allowed) return fail(c, 'Terlalu banyak percobaan. Coba lagi nanti.', 429);
+  if (!rl.allowed) return fail(c, 'Too many attempts. Please try again later.', 429);
 
   const body = (await c.req.json().catch(() => ({}))) as { username?: string; password?: string };
   const username = (body.username ?? '').trim();
@@ -81,7 +81,7 @@ app.post('/login', async (c) => {
     ? await verifyPassword(password, user.password_hash, user.password_salt, user.iterations, c.env.MASTER_KEY)
     : await verifyPassword(password, '', 'AAAAAAAAAAAAAAAAAAAAAA==', 100000, c.env.MASTER_KEY).then(() => false);
 
-  if (!user || !valid) return fail(c, 'Username atau password salah', 401);
+  if (!user || !valid) return fail(c, 'Incorrect username or password', 401);
 
   await resetRateLimit(c.env, `login:${ip}`);
   const { sid } = await createSession(
@@ -111,7 +111,7 @@ app.post('/change-password', requireAuth, requireCsrf, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { current?: string; next?: string };
   const current = body.current ?? '';
   const next = body.next ?? '';
-  if (next.length < 10) return fail(c, 'Password baru minimal 10 karakter');
+  if (next.length < 10) return fail(c, 'New password must be at least 10 characters');
 
   const s = c.get('session');
   const user = await queryOne<UserRow>(
@@ -119,9 +119,9 @@ app.post('/change-password', requireAuth, requireCsrf, async (c) => {
     'SELECT id, username, password_hash, password_salt, iterations FROM users WHERE id = ?',
     s.userId,
   );
-  if (!user) return fail(c, 'User tidak ditemukan', 404);
+  if (!user) return fail(c, 'User not found', 404);
   const valid = await verifyPassword(current, user.password_hash, user.password_salt, user.iterations, c.env.MASTER_KEY);
-  if (!valid) return fail(c, 'Password saat ini salah', 401);
+  if (!valid) return fail(c, 'Current password is incorrect', 401);
 
   const { hash, salt, iterations } = await hashPassword(next, undefined, undefined, c.env.MASTER_KEY);
   await run(

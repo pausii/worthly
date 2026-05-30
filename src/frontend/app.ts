@@ -73,10 +73,15 @@ export const appHtml = `<!doctype html>
           <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Total Value</div>
           <div class="text-sm font-semibold" x-text="fmtDisplay(overview.grandTotalUsd||0)"></div>
         </div>
+        <!-- Last synced indicator -->
+        <div x-show="lastSync>0" class="hidden items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 sm:flex" :title="'Last synced: '+fmtDate(lastSync)">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+          <span x-text="'Synced '+timeAgo(lastSync)"></span>
+        </div>
         <!-- Currency toggle (always visible, incl. mobile) -->
         <button @click="toggleCurrency()"
           class="rounded-xl px-2.5 py-2 text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900/70"
-          :title="'Ganti mata uang (sekarang '+displayCurrency+')'"
+          :title="'Switch currency (now '+displayCurrency+')'"
           x-text="displayCurrency"></button>
         <!-- Activity / notifications bell -->
         <button @click="go('activity')" class="relative rounded-xl p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700" title="Activity">
@@ -85,7 +90,7 @@ export const appHtml = `<!doctype html>
             class="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white leading-none"></span>
         </button>
         <!-- Hide amounts toggle -->
-        <button @click="toggleHideAmounts()" class="rounded-xl p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700" :title="hideAmounts?'Tampilkan nominal':'Sembunyikan nominal'">
+        <button @click="toggleHideAmounts()" class="rounded-xl p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700" :title="hideAmounts?'Show amounts':'Hide amounts'">
           <svg x-show="!hideAmounts" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
           <svg x-show="hideAmounts" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
         </button>
@@ -103,7 +108,15 @@ export const appHtml = `<!doctype html>
     </header>
 
     <main class="flex-1 overflow-y-auto p-4 pb-24 lg:p-6 lg:pb-6">
-      <p x-show="toast" x-text="toast" class="mb-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/40 px-4 py-2 text-sm text-indigo-700 dark:text-indigo-300"></p>
+      <p x-show="toast" x-transition x-text="toast" :class="toastClass()" class="mb-4 rounded-xl px-4 py-2 text-sm font-medium"></p>
+
+      <!-- First-load overlay -->
+      <div x-show="loading" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm">
+        <div class="flex flex-col items-center gap-3">
+          <svg class="h-8 w-8 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+          <span class="text-sm text-slate-500 dark:text-slate-400">Loading your portfolio…</span>
+        </div>
+      </div>
 
       <!-- DASHBOARD -->
       <section x-show="view==='dashboard'" class="space-y-6">
@@ -865,12 +878,35 @@ export const appHtml = `<!doctype html>
     </div>
   </div>
 
-  <!-- Update tersedia (PWA) -->
+  <!-- Update available (PWA) -->
   <div x-show="updateReady" x-transition class="fixed inset-x-0 bottom-20 z-40 flex justify-center px-4 lg:bottom-6">
     <button @click="location.reload()" class="flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg ring-1 ring-black/5 hover:bg-indigo-700">
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-      <span>Versi baru tersedia — ketuk untuk muat ulang</span>
+      <span>A new version is available — tap to reload</span>
     </button>
+  </div>
+
+  <!-- Confirm dialog (themed, replaces native confirm) -->
+  <div x-show="confirmState.open" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div @click="resolveConfirm(false)" class="absolute inset-0 bg-slate-900/50"></div>
+    <div class="relative w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-xl">
+      <div class="flex items-start gap-3">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+          :class="confirmState.danger ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z"/></svg>
+        </div>
+        <div class="min-w-0 flex-1">
+          <h3 class="text-sm font-semibold" x-text="confirmState.title"></h3>
+          <p class="mt-1 text-sm text-slate-500 dark:text-slate-400" x-text="confirmState.message"></p>
+        </div>
+      </div>
+      <div class="mt-5 flex justify-end gap-2">
+        <button @click="resolveConfirm(false)" class="rounded-xl px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</button>
+        <button @click="resolveConfirm(true)" x-text="confirmState.confirmText"
+          class="rounded-xl px-4 py-2 text-sm font-medium text-white shadow-sm"
+          :class="confirmState.danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'"></button>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL: Portfolio -->
@@ -1015,7 +1051,9 @@ export const appHtml = `<!doctype html>
     function app() {
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
-        syncing: false, toast: '', modal: null, updateReady: false, appVersion: '',
+        syncing: false, toast: '', toastType: 'info', modal: null, updateReady: false, appVersion: '',
+        loading: true, lastSync: 0,
+        confirmState: { open: false, title: '', message: '', confirmText: 'Confirm', danger: true, _resolve: null },
         installPrompt: null, installed: false, isIOS: false,
         systemEvents: [], unreadCount: 0, activityQueue: [], queueMeta: {}, activityTab: 'events',
         darkMode: document.documentElement.classList.contains('dark'),
@@ -1090,10 +1128,18 @@ export const appHtml = `<!doctype html>
           const me = await this.api('GET','/auth/me');
           if (!me) return;
           this.csrf = me.data.csrf; this.username = me.data.username;
-          await this.loadPortfolios();
-          await Promise.all([this.loadOverview(), this.loadAccounts(), this.loadHoldings(), this.loadDeposits(), this.loadSystemEvents()]);
-          await this.loadHistory();
-          if (this.view==='analysis') this.loadAnalysis();
+          try {
+            await this.loadPortfolios();
+            await Promise.all([this.loadOverview(), this.loadAccounts(), this.loadHoldings(), this.loadDeposits(), this.loadSystemEvents()]);
+            await this.loadHistory();
+            if (this.view==='analysis') this.loadAnalysis();
+          } finally {
+            this.loading = false;
+          }
+        },
+        // Waktu sync terakhir = paling baru dari semua account.
+        refreshLastSync() {
+          this.lastSync = this.accounts.reduce((m,a)=>Math.max(m, Number(a.last_synced_at)||0), 0);
         },
 
         toggleDark() {
@@ -1136,7 +1182,31 @@ export const appHtml = `<!doctype html>
         },
         navLabel() { const n=this.nav.find(x=>x.id===this.view); return n?n.label:''; },
         portfolioName(id) { const p=this.portfolios.find(x=>x.id===id); return p?p.name:'—'; },
-        flash(msg) { this.toast = msg; setTimeout(()=>{ this.toast=''; }, 3000); },
+        flash(msg, type='info') { this.toast = msg; this.toastType = type; setTimeout(()=>{ this.toast=''; }, 3000); },
+        toastClass() {
+          if (this.toastType==='success') return 'bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300';
+          if (this.toastType==='error') return 'bg-rose-50 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300';
+          return 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300';
+        },
+        // Modal konfirmasi bertema (pengganti confirm() native). Mengembalikan Promise<boolean>.
+        askConfirm(opts) {
+          return new Promise((resolve) => {
+            this.confirmState = {
+              open: true,
+              title: opts.title || 'Are you sure?',
+              message: opts.message || '',
+              confirmText: opts.confirmText || 'Confirm',
+              danger: opts.danger !== false,
+              _resolve: resolve,
+            };
+          });
+        },
+        resolveConfirm(val) {
+          const r = this.confirmState._resolve;
+          this.confirmState.open = false;
+          this.confirmState._resolve = null;
+          if (r) r(val);
+        },
         async installApp() {
           if (!this.installPrompt) return;
           this.installPrompt.prompt();
@@ -1213,7 +1283,7 @@ export const appHtml = `<!doctype html>
           }
         },
         async loadPortfolios() { const r=await this.api('GET','/portfolios'); if(r&&r.ok) this.portfolios=r.data; },
-        async loadAccounts() { const r=await this.api('GET','/accounts'); if(r&&r.ok) this.accounts=r.data; },
+        async loadAccounts() { const r=await this.api('GET','/accounts'); if(r&&r.ok){ this.accounts=r.data; this.refreshLastSync(); } },
         async loadHoldings() { const r=await this.api('GET','/holdings'); if(r&&r.ok) this.holdings=r.data; },
         async loadDeposits(page=1) {
           this.depositPage=page;
@@ -1236,7 +1306,7 @@ export const appHtml = `<!doctype html>
           await this.loadSystemEvents();
         },
         async clearEvents() {
-          if (!confirm('Hapus semua event? Tindakan ini tidak bisa dibatalkan.')) return;
+          if (!(await this.askConfirm({ title:'Clear all events?', message:'This cannot be undone.', confirmText:'Clear all' }))) return;
           await this.api('DELETE','/system/events');
           await this.loadSystemEvents();
         },
@@ -1475,27 +1545,28 @@ export const appHtml = `<!doctype html>
           this.syncing=true;
           const r=await this.api('POST','/dashboard/sync', {});
           this.syncing=false;
-          if (r&&r.ok) { this.flash('Sync complete ('+r.data.synced+' accounts)'); await Promise.all([this.loadOverview(),this.loadAccounts(),this.loadDeposits(),this.loadHistory()]); if(this.view==='analysis') this.loadAnalysis(); }
-          else this.flash('Sync failed');
+          if (r&&r.ok) { this.flash('Sync complete ('+r.data.synced+' accounts)', 'success'); await Promise.all([this.loadOverview(),this.loadAccounts(),this.loadDeposits(),this.loadHistory()]); if(this.view==='analysis') this.loadAnalysis(); }
+          else this.flash('Sync failed', 'error');
         },
         async syncAccount(id) {
           const r=await this.api('POST','/accounts/'+id+'/sync', {});
-          if (r&&r.ok) { this.flash('Account synced'); await Promise.all([this.loadAccounts(),this.loadOverview()]); }
+          if (r&&r.ok) { this.flash('Account synced', 'success'); await Promise.all([this.loadAccounts(),this.loadOverview()]); }
+          else if(r) this.flash(r.error||'Sync failed', 'error');
         },
         async backfillDeposits(id) {
-          if (!confirm('Fetch FULL deposit history from the beginning? This runs in the background Worker (may take several minutes) and auto-resumes every 10 minutes.')) return;
+          if (!(await this.askConfirm({ title:'Fetch full deposit history?', message:'Runs in the background (may take several minutes) and auto-resumes every 10 minutes.', confirmText:'Start backfill', danger:false }))) return;
           const r=await this.api('POST','/accounts/'+id+'/backfill-deposits', {});
-          if (r&&r.ok) { this.flash('Backfill started — running in the background. Monitor status in the account card / Deposits tab.'); await this.loadAccounts(); }
-          else if(r) this.flash(r.error);
+          if (r&&r.ok) { this.flash('Backfill started — running in the background. Monitor status in the account card / Deposits tab.', 'success'); await this.loadAccounts(); }
+          else if(r) this.flash(r.error, 'error');
         },
 
         openPortfolioModal(p) { this.pf = p ? { id:p.id, name:p.name, description:p.description||'' } : { id:null, name:'', description:'' }; this.modal='portfolio'; },
         async savePortfolio() {
           const body={ name:this.pf.name, description:this.pf.description };
           const r = this.pf.id ? await this.api('PUT','/portfolios/'+this.pf.id, body) : await this.api('POST','/portfolios', body);
-          if (r&&r.ok) { this.modal=null; await this.loadPortfolios(); await this.loadOverview(); } else if(r) this.flash(r.error);
+          if (r&&r.ok) { this.modal=null; await this.loadPortfolios(); await this.loadOverview(); } else if(r) this.flash(r.error, 'error');
         },
-        async deletePortfolio(id) { if(!confirm('Delete this portfolio and all its contents?')) return; const r=await this.api('DELETE','/portfolios/'+id); if(r&&r.ok){ await this.loadPortfolios(); await this.loadOverview(); } },
+        async deletePortfolio(id) { if(!(await this.askConfirm({ title:'Delete portfolio?', message:'This portfolio and all its contents will be removed.', confirmText:'Delete' }))) return; const r=await this.api('DELETE','/portfolios/'+id); if(r&&r.ok){ await this.loadPortfolios(); await this.loadOverview(); } },
 
         openHoldingModal(h) { const amt=h?Math.abs(Number(h.amount)||0):null; this.hd = h ? { id:h.id, portfolio_id:h.portfolio_id, label:h.label, currency:h.currency||'USD', amountDisplay:amt?amt.toLocaleString('en-US',{maximumFractionDigits:8}):'', direction:(Number(h.amount)<0?'out':'in'), note:h.note||'', added_at:this.toDateInput(h.added_at||h.created_at) } : { id:null, portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', label:'', currency:'USD', amountDisplay:'', direction:'in', note:'', added_at:this.toDateInput(null) }; this.modal='holding'; },
         async saveHolding() {
@@ -1503,9 +1574,9 @@ export const appHtml = `<!doctype html>
           const amount = this.hd.direction==='out' ? -mag : mag;
           const body={ portfolio_id:this.hd.portfolio_id, label:this.hd.label, currency:this.hd.currency, amount, note:this.hd.note, added_at:this.hd.added_at?new Date(this.hd.added_at).getTime():null };
           const r = this.hd.id ? await this.api('PUT','/holdings/'+this.hd.id, body) : await this.api('POST','/holdings', body);
-          if (r&&r.ok) { this.modal=null; await this.loadHoldings(); await this.loadOverview(); } else if(r) this.flash(r.error);
+          if (r&&r.ok) { this.modal=null; await this.loadHoldings(); await this.loadOverview(); } else if(r) this.flash(r.error, 'error');
         },
-        async deleteHolding(id) { if(!confirm('Delete this holding?')) return; const r=await this.api('DELETE','/holdings/'+id); if(r&&r.ok){ await this.loadHoldings(); await this.loadOverview(); } },
+        async deleteHolding(id) { if(!(await this.askConfirm({ title:'Delete holding?', message:'This manual holding will be removed.', confirmText:'Delete' }))) return; const r=await this.api('DELETE','/holdings/'+id); if(r&&r.ok){ await this.loadHoldings(); await this.loadOverview(); } },
 
         nativeSymbol() {
           if (this.ac.type==='eth') return 'ETH';
@@ -1539,17 +1610,17 @@ export const appHtml = `<!doctype html>
           const r = this.ac.id ? await this.api('PUT','/accounts/'+this.ac.id, body) : await this.api('POST','/accounts', body);
           if (r&&r.ok) { this.modal=null; await this.loadAccounts(); if(this.ac.id===null && r.data.id){ await this.syncAccount(r.data.id);} } else if(r) this.ac.error=r.error;
         },
-        async deleteAccount(id) { if(!confirm('Delete this account?')) return; const r=await this.api('DELETE','/accounts/'+id); if(r&&r.ok){ await this.loadAccounts(); await this.loadOverview(); } },
+        async deleteAccount(id) { if(!(await this.askConfirm({ title:'Delete account?', message:'This connected account and its synced balances will be removed.', confirmText:'Delete' }))) return; const r=await this.api('DELETE','/accounts/'+id); if(r&&r.ok){ await this.loadAccounts(); await this.loadOverview(); } },
 
         async changePassword() {
-          if (this.pw.next.length<10) { this.flash('New password must be at least 10 characters'); return; }
+          if (this.pw.next.length<10) { this.flash('New password must be at least 10 characters', 'error'); return; }
           const r=await this.api('POST','/auth/change-password', { current:this.pw.current, next:this.pw.next });
-          if (r&&r.ok) { this.pw={current:'',next:''}; this.flash('Password changed successfully'); } else if(r) this.flash(r.error);
+          if (r&&r.ok) { this.pw={current:'',next:''}; this.flash('Password changed successfully', 'success'); } else if(r) this.flash(r.error, 'error');
         },
         async exportCsv(type) {
           const res = await fetch('/api/export/'+type+'.csv');
           if (res.status===401) { location.href='/login'; return; }
-          if (!res.ok) { this.flash('Export gagal'); return; }
+          if (!res.ok) { this.flash('Export failed', 'error'); return; }
           const blob = await res.blob();
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a'); a.href=url; a.download=type+'.csv';
