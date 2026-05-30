@@ -277,28 +277,25 @@ export const appHtml = `<!doctype html>
             <div x-show="analysisHistory.length===0 && !analysisLoading" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500" x-text="valueMode==='holdings' ? 'No price history available.' : 'No snapshots for this period.'"></div>
           </div>
           <!-- Per-asset price peaks (holdings sim only) -->
-          <div x-show="valueMode==='holdings' && assetPeaks.length>0" class="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
-            <!-- All assets: total, highest, lowest, below peak (dari kurva portofolio) -->
-            <div x-show="perf().has">
-              <div class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">All Assets</div>
-              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div>
-                  <div class="text-[11px] text-slate-400 dark:text-slate-500">Total</div>
-                  <div class="text-sm font-semibold" x-text="fmtDisplay(perf().end)"></div>
-                </div>
-                <div>
-                  <div class="text-[11px] text-slate-400 dark:text-slate-500">Highest</div>
-                  <div class="text-sm font-semibold text-emerald-600 dark:text-emerald-400" x-text="fmtDisplay(perf().peak)"></div>
-                </div>
-                <div>
-                  <div class="text-[11px] text-slate-400 dark:text-slate-500">Lowest</div>
-                  <div class="text-sm font-semibold text-rose-600 dark:text-rose-400" x-text="fmtDisplay(perf().low)"></div>
-                </div>
-                <div>
-                  <div class="text-[11px] text-slate-400 dark:text-slate-500">Below peak</div>
-                  <div class="text-sm font-semibold" :class="(perf().peak-perf().end) > 0.005 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'"
-                    x-text="(perf().peak-perf().end) > 0.005 ? '−'+fmtDisplay(perf().peak-perf().end) : 'at peak'"></div>
-                </div>
+          <div x-show="valueMode==='holdings' && assetPeaks.length>0" class="mt-3">
+            <!-- All assets: total, highest, lowest, below peak (dari kurva portofolio) — strip ringkas nempel di bawah chart -->
+            <div x-show="perf().has" class="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-100 bg-slate-100 dark:border-slate-700 dark:bg-slate-700 sm:grid-cols-4">
+              <div class="bg-white px-3 py-2 dark:bg-slate-800">
+                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Total</div>
+                <div class="text-sm font-semibold" x-text="fmtDisplay(perf().end)"></div>
+              </div>
+              <div class="bg-white px-3 py-2 dark:bg-slate-800">
+                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Highest</div>
+                <div class="text-sm font-semibold text-emerald-600 dark:text-emerald-400" x-text="fmtDisplay(perf().peak)"></div>
+              </div>
+              <div class="bg-white px-3 py-2 dark:bg-slate-800">
+                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Lowest</div>
+                <div class="text-sm font-semibold text-rose-600 dark:text-rose-400" x-text="fmtDisplay(perf().low)"></div>
+              </div>
+              <div class="bg-white px-3 py-2 dark:bg-slate-800">
+                <div class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Below peak</div>
+                <div class="text-sm font-semibold" :class="(perf().peak-perf().end) > 0.005 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'"
+                  x-text="(perf().peak-perf().end) > 0.005 ? '−'+fmtDisplay(perf().peak-perf().end) : 'at peak'"></div>
               </div>
             </div>
             <!-- Per-asset price peaks -->
