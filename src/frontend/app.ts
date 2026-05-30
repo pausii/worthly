@@ -73,11 +73,6 @@ export const appHtml = `<!doctype html>
           <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Total Value</div>
           <div class="text-sm font-semibold" x-text="fmtDisplay(overview.grandTotalUsd||0)"></div>
         </div>
-        <!-- Last synced indicator -->
-        <div x-show="lastSync>0" class="hidden items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 sm:flex" :title="'Last synced: '+fmtDate(lastSync)">
-          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-          <span x-text="'Synced '+timeAgo(lastSync)"></span>
-        </div>
         <!-- Currency toggle (always visible, incl. mobile) -->
         <button @click="toggleCurrency()"
           class="rounded-xl px-2.5 py-2 text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900/70"
@@ -100,6 +95,7 @@ export const appHtml = `<!doctype html>
           <svg x-show="darkMode" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
         </button>
         <button @click="syncAll()" :disabled="syncing"
+          :title="lastSync>0 ? 'Last synced '+timeAgo(lastSync)+' ('+fmtDate(lastSync)+')' : 'Not synced yet'"
           class="flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" :class="syncing&&'animate-spin'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           <span x-text="syncing ? 'Syncing…' : 'Sync'"></span>
