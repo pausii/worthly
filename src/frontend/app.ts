@@ -278,31 +278,8 @@ export const appHtml = `<!doctype html>
           </div>
           <!-- Per-asset price peaks (holdings sim only) -->
           <div x-show="valueMode==='holdings' && assetPeaks.length>0" class="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
-            <button @click="peaksOpen=!peaksOpen" class="flex w-full items-center justify-between gap-2 text-left">
-              <h4 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Asset Peaks — this period</h4>
-              <svg class="h-4 w-4 shrink-0 text-slate-400 transition-transform dark:text-slate-500" :class="peaksOpen ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-            </button>
-            <div x-show="peaksOpen" x-transition class="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-              <template x-for="p in assetPeaks" :key="p.asset">
-                <div class="flex items-center justify-between gap-2 text-sm">
-                  <div class="flex min-w-0 items-center gap-2">
-                    <span class="relative h-5 w-5 shrink-0">
-                      <span class="absolute inset-0 flex items-center justify-center rounded-full text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(p.asset)" x-text="tokenInitial(p.asset)"></span>
-                      <img :src="tokenIcon(p.asset)" class="absolute inset-0 h-5 w-5 rounded-full object-cover" @error="$el.style.display='none'" alt="">
-                    </span>
-                    <span class="truncate font-medium" x-text="p.asset"></span>
-                  </div>
-                  <div class="flex shrink-0 items-center gap-2 text-right">
-                    <span class="font-medium" x-text="fmtDisplay(p.peak)"></span>
-                    <span class="text-[11px] text-slate-400 dark:text-slate-500" x-text="new Date(p.peakAt).toLocaleDateString('en-US',{day:'2-digit',month:'short'})"></span>
-                    <span class="w-14 text-[11px] font-medium" :class="p.fromPeakPct >= -0.05 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'"
-                      x-text="p.fromPeakPct >= -0.05 ? 'at peak' : fmtPct(p.fromPeakPct,false)"></span>
-                  </div>
-                </div>
-              </template>
-            </div>
             <!-- All assets: total, highest, lowest, below peak (dari kurva portofolio) -->
-            <div x-show="perf().has" class="mt-3 border-t border-slate-100 dark:border-slate-700 pt-3">
+            <div x-show="perf().has">
               <div class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">All Assets</div>
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div>
@@ -322,6 +299,32 @@ export const appHtml = `<!doctype html>
                   <div class="text-sm font-semibold" :class="(perf().peak-perf().end) > 0.005 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'"
                     x-text="(perf().peak-perf().end) > 0.005 ? '−'+fmtDisplay(perf().peak-perf().end) : 'at peak'"></div>
                 </div>
+              </div>
+            </div>
+            <!-- Per-asset price peaks -->
+            <div class="mt-3 border-t border-slate-100 dark:border-slate-700 pt-3">
+              <button @click="peaksOpen=!peaksOpen" class="flex w-full items-center justify-between gap-2 text-left">
+                <h4 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Asset Peaks — this period</h4>
+                <svg class="h-4 w-4 shrink-0 text-slate-400 transition-transform dark:text-slate-500" :class="peaksOpen ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <div x-show="peaksOpen" x-transition class="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+                <template x-for="p in assetPeaks" :key="p.asset">
+                  <div class="flex items-center justify-between gap-2 text-sm">
+                    <div class="flex min-w-0 items-center gap-2">
+                      <span class="relative h-5 w-5 shrink-0">
+                        <span class="absolute inset-0 flex items-center justify-center rounded-full text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(p.asset)" x-text="tokenInitial(p.asset)"></span>
+                        <img :src="tokenIcon(p.asset)" class="absolute inset-0 h-5 w-5 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                      </span>
+                      <span class="truncate font-medium" x-text="p.asset"></span>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2 text-right">
+                      <span class="font-medium" x-text="fmtDisplay(p.peak)"></span>
+                      <span class="text-[11px] text-slate-400 dark:text-slate-500" x-text="new Date(p.peakAt).toLocaleDateString('en-US',{day:'2-digit',month:'short'})"></span>
+                      <span class="w-14 text-[11px] font-medium" :class="p.fromPeakPct >= -0.05 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'"
+                        x-text="p.fromPeakPct >= -0.05 ? 'at peak' : fmtPct(p.fromPeakPct,false)"></span>
+                    </div>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
