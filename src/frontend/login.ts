@@ -37,7 +37,7 @@ export const loginHtml = `<!doctype html>
   </button>
 
   <div class="flex min-h-full items-center justify-center px-4 py-12">
-    <div x-data="loginPage()" x-init="init()" x-cloak class="w-full max-w-md">
+    <div x-data="loginPage()" x-cloak class="w-full max-w-md">
       <div class="mb-6 text-center">
         <img src="/icon.svg" alt="Worthly" class="mx-auto mb-3 h-12 w-12 rounded-2xl shadow-lg" />
         <h1 class="text-xl font-semibold tracking-tight">Worthly</h1>

@@ -28,7 +28,7 @@ export const appHtml = `<!doctype html>
   </style>
 </head>
 <body class="h-full bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100 antialiased">
-<div x-data="app()" x-init="init()" x-cloak class="flex h-full">
+<div x-data="app()" x-cloak class="flex h-full">
 
   <!-- Sidebar (desktop only; mobile pakai bottom nav) -->
   <aside class="hidden w-64 flex-col bg-gradient-to-b from-indigo-700 via-indigo-700 to-violet-900 text-indigo-50 lg:flex">
