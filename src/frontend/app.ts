@@ -1034,7 +1034,7 @@ export const appHtml = `<!doctype html>
         chartRange: null, // {min,max} ms saat chart di-zoom/pan; perf() mengikuti rentang ini
         STABLES_SET: ['USDT','USDC','BUSD','DAI','TUSD','FDUSD','USDD','USDP','USD'],
         FIATS_SET: ['IDR','EUR','JPY','GBP','AUD','CAD','CHF','CNY','HKD','SGD','KRW','INR','MYR','THB','PHP','NZD','SEK','NOK','DKK','ZAR','TRY','BRL','MXN'],
-        ALLOC_COLORS: ['#6366f1','#8b5cf6','#f59e0b','#10b981','#94a3b8'],
+        ALLOC_COLORS: ['#6366f1','#22d3ee','#34d399','#fbbf24','#fb7185','#a855f7','#38bdf8','#a3e635','#f472b6','#94a3b8'],
         pf: { id:null, name:'', description:'' },
         hd: { id:null, portfolio_id:'', label:'', currency:'USD', amount:null, note:'', added_at:'' },
         ac: { id:null, type:'binance', portfolio_id:'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, error:'' },
@@ -1285,7 +1285,8 @@ export const appHtml = `<!doctype html>
           const top=entries.slice(0,8); const othersVal=entries.slice(8).reduce((s,e)=>s+e[1],0);
           if (othersVal>0) top.push(['Others',othersVal]);
           const labels=top.map(e=>e[0]), data=top.map(e=>e[1]);
-          const COLORS=['#6366f1','#8b5cf6','#f59e0b','#10b981','#ef4444','#3b82f6','#f97316','#ec4899','#14b8a6','#a855f7'];
+          const COLORS=['#6366f1','#22d3ee','#34d399','#fbbf24','#fb7185','#a855f7','#38bdf8','#a3e635','#f472b6','#94a3b8'];
+          const GLOW=['#818cf8','#38e8ff','#5effc4','#ffd54a','#ff8fa3','#c77dff','#5ec8ff','#c4f542','#ff8fd0','#b8c4d4'];
           const dark=this.darkMode, currency=this.displayCurrency, idrRate=this.idrRate, self=this;
           const totalUsd=data.reduce((s,v)=>s+v,0);
           const totalDisp=currency==='IDR'?totalUsd*(idrRate||0):totalUsd;
@@ -1294,6 +1295,7 @@ export const appHtml = `<!doctype html>
             theme:{ mode:dark?'dark':'light' },
             series:data, labels,
             colors:COLORS.slice(0,labels.length),
+            fill:{ type:'gradient', gradient:{ shade:'light', type:'vertical', shadeIntensity:0.3, gradientToColors:GLOW.slice(0,labels.length), inverseColors:false, opacityFrom:1, opacityTo:1, stops:[0,100] } },
             plotOptions:{ pie:{ expandOnClick:false, donut:{ size:'62%', labels:{ show:true,
               name:{ show:true, fontSize:'11px', color:dark?'#94a3b8':'#64748b', offsetY:-10 },
               value:{ show:true, fontSize:'20px', fontWeight:700, color:dark?'#e2e8f0':'#0f172a', offsetY:6, formatter:(v)=>{ if(self.hideAmounts) return '••••'; const n=Number(v); const d=currency==='IDR'?n*(idrRate||0):n; return self.fmtAxis(d); } },
@@ -1302,7 +1304,7 @@ export const appHtml = `<!doctype html>
             dataLabels:{ enabled:false },
             legend:{ position:'bottom', fontSize:'10px', labels:{colors:dark?'#94a3b8':'#64748b'}, markers:{size:5}, itemMargin:{horizontal:4} },
             tooltip:{ theme:dark?'dark':'light', y:{ formatter:(v)=>{ const pct=totalUsd>0?((v/totalUsd)*100).toFixed(1):'0.0'; const fmt=self.hideAmounts?'••••':(currency==='IDR'?'Rp '+Math.round(v*(idrRate||0)).toLocaleString('en-US'):'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})); return fmt+' ('+pct+'%)'; } } },
-            stroke:{ width:2, colors:[dark?'#1e293b':'#ffffff'] },
+            stroke:{ width:0 },
           });
           this.pieChart.render();
         },
@@ -1422,6 +1424,7 @@ export const appHtml = `<!doctype html>
           if (items.length===0) return;
           const labels=items.map(x=>x.asset), data=items.map(x=>x.usd);
           const COLORS=this.ALLOC_COLORS;
+          const GLOW=['#818cf8','#38e8ff','#5effc4','#ffd54a','#ff8fa3','#c77dff','#5ec8ff','#c4f542','#ff8fd0','#b8c4d4'];
           const dark=this.darkMode, currency=this.displayCurrency, idrRate=this.idrRate, self=this;
           const totalUsd=data.reduce((s,v)=>s+v,0);
           const totalDisp=currency==='IDR'?totalUsd*(idrRate||0):totalUsd;
@@ -1430,6 +1433,7 @@ export const appHtml = `<!doctype html>
             theme:{ mode:dark?'dark':'light' },
             series:data, labels,
             colors:COLORS.slice(0,labels.length),
+            fill:{ type:'gradient', gradient:{ shade:'light', type:'vertical', shadeIntensity:0.3, gradientToColors:GLOW.slice(0,labels.length), inverseColors:false, opacityFrom:1, opacityTo:1, stops:[0,100] } },
             plotOptions:{ pie:{ expandOnClick:false, donut:{ size:'62%', labels:{ show:true,
               name:{ show:true, fontSize:'11px', color:dark?'#94a3b8':'#64748b', offsetY:-10 },
               value:{ show:true, fontSize:'20px', fontWeight:700, color:dark?'#e2e8f0':'#0f172a', offsetY:6, formatter:(v)=>{ if(self.hideAmounts) return '••••'; const n=Number(v); const d=currency==='IDR'?n*(idrRate||0):n; return self.fmtAxis(d); } },
@@ -1438,7 +1442,7 @@ export const appHtml = `<!doctype html>
             dataLabels:{enabled:false},
             legend:{show:false},
             tooltip:{ theme:dark?'dark':'light', y:{ formatter:(v)=>{ const pct=totalUsd>0?((v/totalUsd)*100).toFixed(1):'0.0'; const fmt=self.hideAmounts?'••••':(currency==='IDR'?'Rp '+Math.round(v*(idrRate||0)).toLocaleString('en-US'):'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})); return fmt+' ('+pct+'%)'; } } },
-            stroke:{ width:2, colors:[dark?'#1e293b':'#ffffff'] },
+            stroke:{ width:0 },
           });
           this.analysisPie.render();
         },
