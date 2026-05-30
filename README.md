@@ -1,4 +1,4 @@
-# Wallet Tracker
+# Worthly
 
 Personal crypto / CEX portfolio tracker yang berjalan di **Cloudflare Workers**.
 

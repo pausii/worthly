@@ -24,8 +24,8 @@ export const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192
 </svg>`;
 
 export const manifestJson = JSON.stringify({
-  name: 'Wallet Tracker',
-  short_name: 'Wallet',
+  name: 'Worthly',
+  short_name: 'Worthly',
   description: 'Personal crypto & portfolio tracker',
   start_url: '/',
   scope: '/',

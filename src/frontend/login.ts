@@ -6,11 +6,11 @@ export const loginHtml = `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="robots" content="noindex,nofollow" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="Wallet Tracker" />
+  <meta name="apple-mobile-web-app-title" content="Worthly" />
   <meta name="theme-color" content="#4f46e5" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <title>Sign In — Wallet Tracker</title>
+  <title>Sign In — Worthly</title>
   <!-- Apply dark class before CSS renders to prevent flash -->
   <link rel="stylesheet" href="/app.css" />
   <script nonce="__CSP_NONCE__">if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark')</script>
@@ -42,7 +42,7 @@ export const loginHtml = `<!doctype html>
         <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M3 7l2 12a2 2 0 002 2h10a2 2 0 002-2l2-12M3 7l1-3h16l1 3M9 11v6m6-6v6"/></svg>
         </div>
-        <h1 class="text-xl font-semibold tracking-tight">Wallet Tracker</h1>
+        <h1 class="text-xl font-semibold tracking-tight">Worthly</h1>
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400" x-text="mode === 'setup' ? 'Create the first admin account' : 'Sign in to your account'"></p>
       </div>
 

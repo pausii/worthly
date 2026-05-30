@@ -7,13 +7,13 @@ export const appHtml = `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="robots" content="noindex,nofollow" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="Wallet Tracker" />
+  <meta name="apple-mobile-web-app-title" content="Worthly" />
   <meta name="theme-color" content="#4f46e5" />
   <meta name="app-version" content="__APP_VERSION__" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/favicon.svg" />
-  <title>Dashboard — Wallet Tracker</title>
+  <title>Dashboard — Worthly</title>
   <link rel="stylesheet" href="/app.css" />
   <script nonce="__CSP_NONCE__">if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark');
     window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__bip=e;window.dispatchEvent(new Event('bip-ready'));});</script>
@@ -37,7 +37,7 @@ export const appHtml = `<!doctype html>
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M3 7l2 12a2 2 0 002 2h10a2 2 0 002-2l2-12M9 11v6m6-6v6"/></svg>
       </div>
       <div class="min-w-0">
-        <div class="truncate text-[15px] font-semibold tracking-wide">Wallet Tracker</div>
+        <div class="truncate text-[15px] font-semibold tracking-wide">Worthly</div>
         <div class="truncate text-[11px] text-indigo-200/80">Portfolio Console</div>
       </div>
     </div>
@@ -771,7 +771,7 @@ export const appHtml = `<!doctype html>
       <section x-show="view==='settings'" class="max-w-md space-y-4">
         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
           <h3 class="mb-1 text-sm font-semibold">Install App</h3>
-          <p class="mb-4 text-xs text-slate-400 dark:text-slate-500">Add Wallet Tracker to your home screen for a full-screen, app-like experience.</p>
+          <p class="mb-4 text-xs text-slate-400 dark:text-slate-500">Add Worthly to your home screen for a full-screen, app-like experience.</p>
           <!-- Sudah terpasang -->
           <div x-show="installed" class="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
             <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
