@@ -33,9 +33,7 @@ export const appHtml = `<!doctype html>
   <!-- Sidebar (desktop only; mobile pakai bottom nav) -->
   <aside class="hidden w-64 flex-col bg-gradient-to-b from-indigo-700 via-indigo-700 to-violet-900 text-indigo-50 lg:flex">
     <div class="flex items-center gap-3 px-5 pt-5 pb-4">
-      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M3 7l2 12a2 2 0 002 2h10a2 2 0 002-2l2-12M9 11v6m6-6v6"/></svg>
-      </div>
+      <img src="/icon.svg" alt="Worthly" class="h-10 w-10 rounded-xl" />
       <div class="min-w-0">
         <div class="truncate text-[15px] font-semibold tracking-wide">Worthly</div>
         <div class="truncate text-[11px] text-indigo-200/80">Portfolio Console</div>
