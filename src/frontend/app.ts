@@ -25,6 +25,7 @@ export const appHtml = `<!doctype html>
     ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:9999px}
     .dark ::-webkit-scrollbar-thumb{background:#475569}
     .theme-ready,.theme-ready *{transition:background-color .2s ease,border-color .2s ease,color .2s ease}
+    @keyframes worthly-load{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}
   </style>
 </head>
 <body class="h-full bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100 antialiased">
@@ -103,16 +104,14 @@ export const appHtml = `<!doctype html>
       </div>
     </header>
 
+    <!-- Non-blocking top loading bar (first load) -->
+    <div x-show="loading" class="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-indigo-500/20">
+      <div class="h-full w-1/3 rounded-full bg-indigo-500" style="animation:worthly-load 1.1s ease-in-out infinite"></div>
+    </div>
+
     <main class="flex-1 overflow-y-auto p-4 pb-24 lg:p-6 lg:pb-6">
       <p x-show="toast" x-transition x-text="toast" :class="toastClass()" class="mb-4 rounded-xl px-4 py-2 text-sm font-medium"></p>
 
-      <!-- First-load overlay -->
-      <div x-show="loading" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm">
-        <div class="flex flex-col items-center gap-3">
-          <svg class="h-8 w-8 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-          <span class="text-sm text-slate-500 dark:text-slate-400">Loading your portfolio…</span>
-        </div>
-      </div>
 
       <!-- DASHBOARD -->
       <section x-show="view==='dashboard'" class="space-y-6">
