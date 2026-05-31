@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 export interface Env {
   DB: D1Database;
   KV: KVNamespace;
+  AI: Ai; // Cloudflare Workers AI (inferensi LLM) — binding [ai] di wrangler.toml
 
   // Binding metadata versi Worker (Cloudflare) — id unik per deploy.
   CF_VERSION_METADATA?: { id: string; tag?: string; timestamp?: string };

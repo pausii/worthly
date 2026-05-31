@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
 import { queryAll, queryOne } from '../lib/db';
-import { ok } from '../lib/response';
+import { ok, fail } from '../lib/response';
 import { syncAll } from '../services/sync';
 import { getStoredOverview, refreshOverview } from '../services/overview';
 import { classifyAsset, getDailyCloses, getUsdRates } from '../services/prices';
@@ -154,6 +154,91 @@ app.get('/deposits', async (c) => {
 
   const total = countRow?.total ?? 0;
   return ok(c, { data: rows, total, page, limit, pages: Math.ceil(total / limit) || 1 });
+});
+
+// Ringkasan portofolio bertenaga Workers AI (LLM). On-demand (dipicu tombol),
+// di-cache di KV per-`computedAt` overview agar klik berulang tidak bakar Neuron.
+const INSIGHT_KV_KEY = 'ai_insight';
+const INSIGHT_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+
+app.get('/insight', async (c) => {
+  const overview = (await getStoredOverview(c.env)) || (await refreshOverview(c.env));
+  if (!overview || overview.portfolios.length === 0) {
+    return ok(c, { text: 'Belum ada data portofolio untuk dianalisis.', cached: false, computedAt: 0 });
+  }
+
+  // Cache hit: data belum berubah sejak insight terakhir → kembalikan tanpa panggil AI.
+  const cachedRaw = await c.env.KV.get(INSIGHT_KV_KEY);
+  if (cachedRaw) {
+    try {
+      const cached = JSON.parse(cachedRaw) as { computedAt: number; text: string };
+      if (cached.computedAt === overview.computedAt) {
+        return ok(c, { text: cached.text, cached: true, computedAt: cached.computedAt });
+      }
+    } catch { /* abaikan cache rusak */ }
+  }
+
+  // Ringkas overview jadi konteks padat (hemat token): total, per-portofolio, top aset.
+  const total = overview.grandTotalUsd || 0;
+  const assetUsd = new Map<string, number>();
+  for (const p of overview.portfolios) {
+    for (const a of p.assets) {
+      if (!(a.usd > 0)) continue;
+      assetUsd.set(a.asset, (assetUsd.get(a.asset) || 0) + a.usd);
+    }
+  }
+  const topAssets = [...assetUsd.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([sym, usd]) => {
+      const pct = total > 0 ? ((usd / total) * 100).toFixed(1) : '0';
+      const chg = overview.assetChange[sym];
+      const chgStr = chg !== undefined && chg !== null ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : 'n/a';
+      return `- ${sym}: $${usd.toFixed(2)} (${pct}% dari total, 24h ${chgStr})`;
+    });
+  const portfolioLines = overview.portfolios.map((p) => {
+    const chg = p.change24hPct;
+    const chgStr = chg !== null && chg !== undefined ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : 'n/a';
+    return `- ${p.name}: $${p.totalUsd.toFixed(2)} (24h ${chgStr})`;
+  });
+  const grandChg = overview.grandChangePct;
+  const grandChgStr = grandChg !== null && grandChg !== undefined ? `${grandChg >= 0 ? '+' : ''}${grandChg.toFixed(2)}%` : 'n/a';
+
+  const dataContext = [
+    `Total nilai: $${total.toFixed(2)} (perubahan 24 jam: ${grandChgStr})`,
+    `Portofolio (${overview.portfolios.length}):`,
+    ...portfolioLines,
+    `Aset terbesar:`,
+    ...topAssets,
+  ].join('\n');
+
+  const systemPrompt =
+    'Kamu analis portofolio kripto. Berdasarkan data yang diberikan, tulis ringkasan singkat ' +
+    'dalam Bahasa Indonesia, 3-4 kalimat, objektif dan padat. Sebutkan: total nilai & pergerakan 24 jam, ' +
+    'kontributor/penggerak utama, dan satu catatan risiko (mis. konsentrasi pada satu aset atau porsi stablecoin). ' +
+    'JANGAN memberi nasihat beli/jual atau prediksi harga. JANGAN mengarang angka di luar data yang diberikan.';
+
+  try {
+    const result = (await c.env.AI.run(INSIGHT_MODEL as any, {
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: dataContext },
+      ],
+      max_tokens: 400,
+    } as any)) as { response?: string };
+    const text = (result?.response || '').trim();
+    if (!text) return fail(c, 'AI tidak mengembalikan teks', 502);
+
+    await c.env.KV.put(
+      INSIGHT_KV_KEY,
+      JSON.stringify({ computedAt: overview.computedAt, text }),
+      { expirationTtl: 86400 },
+    );
+    return ok(c, { text, cached: false, computedAt: overview.computedAt });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return fail(c, 'Gagal membuat insight: ' + msg.slice(0, 200), 502);
+  }
 });
 
 // Trigger sinkronisasi penuh secara manual.

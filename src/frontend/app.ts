@@ -231,6 +231,25 @@ export const appHtml = `<!doctype html>
           </div>
         </div>
 
+        <!-- AI Insight (Workers AI) -->
+        <div class="rounded-2xl border border-indigo-200 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/40 dark:to-slate-800 p-5 shadow-sm">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <svg class="h-4 w-4 text-indigo-500 dark:text-indigo-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l1.9 5.6L19.5 9l-4.5 3.3 1.7 5.7L12 14.8 7.3 18l1.7-5.7L4.5 9l5.6-1.4L12 2z"/></svg>
+              <h3 class="text-sm font-semibold">AI Insight</h3>
+              <span x-show="aiCached" class="rounded-full bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500">cached</span>
+            </div>
+            <button @click="loadInsight()" :disabled="aiInsightLoading"
+              class="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60">
+              <svg x-show="aiInsightLoading" class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <span x-text="aiInsightLoading ? 'Generating…' : (aiInsight ? 'Refresh' : 'Generate')"></span>
+            </button>
+          </div>
+          <p x-show="aiInsight" class="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-700 dark:text-slate-300" x-text="aiInsight"></p>
+          <p x-show="!aiInsight && !aiInsightLoading" class="mt-3 text-xs text-slate-400 dark:text-slate-500">Klik <span class="font-medium">Generate</span> untuk ringkasan portofolio bertenaga AI.</p>
+          <p x-show="aiInsight" class="mt-2 text-[10px] text-slate-400 dark:text-slate-500">Dihasilkan AI — bisa keliru, bukan nasihat keuangan.</p>
+        </div>
+
         <!-- Charts row: line (2/3) + pie (1/3) -->
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <!-- Value History -->
@@ -1158,6 +1177,7 @@ export const appHtml = `<!doctype html>
           { id:'settings', label:'Settings', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z\\'/><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M15 12a3 3 0 11-6 0 3 3 0 016 0z\\'/></svg>' }
         ],
         overview: { portfolios: [], grandTotalUsd: 0 },
+        aiInsight: '', aiInsightLoading: false, aiCached: false,
         portfolios: [], accounts: [], holdings: [], deposits: [],
         depositPage: 1, depositTotal: 0, depositLimit: 25,
         history: [], historyRange: 30, historyPortfolio: '', chart: null, pieChart: null,
@@ -1370,6 +1390,14 @@ export const appHtml = `<!doctype html>
             this.idrRate = r.data.idrRate || 0;
             this.$nextTick(()=>this.renderPieChart());
           }
+        },
+        async loadInsight() {
+          if (this.aiInsightLoading) return;
+          this.aiInsightLoading=true;
+          const r=await this.api('GET','/dashboard/insight');
+          if (r&&r.ok) { this.aiInsight=r.data.text||''; this.aiCached=!!r.data.cached; }
+          else this.flash((r&&r.error)||'Gagal membuat insight','error');
+          this.aiInsightLoading=false;
         },
         async loadPortfolios() { const r=await this.api('GET','/portfolios'); if(r&&r.ok) this.portfolios=r.data; },
         async loadAccounts() { const r=await this.api('GET','/accounts'); if(r&&r.ok){ this.accounts=r.data; this.refreshLastSync(); } },
