@@ -7,7 +7,7 @@ export const loginHtml = `<!doctype html>
   <meta name="robots" content="noindex,nofollow" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Worthly" />
-  <meta name="theme-color" content="#4f46e5" />
+  <meta name="theme-color" content="#6366f1" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="apple-touch-icon" href="/icon.svg" />
   <title>Sign In — Worthly</title>
@@ -22,26 +22,48 @@ export const loginHtml = `<!doctype html>
     /* Card entrance */
     .login-card{animation:loginIn .5s cubic-bezier(.16,1,.3,1) both}
     @keyframes loginIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-    /* Slow drift for aurora blobs */
-    @keyframes auroraA{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(20px,30px) scale(1.1)}}
-    @keyframes auroraB{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-30px,-20px) scale(1.05)}}
-    .blob-a{animation:auroraA 14s ease-in-out infinite}
-    .blob-b{animation:auroraB 18s ease-in-out infinite}
-    @media (prefers-reduced-motion: reduce){.login-card,.blob-a,.blob-b{animation:none}}
+    /* Self-drawing portfolio chart line (pathLength normalized to 1) */
+    .draw-line{stroke-dasharray:1;stroke-dashoffset:1;filter:drop-shadow(0 1px 6px rgba(99,102,241,.35))}
+    .draw-1{animation:draw 7s ease-in-out infinite}
+    .draw-2{animation:draw 9.5s ease-in-out infinite;animation-delay:1.2s}
+    @keyframes draw{
+      0%{stroke-dashoffset:1;opacity:0}
+      8%{opacity:.9}
+      55%{stroke-dashoffset:0;opacity:.9}
+      82%{stroke-dashoffset:0;opacity:0}
+      100%{stroke-dashoffset:0;opacity:0}
+    }
+    /* A glowing dot that rides the trend, pulsing gently */
+    .pulse-dot{animation:pulse 7s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:0;transform:scale(.6)}40%{opacity:1;transform:scale(1)}70%{opacity:.6}}
+    @media (prefers-reduced-motion: reduce){
+      .login-card,.draw-1,.draw-2,.pulse-dot{animation:none}
+      .draw-line{stroke-dashoffset:0;opacity:.45}
+    }
   </style>
 </head>
-<body class="h-full bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
+<body class="h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased">
 
-  <!-- Aurora background -->
+  <!-- Calm gradient + self-drawing chart background -->
   <div class="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
-    <div class="blob-a absolute -top-32 -left-24 h-80 w-80 rounded-full bg-indigo-400/40 blur-3xl dark:bg-indigo-600/30"></div>
-    <div class="blob-b absolute top-1/4 -right-24 h-96 w-96 rounded-full bg-violet-400/40 blur-3xl dark:bg-violet-600/30"></div>
-    <div class="blob-a absolute -bottom-32 left-1/4 h-80 w-80 rounded-full bg-fuchsia-300/40 blur-3xl dark:bg-fuchsia-700/25"></div>
+    <div class="absolute inset-0 bg-gradient-to-br from-slate-50 via-indigo-50 to-violet-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950"></div>
+    <svg class="absolute inset-0 h-full w-full" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid slice" fill="none">
+      <!-- secondary, fainter line -->
+      <path class="draw-line draw-2 text-violet-300 dark:text-violet-500/60" pathLength="1" vector-effect="non-scaling-stroke"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+        d="M0,500 L100,470 L200,492 L300,430 L400,452 L500,398 L600,420 L700,358 L800,382 L900,318 L1000,348 L1100,300 L1200,278" />
+      <!-- primary trend line -->
+      <path class="draw-line draw-1 text-indigo-400 dark:text-indigo-400/80" pathLength="1" vector-effect="non-scaling-stroke"
+        stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+        d="M0,420 L80,402 L160,442 L240,360 L320,392 L400,300 L480,332 L560,260 L640,292 L720,210 L800,242 L880,170 L960,202 L1040,132 L1120,162 L1200,92" />
+      <!-- glowing head dot near the latest (top-right) point -->
+      <circle class="pulse-dot text-indigo-500 dark:text-indigo-400" cx="1120" cy="162" r="6" fill="currentColor" />
+    </svg>
   </div>
 
   <!-- Dark mode toggle -->
   <button id="darkToggle" aria-label="Toggle dark mode"
-    class="fixed top-4 right-4 z-50 rounded-xl p-2.5 text-slate-500 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60 backdrop-blur border border-transparent hover:border-slate-300/60 dark:hover:border-slate-700">
+    class="fixed top-4 right-4 z-50 rounded-xl bg-white/50 p-2.5 text-slate-600 backdrop-blur transition hover:bg-white/80 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/20">
     <!-- Moon — shown in light mode -->
     <svg class="h-5 w-5 dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
       <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
@@ -57,18 +79,18 @@ export const loginHtml = `<!doctype html>
       <div class="mb-6 text-center">
         <div class="relative mx-auto mb-3 h-14 w-14">
           <div class="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 opacity-60 blur-lg"></div>
-          <img src="/icon.svg" alt="Worthly" class="relative h-14 w-14 rounded-2xl shadow-lg ring-1 ring-white/60 dark:ring-white/10" />
+          <img src="/icon.svg" alt="Worthly" class="relative h-14 w-14 rounded-2xl shadow-lg ring-1 ring-white/70 dark:ring-white/10" />
         </div>
         <h1 class="text-xl font-semibold tracking-tight">Worthly</h1>
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400" x-text="mode === 'setup' ? 'Create the first admin account' : 'Sign in to your account'"></p>
       </div>
 
-      <div class="rounded-2xl border border-white/50 dark:border-white/10 bg-white/70 dark:bg-slate-800/50 p-6 shadow-2xl backdrop-blur-xl">
+      <div class="rounded-3xl border border-white/70 bg-white/85 p-6 shadow-xl shadow-indigo-200/40 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/80 dark:shadow-black/30 sm:p-8">
         <form @submit.prevent="submit()" class="space-y-4">
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Username</label>
             <input x-model="username" type="text" autocomplete="username" required autofocus
-              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white/80 dark:bg-slate-700/70 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/40" />
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/40" />
           </div>
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
@@ -76,7 +98,7 @@ export const loginHtml = `<!doctype html>
               <input x-model="password" :type="showPw ? 'text' : 'password'" :autocomplete="mode === 'setup' ? 'new-password' : 'current-password'" required
                 @keyup="capsLock = !!($event.getModifierState && $event.getModifierState('CapsLock'))"
                 @keydown="capsLock = !!($event.getModifierState && $event.getModifierState('CapsLock'))"
-                class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white/80 dark:bg-slate-700/70 text-slate-900 dark:text-slate-100 px-3 py-2.5 pr-10 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/40" />
+                class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-3 py-2.5 pr-10 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/40" />
               <button type="button" @click="showPw = !showPw" tabindex="-1"
                 :aria-label="showPw ? 'Hide password' : 'Show password'"
                 class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
@@ -94,13 +116,13 @@ export const loginHtml = `<!doctype html>
           <p x-show="error" x-text="error" role="alert" aria-live="assertive" class="rounded-lg bg-rose-50 dark:bg-rose-900/30 px-3 py-2 text-sm text-rose-600 dark:text-rose-400"></p>
 
           <button type="submit" :disabled="loading || !username || !password"
-            class="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60">
+            class="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60">
             <svg x-show="loading" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
             <span x-text="loading ? (mode === 'setup' ? 'Creating account…' : 'Signing in…') : (mode === 'setup' ? 'Create account' : 'Sign in')"></span>
           </button>
         </form>
       </div>
-      <p class="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-slate-400 dark:text-slate-500">
+      <p class="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-slate-500 dark:text-slate-400">
         <svg class="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
         Single-user · Secure httpOnly session
       </p>
