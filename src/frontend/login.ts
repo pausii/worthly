@@ -76,16 +76,15 @@ export const loginHtml = `<!doctype html>
 
   <div class="relative flex min-h-full items-center justify-center px-4 py-12">
     <div x-data="loginPage()" x-cloak class="login-card w-full max-w-md">
-      <div class="mb-6 text-center">
-        <div class="relative mx-auto mb-3 h-14 w-14">
-          <div class="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 opacity-60 blur-lg"></div>
-          <img src="/icon.svg" alt="Worthly" class="relative h-14 w-14 rounded-2xl shadow-lg ring-1 ring-white/70 dark:ring-white/10" />
-        </div>
-        <h1 class="text-xl font-semibold tracking-tight">Worthly</h1>
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400" x-text="mode === 'setup' ? 'Create the first admin account' : 'Sign in to your account'"></p>
-      </div>
-
       <div class="rounded-3xl border border-white/70 bg-white/85 p-6 shadow-xl shadow-indigo-200/40 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/80 dark:shadow-black/30 sm:p-8">
+        <div class="mb-6 text-center">
+          <div class="relative mx-auto mb-3 h-14 w-14">
+            <div class="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 opacity-60 blur-lg"></div>
+            <img src="/icon.svg" alt="Worthly" class="relative h-14 w-14 rounded-2xl shadow-lg ring-1 ring-white/70 dark:ring-white/10" />
+          </div>
+          <h1 class="text-xl font-semibold tracking-tight">Worthly</h1>
+          <p class="mt-1 text-sm text-slate-500 dark:text-slate-400" x-text="mode === 'setup' ? 'Create the first admin account' : 'Sign in to your account'"></p>
+        </div>
         <form @submit.prevent="submit()" class="space-y-4">
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Username</label>
