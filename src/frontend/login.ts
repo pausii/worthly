@@ -19,13 +19,29 @@ export const loginHtml = `<!doctype html>
     [x-cloak]{display:none!important}
     /* Smooth dark mode transitions — enabled after first paint to avoid load flash */
     .theme-ready,.theme-ready *{transition:background-color .2s ease,border-color .2s ease,color .2s ease}
+    /* Card entrance */
+    .login-card{animation:loginIn .5s cubic-bezier(.16,1,.3,1) both}
+    @keyframes loginIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+    /* Slow drift for aurora blobs */
+    @keyframes auroraA{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(20px,30px) scale(1.1)}}
+    @keyframes auroraB{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-30px,-20px) scale(1.05)}}
+    .blob-a{animation:auroraA 14s ease-in-out infinite}
+    .blob-b{animation:auroraB 18s ease-in-out infinite}
+    @media (prefers-reduced-motion: reduce){.login-card,.blob-a,.blob-b{animation:none}}
   </style>
 </head>
 <body class="h-full bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
 
+  <!-- Aurora background -->
+  <div class="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+    <div class="blob-a absolute -top-32 -left-24 h-80 w-80 rounded-full bg-indigo-400/40 blur-3xl dark:bg-indigo-600/30"></div>
+    <div class="blob-b absolute top-1/4 -right-24 h-96 w-96 rounded-full bg-violet-400/40 blur-3xl dark:bg-violet-600/30"></div>
+    <div class="blob-a absolute -bottom-32 left-1/4 h-80 w-80 rounded-full bg-fuchsia-300/40 blur-3xl dark:bg-fuchsia-700/25"></div>
+  </div>
+
   <!-- Dark mode toggle -->
   <button id="darkToggle" aria-label="Toggle dark mode"
-    class="fixed top-4 right-4 z-50 rounded-xl p-2.5 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-transparent hover:border-slate-300 dark:hover:border-slate-700">
+    class="fixed top-4 right-4 z-50 rounded-xl p-2.5 text-slate-500 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60 backdrop-blur border border-transparent hover:border-slate-300/60 dark:hover:border-slate-700">
     <!-- Moon — shown in light mode -->
     <svg class="h-5 w-5 dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
       <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
@@ -36,38 +52,58 @@ export const loginHtml = `<!doctype html>
     </svg>
   </button>
 
-  <div class="flex min-h-full items-center justify-center px-4 py-12">
-    <div x-data="loginPage()" x-cloak class="w-full max-w-md">
+  <div class="relative flex min-h-full items-center justify-center px-4 py-12">
+    <div x-data="loginPage()" x-cloak class="login-card w-full max-w-md">
       <div class="mb-6 text-center">
-        <img src="/icon.svg" alt="Worthly" class="mx-auto mb-3 h-12 w-12 rounded-2xl shadow-lg" />
+        <div class="relative mx-auto mb-3 h-14 w-14">
+          <div class="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 opacity-60 blur-lg"></div>
+          <img src="/icon.svg" alt="Worthly" class="relative h-14 w-14 rounded-2xl shadow-lg ring-1 ring-white/60 dark:ring-white/10" />
+        </div>
         <h1 class="text-xl font-semibold tracking-tight">Worthly</h1>
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400" x-text="mode === 'setup' ? 'Create the first admin account' : 'Sign in to your account'"></p>
       </div>
 
-      <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+      <div class="rounded-2xl border border-white/50 dark:border-white/10 bg-white/70 dark:bg-slate-800/50 p-6 shadow-2xl backdrop-blur-xl">
         <form @submit.prevent="submit()" class="space-y-4">
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Username</label>
             <input x-model="username" type="text" autocomplete="username" required autofocus
-              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/40" />
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white/80 dark:bg-slate-700/70 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/40" />
           </div>
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
-            <input x-model="password" type="password" :autocomplete="mode === 'setup' ? 'new-password' : 'current-password'" required
-              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/40" />
+            <div class="relative">
+              <input x-model="password" :type="showPw ? 'text' : 'password'" :autocomplete="mode === 'setup' ? 'new-password' : 'current-password'" required
+                @keyup="capsLock = !!($event.getModifierState && $event.getModifierState('CapsLock'))"
+                @keydown="capsLock = !!($event.getModifierState && $event.getModifierState('CapsLock'))"
+                class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white/80 dark:bg-slate-700/70 text-slate-900 dark:text-slate-100 px-3 py-2.5 pr-10 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/40" />
+              <button type="button" @click="showPw = !showPw" tabindex="-1"
+                :aria-label="showPw ? 'Hide password' : 'Show password'"
+                class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <svg x-show="!showPw" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                <svg x-show="showPw" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+              </button>
+            </div>
             <p x-show="mode === 'setup'" class="mt-1 text-xs text-slate-400 dark:text-slate-500">Minimum 10 characters.</p>
+            <p x-show="capsLock" x-transition class="mt-1 flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+              <svg class="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z"/></svg>
+              Caps Lock is on
+            </p>
           </div>
 
-          <p x-show="error" x-text="error" class="rounded-lg bg-rose-50 dark:bg-rose-900/30 px-3 py-2 text-sm text-rose-600 dark:text-rose-400"></p>
+          <p x-show="error" x-text="error" role="alert" aria-live="assertive" class="rounded-lg bg-rose-50 dark:bg-rose-900/30 px-3 py-2 text-sm text-rose-600 dark:text-rose-400"></p>
 
-          <button type="submit" :disabled="loading"
-            class="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60">
-            <span x-show="!loading" x-text="mode === 'setup' ? 'Create account' : 'Sign in'"></span>
-            <span x-show="loading">Processing…</span>
+          <button type="submit" :disabled="loading || !username || !password"
+            class="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60">
+            <svg x-show="loading" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            <span x-text="loading ? (mode === 'setup' ? 'Creating account…' : 'Signing in…') : (mode === 'setup' ? 'Create account' : 'Sign in')"></span>
           </button>
         </form>
       </div>
-      <p class="mt-6 text-center text-xs text-slate-400 dark:text-slate-500">Single-user · Secure httpOnly session</p>
+      <p class="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-slate-400 dark:text-slate-500">
+        <svg class="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        Single-user · Secure httpOnly session
+      </p>
     </div>
   </div>
 
@@ -84,6 +120,7 @@ export const loginHtml = `<!doctype html>
     function loginPage() {
       return {
         mode: 'login', username: '', password: '', error: '', loading: false,
+        showPw: false, capsLock: false,
         async init() {
           if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
           try {
