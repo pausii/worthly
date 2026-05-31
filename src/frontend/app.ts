@@ -231,6 +231,33 @@ export const appHtml = `<!doctype html>
           </div>
         </div>
 
+        <!-- All-Time Return (nilai kini vs cost basis) -->
+        <div x-show="returns" class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">All-Time Return</div>
+              <template x-if="returns && returns.pct!==null">
+                <div class="mt-1 flex items-baseline gap-2">
+                  <span class="text-2xl font-semibold" :class="pctClass(returns.abs)" x-text="fmtPct(returns.pct,true)"></span>
+                  <span class="text-sm font-medium" :class="pctClass(returns.abs)" x-text="(returns.abs>=0?'+':'−')+fmtDisplay(Math.abs(returns.abs))"></span>
+                </div>
+              </template>
+              <div x-show="returns && returns.pct===null" class="mt-1 text-sm text-slate-400 dark:text-slate-500">Belum ada data deposit/holding untuk menghitung modal masuk.</div>
+              <p x-show="returns && returns.earliestTs>0" class="mt-1 text-xs text-slate-400 dark:text-slate-500">Sejak <span x-text="fmtDateOnly(returns.earliestTs)"></span></p>
+            </div>
+            <template x-if="returns && returns.pct!==null">
+              <div class="text-right text-xs text-slate-500 dark:text-slate-400">
+                <div>Modal masuk: <span class="font-medium text-slate-700 dark:text-slate-300" x-text="fmtDisplay(returns.costBasis)"></span></div>
+                <div class="mt-0.5">Nilai kini: <span class="font-medium text-slate-700 dark:text-slate-300" x-text="fmtDisplay(returns.currentValue)"></span></div>
+              </div>
+            </template>
+          </div>
+          <p x-show="returns && returns.unpricedAssets && returns.unpricedAssets.length>0" class="mt-2 text-[10px] text-amber-600 dark:text-amber-500">
+            Sebagian aset tak bisa dinilai historis & dikecualikan dari modal: <span x-text="returns && returns.unpricedAssets.join(', ')"></span>
+          </p>
+          <p class="mt-2 text-[10px] text-slate-400 dark:text-slate-500">Aproksimasi dari nilai deposit &amp; holding pada tanggal masuk; belum memperhitungkan penarikan/penjualan.</p>
+        </div>
+
         <!-- AI Insight (Workers AI) -->
         <div class="rounded-2xl border border-indigo-200 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/40 dark:to-slate-800 p-5 shadow-sm">
           <div class="flex items-center justify-between gap-3">
@@ -1178,6 +1205,7 @@ export const appHtml = `<!doctype html>
         ],
         overview: { portfolios: [], grandTotalUsd: 0 },
         aiInsight: '', aiInsightLoading: false, aiCached: false,
+        returns: null,
         portfolios: [], accounts: [], holdings: [], deposits: [],
         depositPage: 1, depositTotal: 0, depositLimit: 25,
         history: [], historyRange: 30, historyPortfolio: '', chart: null, pieChart: null,
@@ -1239,7 +1267,7 @@ export const appHtml = `<!doctype html>
           this.csrf = me.data.csrf; this.username = me.data.username;
           try {
             await this.loadPortfolios();
-            await Promise.all([this.loadOverview(), this.loadAccounts(), this.loadHoldings(), this.loadDeposits(), this.loadSystemEvents()]);
+            await Promise.all([this.loadOverview(), this.loadAccounts(), this.loadHoldings(), this.loadDeposits(), this.loadSystemEvents(), this.loadReturns()]);
             await this.loadHistory();
             if (this.view==='analysis') this.loadAnalysis();
           } finally {
@@ -1390,6 +1418,10 @@ export const appHtml = `<!doctype html>
             this.idrRate = r.data.idrRate || 0;
             this.$nextTick(()=>this.renderPieChart());
           }
+        },
+        async loadReturns() {
+          const r=await this.api('GET','/dashboard/returns');
+          if (r&&r.ok) this.returns=r.data;
         },
         async loadInsight() {
           if (this.aiInsightLoading) return;
@@ -1683,7 +1715,7 @@ export const appHtml = `<!doctype html>
           this.syncing=true;
           const r=await this.api('POST','/dashboard/sync', {});
           this.syncing=false;
-          if (r&&r.ok) { this.flash('Sync complete ('+r.data.synced+' accounts)', 'success'); await Promise.all([this.loadOverview(),this.loadAccounts(),this.loadDeposits(),this.loadHistory()]); if(this.view==='analysis') this.loadAnalysis(); }
+          if (r&&r.ok) { this.flash('Sync complete ('+r.data.synced+' accounts)', 'success'); await Promise.all([this.loadOverview(),this.loadAccounts(),this.loadDeposits(),this.loadHistory(),this.loadReturns()]); if(this.view==='analysis') this.loadAnalysis(); }
           else this.flash('Sync failed', 'error');
         },
         async syncAccount(id) {

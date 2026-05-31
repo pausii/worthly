@@ -4,6 +4,7 @@ import { queryAll, queryOne } from '../lib/db';
 import { ok, fail } from '../lib/response';
 import { syncAll } from '../services/sync';
 import { getStoredOverview, refreshOverview } from '../services/overview';
+import { computeCostBasis } from '../services/returns';
 import { classifyAsset, getDailyCloses, getUsdRates } from '../services/prices';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -154,6 +155,53 @@ app.get('/deposits', async (c) => {
 
   const total = countRow?.total ?? 0;
   return ok(c, { data: rows, total, page, limit, pages: Math.ceil(total / limit) || 1 });
+});
+
+// Total return all-time: nilai kini (grandTotalUsd) vs cost basis (modal masuk).
+// Cost basis di-cache di KV; di-invalidasi otomatis saat deposit/holding berubah
+// (signature = jumlah & timestamp terakhir deposit + manual holdings).
+const RETURNS_KV_KEY = 'returns_basis';
+
+app.get('/returns', async (c) => {
+  const overview = (await getStoredOverview(c.env)) || (await refreshOverview(c.env));
+  const currentValue = overview?.grandTotalUsd ?? 0;
+
+  const sig = await queryOne<{ dc: number; dts: number; mc: number; mts: number }>(
+    c.env,
+    `SELECT
+       (SELECT COUNT(*) FROM deposits WHERE status != 'pending') AS dc,
+       (SELECT COALESCE(MAX(ts), 0) FROM deposits) AS dts,
+       (SELECT COUNT(*) FROM manual_holdings) AS mc,
+       (SELECT COALESCE(MAX(updated_at), 0) FROM manual_holdings) AS mts`,
+  );
+  const sigStr = `${sig?.dc ?? 0}:${sig?.dts ?? 0}:${sig?.mc ?? 0}:${sig?.mts ?? 0}`;
+
+  let basis = null as Awaited<ReturnType<typeof computeCostBasis>> | null;
+  const cachedRaw = await c.env.KV.get(RETURNS_KV_KEY);
+  if (cachedRaw) {
+    try {
+      const cached = JSON.parse(cachedRaw) as { sig: string; result: typeof basis };
+      if (cached.sig === sigStr && cached.result) basis = cached.result;
+    } catch { /* abaikan cache rusak */ }
+  }
+  if (!basis) {
+    basis = await computeCostBasis(c.env);
+    await c.env.KV.put(RETURNS_KV_KEY, JSON.stringify({ sig: sigStr, result: basis }), { expirationTtl: 21600 });
+  }
+
+  const costBasis = basis.costBasis;
+  const abs = currentValue - costBasis;
+  const pct = costBasis > 0 ? (abs / costBasis) * 100 : null;
+  return ok(c, {
+    currentValue,
+    costBasis,
+    abs,
+    pct,
+    pricedItems: basis.pricedItems,
+    totalItems: basis.totalItems,
+    unpricedAssets: basis.unpricedAssets,
+    earliestTs: basis.earliestTs,
+  });
 });
 
 // Ringkasan portofolio bertenaga Workers AI (LLM). On-demand (dipicu tombol),
