@@ -167,6 +167,12 @@ export const appHtml = `<!doctype html>
 
       <!-- DASHBOARD -->
       <section x-show="view==='dashboard' && !loading" class="space-y-6">
+        <!-- Error alert: hanya muncul bila ada akun gagal sync -->
+        <div x-show="accounts.filter(a=>a.status==='error').length>0" class="flex items-center gap-2 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-900/20 px-4 py-2.5 text-sm text-rose-700 dark:text-rose-300">
+          <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/></svg>
+          <span><span class="font-semibold" x-text="accounts.filter(a=>a.status==='error').length"></span> account(s) failed to sync.</span>
+          <button @click="go('accounts')" class="ml-auto shrink-0 text-xs font-semibold underline hover:no-underline">View accounts</button>
+        </div>
         <!-- Stat cards -->
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
@@ -177,17 +183,51 @@ export const appHtml = `<!doctype html>
               <span x-text="fmtPct(overview.grandChangePct,true)"></span> <span class="font-normal text-slate-400 dark:text-slate-500">24h</span>
             </div>
           </div>
+          <!-- Today's P/L (nominal 24 jam) -->
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Groups</div>
-            <div class="mt-1 text-2xl font-semibold" x-text="overview.portfolios.length"></div>
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Today's P/L</div>
+            <template x-if="todayPL().has">
+              <div>
+                <div class="mt-1 text-2xl font-semibold" :class="pctClass(todayPL().abs)" x-text="(todayPL().abs>=0?'+':'−')+fmtDisplay(Math.abs(todayPL().abs))"></div>
+                <div class="mt-1 text-xs font-medium" :class="pctClass(todayPL().pct)"><span x-text="fmtPct(todayPL().pct,true)"></span> <span class="font-normal text-slate-400 dark:text-slate-500">24h</span></div>
+              </div>
+            </template>
+            <div x-show="!todayPL().has" class="mt-1 text-2xl font-semibold text-slate-300 dark:text-slate-600">—</div>
           </div>
+          <!-- Top Mover 24h -->
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Connected Accounts</div>
-            <div class="mt-1 text-2xl font-semibold" x-text="accounts.length"></div>
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Top Mover 24h</div>
+            <template x-if="topMover()">
+              <div>
+                <div class="mt-1 flex items-center gap-2">
+                  <span class="relative h-6 w-6 shrink-0">
+                    <span class="absolute inset-0 rounded-full flex items-center justify-center text-[9px] font-semibold text-white" :style="'background:'+tokenGradient(topMover().asset)" x-text="tokenInitial(topMover().asset)"></span>
+                    <img :src="tokenIcon(topMover().asset)" class="absolute inset-0 h-6 w-6 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                  </span>
+                  <span class="text-2xl font-semibold" x-text="topMover().asset"></span>
+                </div>
+                <div class="mt-1 text-xs font-medium" :class="pctClass(topMover().pct)" x-text="fmtPct(topMover().pct,true)+' 24h'"></div>
+              </div>
+            </template>
+            <div x-show="!topMover()" class="mt-1 text-2xl font-semibold text-slate-300 dark:text-slate-600">—</div>
           </div>
+          <!-- Largest Holding (konsentrasi) -->
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Accounts with Errors</div>
-            <div class="mt-1 text-2xl font-semibold text-rose-600 dark:text-rose-400" x-text="accounts.filter(a=>a.status==='error').length"></div>
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Largest Holding</div>
+            <template x-if="largestHolding()">
+              <div>
+                <div class="mt-1 flex items-center gap-2">
+                  <span class="relative h-6 w-6 shrink-0">
+                    <span class="absolute inset-0 rounded-full flex items-center justify-center text-[9px] font-semibold text-white" :style="'background:'+tokenGradient(largestHolding().asset)" x-text="tokenInitial(largestHolding().asset)"></span>
+                    <img :src="tokenIcon(largestHolding().asset)" class="absolute inset-0 h-6 w-6 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                  </span>
+                  <span class="text-2xl font-semibold" x-text="largestHolding().asset"></span>
+                  <span class="text-sm font-medium text-slate-400 dark:text-slate-500" x-text="largestHolding().pct.toFixed(0)+'%'"></span>
+                </div>
+                <div class="mt-1 text-xs text-slate-400 dark:text-slate-500" x-text="fmtDisplay(largestHolding().usd)"></div>
+              </div>
+            </template>
+            <div x-show="!largestHolding()" class="mt-1 text-2xl font-semibold text-slate-300 dark:text-slate-600">—</div>
           </div>
         </div>
 
@@ -1499,6 +1539,27 @@ export const appHtml = `<!doctype html>
           const w=a.filter(x=>chg[x.asset]!==undefined && chg[x.asset]!==null).map(x=>({ asset:x.asset, usd:x.usd, pct:Number(chg[x.asset]) }));
           const s=w.slice().sort((p,q)=>q.pct-p.pct);
           return { best: s.filter(x=>x.pct>0).slice(0,3), worst: s.filter(x=>x.pct<0).slice(-3).reverse() };
+        },
+        // Untung/rugi 24 jam dalam NOMINAL. Pulihkan nilai 24 jam lalu dari grandChangePct.
+        todayPL() {
+          const pct=this.overview.grandChangePct;
+          if (pct===null || pct===undefined) return { has:false, abs:0, pct:0 };
+          const total=Number(this.overview.grandTotalUsd)||0;
+          const past=total/(1+Number(pct)/100);
+          return { has:true, abs: total-past, pct: Number(pct) };
+        },
+        // Aset dengan pergerakan 24 jam terbesar (absolut), hanya yang dipegang.
+        topMover() {
+          const a=this.aggAssets(); const chg=this.overview.assetChange||{};
+          let best=null;
+          for (const x of a){ const p=chg[x.asset]; if(p===undefined||p===null) continue; if(!best||Math.abs(Number(p))>Math.abs(best.pct)) best={ asset:x.asset, usd:x.usd, pct:Number(p) }; }
+          return best;
+        },
+        // Holding terbesar + porsinya terhadap total (konsentrasi).
+        largestHolding() {
+          const a=this.aggAssets(); if(!a.length) return null;
+          const total=a.reduce((s,x)=>s+x.usd,0); const top=a[0];
+          return { asset:top.asset, usd:top.usd, pct: total>0? top.usd/total*100:0 };
         },
         perf() {
           let h=this.analysisHistory||[];
