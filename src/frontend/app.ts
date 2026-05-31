@@ -74,6 +74,14 @@ export const appHtml = `<!doctype html>
           <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Total Value</div>
           <div class="text-sm font-semibold" x-text="fmtDisplay(overview.grandTotalUsd||0)"></div>
         </div>
+        <!-- Last-synced indicator (always visible, incl. mobile) -->
+        <span x-show="!loading"
+          :title="(now, lastSync>0 ? 'Last synced '+timeAgo(lastSync)+' ('+fmtDate(lastSync)+')' : 'Not synced yet')"
+          class="flex items-center gap-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+          <span class="h-1.5 w-1.5 shrink-0 rounded-full"
+            :class="lastSync===0 ? 'bg-slate-300 dark:bg-slate-600' : (now - lastSync) < 1.8e6 ? 'bg-emerald-400' : (now - lastSync) < 3.6e6 ? 'bg-amber-400' : 'bg-rose-400'"></span>
+          <span x-text="(now, lastSync>0 ? timeAgo(lastSync).replace(' ago','') : 'never')"></span>
+        </span>
         <!-- Currency toggle (always visible, incl. mobile) -->
         <button @click="toggleCurrency()"
           class="rounded-xl px-2.5 py-2 text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900/70"
@@ -96,7 +104,7 @@ export const appHtml = `<!doctype html>
           <svg x-show="darkMode" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
         </button>
         <button @click="syncAll()" :disabled="syncing"
-          :title="lastSync>0 ? 'Last synced '+timeAgo(lastSync)+' ('+fmtDate(lastSync)+')' : 'Not synced yet'"
+          :title="(now, lastSync>0 ? 'Last synced '+timeAgo(lastSync)+' ('+fmtDate(lastSync)+')' : 'Not synced yet')"
           class="flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" :class="syncing&&'animate-spin'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           <span x-text="syncing ? 'Syncing…' : 'Sync'"></span>
@@ -113,8 +121,52 @@ export const appHtml = `<!doctype html>
       <p x-show="toast" x-transition x-text="toast" :class="toastClass()" class="mb-4 rounded-xl px-4 py-2 text-sm font-medium"></p>
 
 
+      <!-- DASHBOARD SKELETON (first load) -->
+      <section x-show="loading && view==='dashboard'" class="space-y-6" aria-hidden="true">
+        <!-- Stat cards -->
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <template x-for="i in 4" :key="i">
+            <div class="animate-pulse rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+              <div class="h-2.5 w-20 rounded bg-slate-200 dark:bg-slate-700"></div>
+              <div class="mt-3 h-6 w-28 rounded bg-slate-200 dark:bg-slate-700"></div>
+              <div class="mt-2 h-2.5 w-16 rounded bg-slate-200 dark:bg-slate-700"></div>
+            </div>
+          </template>
+        </div>
+        <!-- Charts row -->
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div class="animate-pulse rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm lg:col-span-2">
+            <div class="h-3 w-28 rounded bg-slate-200 dark:bg-slate-700"></div>
+            <div class="mt-4 h-56 rounded-xl bg-slate-100 dark:bg-slate-700/50"></div>
+          </div>
+          <div class="animate-pulse rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+            <div class="h-3 w-28 rounded bg-slate-200 dark:bg-slate-700"></div>
+            <div class="mt-4 mx-auto h-44 w-44 rounded-full bg-slate-100 dark:bg-slate-700/50"></div>
+          </div>
+        </div>
+        <!-- Portfolio cards -->
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <template x-for="i in 2" :key="i">
+            <div class="animate-pulse rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+              <div class="mb-4 flex items-center justify-between">
+                <div class="h-3 w-24 rounded bg-slate-200 dark:bg-slate-700"></div>
+                <div class="h-4 w-20 rounded bg-slate-200 dark:bg-slate-700"></div>
+              </div>
+              <div class="space-y-2.5">
+                <template x-for="j in 4" :key="j">
+                  <div class="flex items-center justify-between">
+                    <div class="h-3 w-32 rounded bg-slate-200 dark:bg-slate-700"></div>
+                    <div class="h-3 w-14 rounded bg-slate-200 dark:bg-slate-700"></div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+
       <!-- DASHBOARD -->
-      <section x-show="view==='dashboard'" class="space-y-6">
+      <section x-show="view==='dashboard' && !loading" class="space-y-6">
         <!-- Stat cards -->
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
@@ -1026,7 +1078,7 @@ export const appHtml = `<!doctype html>
             <template x-if="ac.type==='eth' || ac.type==='bsc'">
               <label class="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer border-t border-slate-200 dark:border-slate-600 pt-3">
                 <input type="checkbox" x-model="ac.autoDetect" class="mt-0.5 h-4 w-4 rounded accent-indigo-600" />
-                <span>Auto-deteksi semua token <span class="text-slate-400 dark:text-slate-500">(ERC-20/BEP-20 non-zero, via Alchemy)</span></span>
+                <span>Auto-detect all tokens <span class="text-slate-400 dark:text-slate-500">(non-zero ERC-20/BEP-20, via Alchemy)</span></span>
               </label>
             </template>
           </div>
@@ -1047,7 +1099,7 @@ export const appHtml = `<!doctype html>
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
         syncing: false, toast: '', toastType: 'info', modal: null, updateReady: false, appVersion: '',
-        loading: true, lastSync: 0,
+        loading: true, lastSync: 0, now: Date.now(),
         confirmState: { open: false, title: '', message: '', confirmText: 'Confirm', danger: true, _resolve: null },
         installPrompt: null, installed: false, isIOS: false,
         systemEvents: [], unreadCount: 0, activityQueue: [], queueMeta: {}, activityTab: 'events',
@@ -1103,6 +1155,8 @@ export const appHtml = `<!doctype html>
           const mv = document.querySelector('meta[name=app-version]');
           this.appVersion = mv ? mv.getAttribute('content') : '';
           this.startVersionWatch();
+          // Tick relatif-waktu (mis. "5m ago") tiap 30 dtk agar indikator sync tetap akurat.
+          setInterval(()=>{ this.now = Date.now(); }, 30000);
           // PWA install: tangkap prompt (sudah distash di window.__bip oleh script head).
           this.isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
           this.installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
