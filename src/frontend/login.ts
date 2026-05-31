@@ -23,7 +23,7 @@ export const loginHtml = `<!doctype html>
     .login-card{animation:loginIn .5s cubic-bezier(.16,1,.3,1) both}
     @keyframes loginIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
     /* Self-drawing portfolio chart line (pathLength normalized to 1) */
-    .draw-line{stroke-dasharray:1;stroke-dashoffset:1;filter:drop-shadow(0 1px 6px rgba(99,102,241,.35))}
+    .draw-line{stroke-dasharray:1;stroke-dashoffset:1;filter:drop-shadow(0 1px 8px rgba(99,102,241,.45))}
     .draw-1{animation:draw 7s ease-in-out infinite}
     .draw-2{animation:draw 9.5s ease-in-out infinite;animation-delay:1.2s}
     @keyframes draw{
@@ -46,14 +46,16 @@ export const loginHtml = `<!doctype html>
 
   <!-- Calm gradient + self-drawing chart background -->
   <div class="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
-    <div class="absolute inset-0 bg-gradient-to-br from-slate-50 via-indigo-50 to-violet-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950"></div>
+    <div class="absolute inset-0 bg-gradient-to-br from-violet-100 via-indigo-50 to-sky-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950"></div>
+    <div class="absolute -top-20 -left-16 h-72 w-72 rounded-full bg-indigo-300/40 blur-3xl dark:bg-indigo-500/10"></div>
+    <div class="absolute -bottom-24 right-0 h-80 w-80 rounded-full bg-violet-300/40 blur-3xl dark:bg-violet-500/10"></div>
     <svg class="absolute inset-0 h-full w-full" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid slice" fill="none">
       <!-- secondary, fainter line -->
-      <path class="draw-line draw-2 text-violet-300 dark:text-violet-500/60" pathLength="1" vector-effect="non-scaling-stroke"
+      <path class="draw-line draw-2 text-violet-400 dark:text-violet-500/60" pathLength="1" vector-effect="non-scaling-stroke"
         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
         d="M0,500 L100,470 L200,492 L300,430 L400,452 L500,398 L600,420 L700,358 L800,382 L900,318 L1000,348 L1100,300 L1200,278" />
       <!-- primary trend line -->
-      <path class="draw-line draw-1 text-indigo-400 dark:text-indigo-400/80" pathLength="1" vector-effect="non-scaling-stroke"
+      <path class="draw-line draw-1 text-indigo-500 dark:text-indigo-400/80" pathLength="1" vector-effect="non-scaling-stroke"
         stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
         d="M0,420 L80,402 L160,442 L240,360 L320,392 L400,300 L480,332 L560,260 L640,292 L720,210 L800,242 L880,170 L960,202 L1040,132 L1120,162 L1200,92" />
       <!-- glowing head dot near the latest (top-right) point -->
