@@ -253,7 +253,7 @@ export const appHtml = `<!doctype html>
             </template>
           </div>
           <p x-show="returns && returns.unpricedAssets && returns.unpricedAssets.length>0" class="mt-2 text-[10px] text-amber-600 dark:text-amber-500">
-            Sebagian aset tak bisa dinilai historis & dikecualikan dari modal: <span x-text="returns && returns.unpricedAssets.join(', ')"></span>
+            Sebagian aset tak bisa dinilai historis & dikecualikan dari modal: <span x-text="returns && returns.unpricedAssets && returns.unpricedAssets.join(', ')"></span>
           </p>
           <p class="mt-2 text-[10px] text-slate-400 dark:text-slate-500">Aproksimasi dari nilai deposit &amp; holding pada tanggal masuk; belum memperhitungkan penarikan/penjualan.</p>
         </div>
