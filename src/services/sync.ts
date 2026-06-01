@@ -12,7 +12,7 @@ import * as binance from './cex/binance';
 import * as bybit from './cex/bybit';
 import { getEvmBalances, getEvmAutoBalances } from './onchain/evm';
 import { getTronBalances } from './onchain/tron';
-import { computeValuation } from './valuation';
+import { computeValuation, type ValuationResult } from './valuation';
 import { refreshOverview } from './overview';
 import { isCooling, setCooldown } from '../lib/cooldown';
 import { addEvent } from '../lib/events';
@@ -290,8 +290,8 @@ export async function syncAccount(env: Env, acc: AccountRow): Promise<void> {
   }
 }
 
-/** Tulis snapshot nilai portofolio jika interval sudah lewat. */
-async function maybeSnapshot(env: Env): Promise<void> {
+/** Tulis snapshot nilai portofolio jika interval sudah lewat. Pakai valuasi yang sudah dihitung. */
+async function maybeSnapshot(env: Env, valuation: ValuationResult): Promise<void> {
   const intervalMin = parseInt(env.SNAPSHOT_INTERVAL_MINUTES ?? '30', 10) || 30;
   const lastRow = await queryOne<{ captured_at: number }>(
     env,
@@ -300,7 +300,6 @@ async function maybeSnapshot(env: Env): Promise<void> {
   const last = lastRow?.captured_at ?? 0;
   if (now() - last < intervalMin * 60 * 1000) return;
 
-  const valuation = await computeValuation(env);
   const ts = now();
   for (const p of valuation.portfolios) {
     await run(
@@ -313,23 +312,50 @@ async function maybeSnapshot(env: Env): Promise<void> {
   }
 }
 
-/** Dipanggil oleh cron / trigger manual. Sinkronkan semua account aktif. */
+/** Ambil/simpan kursor round-robin sync di tabel settings. */
+async function getSyncCursor(env: Env): Promise<number> {
+  const row = await queryOne<{ value: string }>(env, "SELECT value FROM settings WHERE key = 'sync_cursor'");
+  return parseInt(row?.value ?? '0', 10) || 0;
+}
+async function setSyncCursor(env: Env, value: number): Promise<void> {
+  await run(
+    env,
+    `INSERT INTO settings (key, value, updated_at) VALUES ('sync_cursor', ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    String(value),
+    now(),
+  );
+}
+
+/** Dipanggil oleh cron / trigger manual. Sinkronkan account aktif. */
 export async function syncAll(env: Env): Promise<{ synced: number }> {
   const accounts = await queryAll<AccountRow>(
     env,
-    'SELECT id, portfolio_id, type, label, enc_credentials, config FROM accounts WHERE enabled = 1',
+    'SELECT id, portfolio_id, type, label, enc_credentials, config FROM accounts WHERE enabled = 1 ORDER BY id',
   );
+
+  // Round-robin (Workers Free: batas CPU per-invocation ketat). 0/kosong = sinkron semua.
+  const batchSize = parseInt(env.SYNC_BATCH_SIZE ?? '0', 10) || 0;
+  let toSync = accounts;
+  if (batchSize > 0 && accounts.length > batchSize) {
+    const start = (await getSyncCursor(env)) % accounts.length;
+    toSync = [];
+    for (let i = 0; i < batchSize; i++) toSync.push(accounts[(start + i) % accounts.length]);
+    await setSyncCursor(env, (start + batchSize) % accounts.length);
+  }
+
   // Sekuensial agar ramah rate-limit API eksternal.
-  for (const acc of accounts) await syncAccount(env, acc);
+  for (const acc of toSync) await syncAccount(env, acc);
   // Lanjutkan backfill deposit yang sedang berjalan (hanya bila sudah dimulai via tombol).
-  for (const acc of accounts) {
+  for (const acc of toSync) {
     if (acc.type !== 'binance') continue;
     if (await isCooling(env, 'cex:binance')) break; // lagi cooldown — jangan poke IP yang ke-flag
     const raw = await getCursor(env, acc.id, 'deposit_backfill');
     if (!raw) continue;
     try {
       const st = JSON.parse(raw) as { done: boolean };
-      if (!st.done) await backfillDeposits(env, acc, 3);
+      // 1 jendela per tick agar beban CPU/subrequest per-invocation kecil (lanjut tick berikutnya).
+      if (!st.done) await backfillDeposits(env, acc, 1);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await addEvent(env, {
@@ -341,10 +367,13 @@ export async function syncAll(env: Env): Promise<{ synced: number }> {
       });
     }
   }
-  await maybeSnapshot(env);
-  // Hitung & simpan overview ke DB agar UI cukup membaca dari sana (bukan hitung live).
-  await refreshOverview(env).catch(() => undefined);
-  return { synced: accounts.length };
+  // Hitung valuasi SEKALI per tick, lalu pakai ulang untuk snapshot + overview
+  // (sebelumnya computeValuation berjalan 2x pada tick yang ada snapshot).
+  const valuation = await computeValuation(env);
+  await maybeSnapshot(env, valuation);
+  // Simpan overview ke DB agar UI cukup membaca dari sana (bukan hitung live).
+  await refreshOverview(env, valuation).catch(() => undefined);
+  return { synced: toSync.length };
 }
 
 /** Sinkron satu account by id (untuk tombol "Sync sekarang" di UI). */

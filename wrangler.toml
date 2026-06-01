@@ -38,6 +38,9 @@ binding = "AI"
 ENVIRONMENT = "production"
 # Default jadwal snapshot nilai portofolio (menit). Sync balance tetap tiap 10 menit.
 SNAPSHOT_INTERVAL_MINUTES = "30"
+# Workers Free: batas CPU per-invocation ketat. Sinkron sebagian account per tick (round-robin)
+# agar tiap cron lebih ringan. 0/kosong = sinkron semua. Naikkan/turunkan sesuai jumlah account.
+SYNC_BATCH_SIZE = "2"
 
 # === SECRETS (JANGAN ditaruh di sini — set via `wrangler secret put`) ===
 # wrangler secret put MASTER_KEY          -> base64 dari 32 byte acak (kunci enkripsi kredensial)

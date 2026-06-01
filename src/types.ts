@@ -12,6 +12,9 @@ export interface Env {
   MASTER_KEY: string; // base64, 32 byte — kunci enkripsi kredensial
   ENVIRONMENT?: string;
   SNAPSHOT_INTERVAL_MINUTES?: string;
+  // Round-robin sync: jumlah account yang disinkron per tick cron (0/kosong = semua).
+  // Berguna di Workers Free (batas CPU per-invocation ketat) untuk memecah beban antar-tick.
+  SYNC_BATCH_SIZE?: string;
   COINGECKO_API_KEY?: string;
   // Endpoint RPC default (netral provider: Alchemy untuk EVM, TronGrid untuk TRON).
   RPC_ETH_URL?: string;

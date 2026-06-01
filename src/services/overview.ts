@@ -1,6 +1,6 @@
 import type { Env } from '../types';
 import { now, queryAll, queryOne, run } from '../lib/db';
-import { computeValuation, type PortfolioValue } from './valuation';
+import { computeValuation, type PortfolioValue, type ValuationResult } from './valuation';
 import { getUsdRates, get24hChangePct } from './prices';
 
 const OVERVIEW_KEY = 'overview_cache';
@@ -19,10 +19,10 @@ export interface OverviewPayload {
  * Hitung payload overview lengkap (valuasi + perubahan 24 jam + kurs IDR).
  * Operasi berat (fetch harga, valuasi) — dijalankan oleh worker, BUKAN saat UI memuat.
  */
-export async function buildOverview(env: Env): Promise<OverviewPayload> {
+export async function buildOverview(env: Env, pre?: ValuationResult): Promise<OverviewPayload> {
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   const [valuation, rates, pastRows] = await Promise.all([
-    computeValuation(env),
+    pre ? Promise.resolve(pre) : computeValuation(env),
     getUsdRates(env, ['IDR']),
     queryAll<{ portfolio_id: number; total_usd: number }>(
       env,
@@ -67,8 +67,8 @@ export async function buildOverview(env: Env): Promise<OverviewPayload> {
 }
 
 /** Hitung overview lalu simpan ke DB (settings). Dipanggil worker/cron & setelah mutasi. */
-export async function refreshOverview(env: Env): Promise<OverviewPayload> {
-  const payload = await buildOverview(env);
+export async function refreshOverview(env: Env, pre?: ValuationResult): Promise<OverviewPayload> {
+  const payload = await buildOverview(env, pre);
   await run(
     env,
     `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
