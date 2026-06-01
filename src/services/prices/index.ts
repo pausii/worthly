@@ -48,16 +48,19 @@ async function binancePublicGet(env: Env, pathWithQuery: string): Promise<Respon
     }
   }
 
+  const ep = pathWithQuery.split('?')[0];
   for (const host of hosts) {
     try {
       const res = await fetch(host + pathWithQuery, { headers });
       if (res.ok) return res;
       if (res.status === 451) {
         await setCooldown(env, BINANCE_COOLDOWN, BINANCE_COOLDOWN_SECONDS);
+        console.error(`[prices] Binance 451 geo-block ${host}${ep} — cooldown ${BINANCE_COOLDOWN_SECONDS}s`);
         return null;
       }
-    } catch {
-      // coba host berikutnya
+      console.error(`[prices] Binance ${res.status} ${host}${ep}`);
+    } catch (e) {
+      console.error(`[prices] fetch gagal ${host}${ep}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
   return null;
@@ -93,8 +96,8 @@ export async function getDailyCloses(env: Env, symbol: string, limit: number): P
       if (pts.length) await env.KV.put(KEY, JSON.stringify({ ts: Date.now(), pts }), { expirationTtl: KLINES_TTL_SECONDS });
       return pts.length ? pts : (cached?.pts ?? []);
     }
-  } catch {
-    // diamkan
+  } catch (e) {
+    console.error(`[prices] getDailyCloses ${symbol} gagal: ${e instanceof Error ? e.message : String(e)}`);
   }
   return cached?.pts ?? [];
 }
@@ -188,8 +191,8 @@ async function getBinanceTickerMap(env: Env): Promise<Record<string, number>> {
       await env.KV.put(KEY, JSON.stringify({ ts: Date.now(), map }), { expirationTtl: 120 });
       return map;
     }
-  } catch {
-    // diamkan
+  } catch (e) {
+    console.error(`[prices] tickerMap gagal: ${e instanceof Error ? e.message : String(e)}`);
   }
   return cached?.map ?? {};
 }
@@ -236,7 +239,8 @@ export async function get24hChangePct(env: Env, assetsRaw: string[]): Promise<Re
       await env.KV.put(KEY, JSON.stringify({ ts: Date.now(), chg }), { expirationTtl: 120 });
     }
     return chg;
-  } catch {
+  } catch (e) {
+    console.error(`[prices] 24hChange gagal: ${e instanceof Error ? e.message : String(e)}`);
     return store?.chg ?? {};
   }
 }
@@ -255,8 +259,8 @@ async function fetchFiatUsd(assets: string[]): Promise<Record<string, number>> {
         if (usdToFiat && usdToFiat > 0) out[asset] = 1 / usdToFiat; // 1 unit fiat = ? USD
       }
     }
-  } catch {
-    // diamkan
+  } catch (e) {
+    console.error(`[prices] fiat (Frankfurter) gagal: ${e instanceof Error ? e.message : String(e)}`);
   }
   return out;
 }
