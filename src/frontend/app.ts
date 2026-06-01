@@ -243,7 +243,7 @@ export const appHtml = `<!doctype html>
                 </div>
               </template>
               <div x-show="returns && returns.pct===null" class="mt-1 text-sm text-slate-400 dark:text-slate-500">Belum ada data deposit/holding untuk menghitung modal masuk.</div>
-              <p x-show="returns && returns.earliestTs>0" class="mt-1 text-xs text-slate-400 dark:text-slate-500">Sejak <span x-text="fmtDateOnly(returns.earliestTs)"></span></p>
+              <p x-show="returns && returns.earliestTs>0" class="mt-1 text-xs text-slate-400 dark:text-slate-500">Sejak <span x-text="fmtDateOnly(returns && returns.earliestTs)"></span></p>
             </div>
             <template x-if="returns && returns.pct!==null">
               <div class="text-right text-xs text-slate-500 dark:text-slate-400">
@@ -664,29 +664,74 @@ export const appHtml = `<!doctype html>
 
       <!-- ACCOUNTS -->
       <section x-show="view==='accounts'" class="space-y-4">
-        <div class="flex justify-end">
-          <button @click="openAccountModal()" class="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">+ Account</button>
+        <!-- Summary header -->
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+              <span x-text="accounts.length + ' account' + (accounts.length===1?'':'s')"></span>
+              <template x-if="accounts.length">
+                <span class="flex items-center gap-2.5">
+                  <span x-show="accountsCount('ok')" class="flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span><span x-text="accountsCount('ok')+' ok'"></span></span>
+                  <span x-show="accountsCount('error')" class="flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span><span x-text="accountsCount('error')+' error'"></span></span>
+                  <span x-show="accountsCount('pending')" class="flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-600"></span><span x-text="accountsCount('pending')+' pending'"></span></span>
+                </span>
+              </template>
+            </div>
+            <div class="mt-0.5 text-2xl font-bold tracking-tight" x-text="fmtDisplay(accountsTotalUsd())"></div>
+            <div x-show="displayCurrency==='IDR'" class="text-xs text-slate-400 dark:text-slate-500" x-text="fmtUsd(accountsTotalUsd())"></div>
+            <div class="text-[11px] text-slate-400 dark:text-slate-500">Total tracked across connected accounts</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button @click="syncAll()" :disabled="syncing" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50">
+              <span x-show="!syncing">Sync all</span><span x-show="syncing">Syncing…</span>
+            </button>
+            <button @click="openAccountModal()" class="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">+ Account</button>
+          </div>
         </div>
+
+        <!-- Cards -->
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <template x-for="a in accounts" :key="a.id">
-            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
-              <div class="flex items-start justify-between">
-                <div>
+            <div class="flex flex-col rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
                   <div class="flex items-center gap-2">
-                    <span class="rounded-md bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[11px] font-semibold uppercase text-slate-600 dark:text-slate-300" x-text="a.type"></span>
-                    <span class="font-medium" x-text="a.label"></span>
+                    <span class="relative h-6 w-6 shrink-0">
+                      <span class="absolute inset-0 flex items-center justify-center rounded-full text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(accountTypeSymbol(a.type))" x-text="tokenInitial(accountTypeSymbol(a.type))"></span>
+                      <img :src="tokenIcon(accountTypeSymbol(a.type))" class="absolute inset-0 h-6 w-6 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                    </span>
+                    <span class="truncate font-medium" x-text="a.label"></span>
+                    <span class="shrink-0 rounded-md bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400" x-text="a.type"></span>
                   </div>
-                  <div class="mt-1 text-xs text-slate-400 dark:text-slate-500" x-text="portfolioName(a.portfolio_id)"></div>
+                  <div class="mt-0.5 text-xs text-slate-400 dark:text-slate-500" x-text="portfolioName(a.portfolio_id)"></div>
                 </div>
-                <span class="rounded-full px-2 py-0.5 text-[11px] font-medium"
-                  :class="a.status==='ok' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : a.status==='error' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'"
-                  x-text="a.status||'pending'"></span>
+                <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="statusClass(a.status)" x-text="a.status||'pending'"></span>
               </div>
+
+              <!-- Value + assets -->
+              <div class="mt-3 flex items-end justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="text-lg font-semibold" x-text="fmtDisplay(a.value_usd||0)"></div>
+                  <div x-show="displayCurrency==='IDR' && (a.value_usd||0)>0" class="text-[11px] text-slate-400 dark:text-slate-500" x-text="fmtUsd(a.value_usd||0)"></div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <div class="flex -space-x-1.5">
+                    <template x-for="sym in (a.top_assets||[])" :key="sym">
+                      <span class="relative h-5 w-5 rounded-full ring-2 ring-white dark:ring-slate-800">
+                        <span class="absolute inset-0 flex items-center justify-center rounded-full text-[7px] font-semibold text-white" :style="'background:'+tokenGradient(sym)" x-text="tokenInitial(sym)"></span>
+                        <img :src="tokenIcon(sym)" class="absolute inset-0 h-5 w-5 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                      </span>
+                    </template>
+                  </div>
+                  <span x-show="a.asset_count" class="text-[11px] text-slate-400 dark:text-slate-500" x-text="a.asset_count + ' asset' + (a.asset_count===1?'':'s')"></span>
+                </div>
+              </div>
+
               <div class="mt-2 text-xs text-slate-400 dark:text-slate-500">
-                <span x-show="a.last_synced_at">Synced: <span x-text="timeAgo(a.last_synced_at)"></span></span>
+                <span x-show="a.last_synced_at">Synced <span x-text="timeAgo(a.last_synced_at)"></span></span>
                 <span x-show="!a.last_synced_at">Never synced</span>
               </div>
-              <p x-show="a.last_error" x-text="a.last_error" class="mt-2 rounded-lg bg-rose-50 dark:bg-rose-900/30 px-2 py-1 text-[11px] text-rose-600 dark:text-rose-400"></p>
+              <p x-show="a.last_error" x-text="a.last_error" class="mt-2 break-all rounded-lg bg-rose-50 dark:bg-rose-900/30 px-2 py-1 text-[11px] text-rose-600 dark:text-rose-400"></p>
               <div x-show="a.type==='binance'" class="mt-2 text-xs">
                 <template x-if="a.deposit_backfill && a.deposit_backfill.done">
                   <span class="text-emerald-600 dark:text-emerald-400">Full deposit history<span class="text-slate-400 dark:text-slate-500" x-text="' ('+(a.deposit_backfill.fetched||0)+' rows)'"></span></span>
@@ -698,7 +743,7 @@ export const appHtml = `<!doctype html>
                   <span class="text-slate-400 dark:text-slate-500">Deposits: last 90 days</span>
                 </template>
               </div>
-              <div class="mt-3 flex flex-wrap gap-2">
+              <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-100 dark:border-slate-700/60 pt-3">
                 <button @click="syncAccount(a.id)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Sync</button>
                 <button @click="openAccountModal(a)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Edit</button>
                 <button x-show="a.type==='binance'" @click="backfillDeposits(a.id)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Full History</button>
@@ -706,7 +751,16 @@ export const appHtml = `<!doctype html>
               </div>
             </div>
           </template>
-          <p x-show="accounts.length===0" class="text-sm text-slate-400 dark:text-slate-500">No accounts yet. Add a Binance/Bybit or on-chain wallet.</p>
+
+          <!-- Empty state -->
+          <div x-show="accounts.length===0" class="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-10 text-center md:col-span-2">
+            <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700">
+              <svg class="h-6 w-6 text-slate-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+            </div>
+            <p class="text-sm font-medium text-slate-600 dark:text-slate-300">No accounts yet</p>
+            <p class="mx-auto mt-1 max-w-sm text-xs text-slate-400 dark:text-slate-500">Connect a Binance/Bybit exchange or an on-chain wallet (ETH, BSC, TRON, BTC) to start tracking balances and value.</p>
+            <button @click="openAccountModal()" class="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">+ Add your first account</button>
+          </div>
         </div>
       </section>
 
@@ -1099,7 +1153,7 @@ export const appHtml = `<!doctype html>
           </div>
         </div>
         <input type="text" x-model="hd.amountDisplay"
-          @blur="{ const n=parseFloat((hd.amountDisplay||'').replace(/,/g,'')); hd.amountDisplay = n ? n.toLocaleString('en-US',{maximumFractionDigits:8}) : ''; }"
+          @blur="hd.amountDisplay = formatAmountInput(hd.amountDisplay)"
           placeholder="Amount (e.g. 100,000,000)"
           class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
         <input x-model="hd.note" placeholder="Note (optional)"
@@ -1419,6 +1473,11 @@ export const appHtml = `<!doctype html>
           if (this.displayCurrency === 'IDR') return 'Rp ' + Math.round(v * (this.idrRate||0)).toLocaleString('en-US');
           return '$' + v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
         },
+        formatAmountInput(v) { const n=parseFloat((v||'').replace(/,/g,'')); return n ? n.toLocaleString('en-US',{maximumFractionDigits:8}) : ''; },
+        accountsTotalUsd() { return (this.accounts||[]).reduce((s,a)=>s+(Number(a.value_usd)||0),0); },
+        accountsCount(st) { return (this.accounts||[]).filter(a=>(a.status||'pending')===st).length; },
+        statusClass(st) { return st==='ok' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : st==='error' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'; },
+        accountTypeSymbol(t) { return t==='eth'?'ETH':t==='bsc'?'BNB':t==='tron'?'TRX':t==='btc'?'BTC':t; },
 
         async loadOverview() {
           const r = await this.api('GET','/dashboard/overview');

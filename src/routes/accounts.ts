@@ -5,6 +5,7 @@ import { encryptSecret } from '../lib/crypto';
 import { ok, fail } from '../lib/response';
 import { syncOne, startDepositBackfill, runDepositBackfill } from '../services/sync';
 import { refreshOverview } from '../services/overview';
+import { getUsdRates } from '../services/prices';
 import { isCooling } from '../lib/cooldown';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -59,6 +60,29 @@ app.get('/', async (c) => {
     "SELECT account_id, value FROM sync_state WHERE key = 'deposit_backfill'",
   );
   const stateMap = new Map(states.map((s) => [s.account_id, s.value]));
+
+  // Nilai USD + jumlah aset + top aset per-account (untuk kartu di halaman Accounts).
+  const bals = await queryAll<{ account_id: number; asset: string; total: number }>(
+    c.env,
+    'SELECT account_id, asset, SUM(total) AS total FROM balances GROUP BY account_id, asset',
+  );
+  const assetSet = new Set<string>();
+  for (const b of bals) assetSet.add(b.asset.toUpperCase());
+  const rates = await getUsdRates(c.env, [...assetSet]);
+  const valByAcc = new Map<number, { usd: number; count: number; assets: { asset: string; usd: number }[] }>();
+  for (const b of bals) {
+    if (!(b.total > 0)) continue;
+    const usd = b.total * (rates[b.asset.toUpperCase()] ?? 0);
+    let e = valByAcc.get(b.account_id);
+    if (!e) {
+      e = { usd: 0, count: 0, assets: [] };
+      valByAcc.set(b.account_id, e);
+    }
+    e.usd += usd;
+    e.count += 1;
+    e.assets.push({ asset: b.asset.toUpperCase(), usd });
+  }
+
   return ok(
     c,
     rows.map((r) => {
@@ -71,7 +95,17 @@ app.get('/', async (c) => {
           backfill = null;
         }
       }
-      return { ...publicView(r), deposit_backfill: backfill };
+      const val = valByAcc.get(r.id);
+      const topAssets = val
+        ? [...val.assets].sort((a, b) => b.usd - a.usd).slice(0, 3).map((a) => a.asset)
+        : [];
+      return {
+        ...publicView(r),
+        deposit_backfill: backfill,
+        value_usd: val?.usd ?? 0,
+        asset_count: val?.count ?? 0,
+        top_assets: topAssets,
+      };
     }),
   );
 });
