@@ -408,7 +408,13 @@ export const appHtml = `<!doctype html>
         <!-- Value over time -->
         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 class="text-sm font-semibold">Your Portfolio Over Time</h3>
+            <div class="flex items-center gap-1.5">
+              <h3 class="text-sm font-semibold">Your Portfolio Over Time</h3>
+              <span x-show="valueMode==='holdings'" class="group relative inline-flex">
+                <span class="flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-500 dark:bg-slate-700 dark:text-slate-400">?</span>
+                <span class="pointer-events-none absolute left-1/2 top-full z-10 mt-1 w-56 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs font-normal text-slate-100 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-slate-700">Simulated: your current holdings &times; historical prices (not your actual past balance).</span>
+              </span>
+            </div>
             <div class="flex gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
               <button @click="setValueMode('snapshot')"
                 class="rounded-lg px-3 py-1 text-xs font-medium transition-colors"
@@ -418,7 +424,6 @@ export const appHtml = `<!doctype html>
                 :class="valueMode==='holdings' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'">Holdings (sim)</button>
             </div>
           </div>
-          <p x-show="valueMode==='holdings'" class="mb-3 text-xs text-slate-400 dark:text-slate-500">Simulated: your current holdings &times; historical prices (not your actual past balance).</p>
           <div class="relative h-64">
             <div x-ref="anaChartWrap" class="w-full h-full"></div>
             <div x-show="analysisHistory.length===0 && !analysisLoading" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500" x-text="valueMode==='holdings' ? 'No price history available.' : 'No snapshots for this period.'"></div>
