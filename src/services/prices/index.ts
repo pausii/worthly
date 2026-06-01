@@ -16,6 +16,12 @@ const FIATS = new Set([
 
 const PRICE_TTL_MS = 60_000; // anggap harga di tabel `prices` valid 60 detik
 
+// Daily close historis hampir tak berubah. Refresh bila lebih tua dari window ini,
+// tapi simpan di KV jauh lebih lama sebagai fallback saat Binance/relay sesekali gagal —
+// supaya chart menyajikan data sedikit basi, bukan kosong total.
+const KLINES_FRESH_MS = 6 * 60 * 60 * 1000; // 6 jam
+const KLINES_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 hari
+
 // Host market-data publik Binance. data-api.binance.com lebih sering lolos geo-block (451)
 // dibanding api.binance.com; dicoba lebih dulu.
 const BINANCE_PUBLIC_HOSTS = ['https://data-api.binance.com', 'https://api.binance.com'];
@@ -24,12 +30,27 @@ const BINANCE_PUBLIC_HOSTS = ['https://data-api.binance.com', 'https://api.binan
  * GET endpoint publik Binance; coba tiap host sampai ada yang OK (mengatasi 451 geo-block).
  * Hormati circuit breaker: lewati bila sedang cooldown; set cooldown bila kena 451 (hindari
  * terus menghantam IP yang ke-flag).
+ *
+ * Bila `BINANCE_PROXY_URL` di-set, request dirutekan lewat relay (IP-nya sudah lolos geo-block) —
+ * sama seperti jalur signed di services/cex/binance.ts. Endpoint publik semuanya di bawah prefix
+ * `/api/`, yang sudah di-forward relay. Tanpa relay, jatuh ke host langsung.
  */
 async function binancePublicGet(env: Env, pathWithQuery: string): Promise<Response | null> {
   if (await isCooling(env, BINANCE_COOLDOWN)) return null;
-  for (const host of BINANCE_PUBLIC_HOSTS) {
+
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  let hosts = BINANCE_PUBLIC_HOSTS;
+  if (env.BINANCE_PROXY_URL) {
+    const r = new URL(env.BINANCE_PROXY_URL);
+    hosts = [r.origin];
+    if (r.username) {
+      headers['Authorization'] = `Basic ${btoa(`${decodeURIComponent(r.username)}:${decodeURIComponent(r.password)}`)}`;
+    }
+  }
+
+  for (const host of hosts) {
     try {
-      const res = await fetch(host + pathWithQuery, { headers: { Accept: 'application/json' } });
+      const res = await fetch(host + pathWithQuery, { headers });
       if (res.ok) return res;
       if (res.status === 451) {
         await setCooldown(env, BINANCE_COOLDOWN, BINANCE_COOLDOWN_SECONDS);
@@ -58,7 +79,7 @@ export async function getDailyCloses(env: Env, symbol: string, limit: number): P
   let cached: { ts: number; pts: PricePoint[] } | null = null;
   try {
     cached = (await env.KV.get(KEY, 'json')) as { ts: number; pts: PricePoint[] } | null;
-    if (cached && Date.now() - cached.ts < 6 * 60 * 60 * 1000) return cached.pts;
+    if (cached && Date.now() - cached.ts < KLINES_FRESH_MS) return cached.pts;
     const res = await binancePublicGet(env, `/api/v3/klines?symbol=${symbol}&interval=1d&limit=${lim}`);
     if (res) {
       const rows = (await res.json()) as unknown[][];
@@ -68,8 +89,9 @@ export async function getDailyCloses(env: Env, symbol: string, limit: number): P
         const c = parseFloat(String(r[4]));
         if (isFinite(t) && isFinite(c) && c > 0) pts.push({ t, c });
       }
-      await env.KV.put(KEY, JSON.stringify({ ts: Date.now(), pts }), { expirationTtl: 21600 });
-      return pts;
+      // Hanya timpa cache bila fetch benar-benar menghasilkan data; jangan kosongkan fallback.
+      if (pts.length) await env.KV.put(KEY, JSON.stringify({ ts: Date.now(), pts }), { expirationTtl: KLINES_TTL_SECONDS });
+      return pts.length ? pts : (cached?.pts ?? []);
     }
   } catch {
     // diamkan
