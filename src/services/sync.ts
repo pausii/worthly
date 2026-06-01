@@ -12,6 +12,7 @@ import * as binance from './cex/binance';
 import * as bybit from './cex/bybit';
 import { getEvmBalances, getEvmAutoBalances } from './onchain/evm';
 import { getTronBalances } from './onchain/tron';
+import { getBitcoinBalances, getBitcoinDeposits } from './onchain/bitcoin';
 import { computeValuation, type ValuationResult } from './valuation';
 import { refreshOverview } from './overview';
 import { isCooling, setCooldown } from '../lib/cooldown';
@@ -205,9 +206,45 @@ async function syncCexAccount(env: Env, acc: AccountRow): Promise<void> {
   }
 }
 
+/** Bitcoin (read-only) via blockchain.com Data API: saldo + riwayat transaksi masuk. */
+async function syncBitcoinAccount(env: Env, acc: AccountRow, config: OnchainConfig): Promise<void> {
+  // base & api_code opsional disimpan terenkripsi (rpcUrl = base API, apiKey = api_code).
+  let base: string | undefined;
+  let apiCode: string | undefined;
+  if (acc.enc_credentials) {
+    const creds = JSON.parse(await decryptSecret(acc.enc_credentials, env.MASTER_KEY)) as OnchainCredentials;
+    base = creds.rpcUrl || undefined;
+    apiCode = creds.apiKey || undefined;
+  }
+
+  const balances = await getBitcoinBalances(config.address, base, apiCode);
+  await upsertBalances(env, acc.id, balances);
+
+  // Riwayat BTC masuk (incremental via cursor). Gagal di sini TIDAK menggagalkan sync saldo.
+  try {
+    const lastTs = parseInt((await getCursor(env, acc.id, 'deposit_ts')) ?? '0', 10);
+    const sinceMs = lastTs > 0 ? lastTs : Date.now() - 365 * 24 * 60 * 60 * 1000; // default 1 tahun ke belakang
+    const deposits = await getBitcoinDeposits(config.address, sinceMs, base, apiCode);
+    await upsertDeposits(env, acc.id, deposits);
+    const maxTs = deposits.reduce((m, d) => Math.max(m, d.ts), lastTs);
+    if (maxTs > lastTs) await setCursor(env, acc.id, 'deposit_ts', String(maxTs));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await addEvent(env, {
+      level: 'warning',
+      source: 'btc',
+      account_id: acc.id,
+      message: 'Fetch riwayat BTC gagal (saldo tetap tersimpan)',
+      detail: msg.slice(0, 300),
+    });
+  }
+}
+
 async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
   const config = JSON.parse(acc.config ?? '{}') as OnchainConfig;
   if (!config.address) throw new Error('Address on-chain belum diisi');
+
+  if (acc.type === 'btc') return syncBitcoinAccount(env, acc, config);
 
   let rpcUrl = '';
   let apiKey = '';

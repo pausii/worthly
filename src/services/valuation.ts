@@ -84,7 +84,13 @@ export async function computeValuation(env: Env): Promise<ValuationResult> {
   };
 
   for (const b of balances) {
-    const origin = b.account_type === 'tron' || b.account_type === 'eth' || b.account_type === 'bsc' ? 'onchain' : 'cex';
+    const origin =
+      b.account_type === 'tron' ||
+      b.account_type === 'eth' ||
+      b.account_type === 'bsc' ||
+      b.account_type === 'btc'
+        ? 'onchain'
+        : 'cex';
     addAsset(b.portfolio_id, b.asset, b.total, origin);
   }
   for (const m of manuals) addAsset(m.portfolio_id, m.currency, m.amount, 'manual');

@@ -44,7 +44,7 @@ export type Variables = {
 
 export type AppContext = Context<{ Bindings: Env; Variables: Variables }>;
 
-export type AccountType = 'binance' | 'bybit' | 'tron' | 'eth' | 'bsc';
+export type AccountType = 'binance' | 'bybit' | 'tron' | 'eth' | 'bsc' | 'btc';
 export type WalletType = 'spot' | 'futures' | 'earn' | 'funding' | 'onchain';
 
 export interface NormalizedBalance {

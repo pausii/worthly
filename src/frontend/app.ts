@@ -1122,7 +1122,7 @@ export const appHtml = `<!doctype html>
           <select x-model="ac.type" :disabled="ac.id"
             class="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 disabled:opacity-60">
             <option value="binance">Binance</option><option value="bybit">Bybit</option>
-            <option value="eth">Ethereum</option><option value="bsc">BSC</option><option value="tron">Tron</option>
+            <option value="eth">Ethereum</option><option value="bsc">BSC</option><option value="tron">Tron</option><option value="btc">Bitcoin</option>
           </select>
           <select x-model.number="ac.portfolio_id"
             class="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
@@ -1141,31 +1141,40 @@ export const appHtml = `<!doctype html>
               class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
           </div>
         </template>
-        <template x-if="ac.type==='eth' || ac.type==='bsc' || ac.type==='tron'">
+        <template x-if="ac.type==='eth' || ac.type==='bsc' || ac.type==='tron' || ac.type==='btc'">
           <div class="space-y-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 p-3">
-            <p class="text-xs text-slate-500 dark:text-slate-400">Enter your wallet address. RPC URL is optional when defaults are configured in the worker environment.</p>
-            <input x-model="ac.address" placeholder="Wallet address (0x… or T…)"
+            <template x-if="ac.type==='btc'">
+              <p class="text-xs text-slate-500 dark:text-slate-400">Enter a Bitcoin <b>address</b> or <b>xpub/ypub/zpub</b> (from your blockchain.com wallet → Receive / Settings). Tracking only — balance &amp; incoming history via blockchain.com. An xpub auto-tracks all derived addresses.</p>
+            </template>
+            <template x-if="ac.type!=='btc'">
+              <p class="text-xs text-slate-500 dark:text-slate-400">Enter your wallet address. RPC URL is optional when defaults are configured in the worker environment.</p>
+            </template>
+            <input x-model="ac.address" :placeholder="ac.type==='btc' ? 'BTC address or xpub/ypub/zpub' : 'Wallet address (0x… or T…)'"
               class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
-            <input x-model="ac.rpcUrl" placeholder="RPC URL (optional)"
-              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
-            <p class="text-xs font-medium text-slate-600 dark:text-slate-400">Assets to track:</p>
-            <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-              <input type="checkbox" x-model="ac.trackNative" class="h-4 w-4 rounded accent-indigo-600" />
-              <span x-text="nativeSymbol()+' (native coin)'"></span>
-            </label>
-            <div class="flex flex-wrap gap-x-5 gap-y-2">
-              <template x-for="t in (TOKEN_PRESETS[ac.type]||[])" :key="t.symbol">
+            <template x-if="ac.type!=='btc'">
+              <div class="space-y-3">
+                <input x-model="ac.rpcUrl" placeholder="RPC URL (optional)"
+                  class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+                <p class="text-xs font-medium text-slate-600 dark:text-slate-400">Assets to track:</p>
                 <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                  <input type="checkbox" x-model="ac.tokens" :value="t.symbol" class="h-4 w-4 rounded accent-indigo-600" />
-                  <span x-text="t.symbol"></span>
+                  <input type="checkbox" x-model="ac.trackNative" class="h-4 w-4 rounded accent-indigo-600" />
+                  <span x-text="nativeSymbol()+' (native coin)'"></span>
                 </label>
-              </template>
-            </div>
-            <template x-if="ac.type==='eth' || ac.type==='bsc'">
-              <label class="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer border-t border-slate-200 dark:border-slate-600 pt-3">
-                <input type="checkbox" x-model="ac.autoDetect" class="mt-0.5 h-4 w-4 rounded accent-indigo-600" />
-                <span>Auto-detect all tokens <span class="text-slate-400 dark:text-slate-500">(non-zero ERC-20/BEP-20, via Alchemy)</span></span>
-              </label>
+                <div class="flex flex-wrap gap-x-5 gap-y-2">
+                  <template x-for="t in (TOKEN_PRESETS[ac.type]||[])" :key="t.symbol">
+                    <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input type="checkbox" x-model="ac.tokens" :value="t.symbol" class="h-4 w-4 rounded accent-indigo-600" />
+                      <span x-text="t.symbol"></span>
+                    </label>
+                  </template>
+                </div>
+                <template x-if="ac.type==='eth' || ac.type==='bsc'">
+                  <label class="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer border-t border-slate-200 dark:border-slate-600 pt-3">
+                    <input type="checkbox" x-model="ac.autoDetect" class="mt-0.5 h-4 w-4 rounded accent-indigo-600" />
+                    <span>Auto-detect all tokens <span class="text-slate-400 dark:text-slate-500">(non-zero ERC-20/BEP-20, via Alchemy)</span></span>
+                  </label>
+                </template>
+              </div>
             </template>
           </div>
         </template>
@@ -1752,6 +1761,7 @@ export const appHtml = `<!doctype html>
           if (this.ac.type==='eth') return 'ETH';
           if (this.ac.type==='bsc') return 'BNB';
           if (this.ac.type==='tron') return 'TRX';
+          if (this.ac.type==='btc') return 'BTC';
           return '';
         },
 

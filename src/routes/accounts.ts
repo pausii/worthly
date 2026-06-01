@@ -10,7 +10,7 @@ import { isCooling } from '../lib/cooldown';
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const CEX_TYPES = new Set<AccountType>(['binance', 'bybit']);
-const ONCHAIN_TYPES = new Set<AccountType>(['tron', 'eth', 'bsc']);
+const ONCHAIN_TYPES = new Set<AccountType>(['tron', 'eth', 'bsc', 'btc']);
 const ALL_TYPES = new Set<AccountType>([...CEX_TYPES, ...ONCHAIN_TYPES]);
 
 interface AccountRow {
