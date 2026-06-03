@@ -489,11 +489,20 @@ export const appHtml = `<!doctype html>
 
         <!-- Allocation: pie + top 5 -->
         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-          <h3 class="mb-4 text-sm font-semibold">Asset Allocation</h3>
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h3 class="text-sm font-semibold">Asset Allocation</h3>
+            <button type="button" @click="allocHideStable=!allocHideStable; $nextTick(()=>renderAllocPie())"
+              :class="allocHideStable ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600'"
+              class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition"
+              :title="allocHideStable ? 'Showing volatile assets only' : 'Hide stablecoins & fiat'">
+              <span class="h-1.5 w-1.5 rounded-full" :class="allocHideStable ? 'bg-white' : 'bg-slate-400'"></span>
+              <span x-text="allocHideStable ? 'Volatile only' : 'Hide stable / fiat'"></span>
+            </button>
+          </div>
           <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div class="relative h-56">
               <div x-ref="allocWrap" class="w-full h-full"></div>
-              <div x-show="totalAssets()===0" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">No assets yet.</div>
+              <div x-show="top5().length===0" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500" x-text="allocHideStable ? 'No volatile assets.' : 'No assets yet.'"></div>
             </div>
             <div class="flex flex-col justify-center space-y-3">
               <template x-for="(t,i) in top5()" :key="t.asset">
@@ -517,7 +526,7 @@ export const appHtml = `<!doctype html>
                   </div>
                 </div>
               </template>
-              <p x-show="totalAssets()===0" class="text-xs text-slate-400 dark:text-slate-500">No assets yet.</p>
+              <p x-show="top5().length===0" class="text-xs text-slate-400 dark:text-slate-500" x-text="allocHideStable ? 'No volatile assets.' : 'No assets yet.'"></p>
             </div>
           </div>
         </div>
@@ -1285,6 +1294,7 @@ export const appHtml = `<!doctype html>
         STABLES_SET: ['USDT','USDC','BUSD','DAI','TUSD','FDUSD','USDD','USDP','USD'],
         FIATS_SET: ['IDR','EUR','JPY','GBP','AUD','CAD','CHF','CNY','HKD','SGD','KRW','INR','MYR','THB','PHP','NZD','SEK','NOK','DKK','ZAR','TRY','BRL','MXN'],
         ALLOC_COLORS: ['#6366f1','#22d3ee','#34d399','#fbbf24','#fb7185','#a855f7','#38bdf8','#a3e635','#f472b6','#94a3b8'],
+        allocHideStable: false, // toggle chart Asset Allocation: sembunyikan stablecoin/fiat
         pf: { id:null, name:'', description:'' },
         hd: { id:null, portfolio_id:'', label:'', currency:'USD', amount:null, note:'', added_at:'' },
         ac: { id:null, type:'binance', portfolio_id:'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, error:'' },
@@ -1649,8 +1659,13 @@ export const appHtml = `<!doctype html>
         totalAssets() { return this.aggAssets().length; },
         topAssets() { return this.aggAssets().slice(0, this.topLimit); },
         allocPct(usd) { const t=this.allocTotal(); return t>0? (Number(usd)||0)/t*100 : 0; },
+        // Aset untuk chart Asset Allocation; bila allocHideStable aktif, buang stablecoin/fiat.
+        allocAssets() {
+          const a=this.aggAssets();
+          return this.allocHideStable ? a.filter(x=>!this.isStableAsset(x.asset)) : a;
+        },
         top5() {
-          const a=this.aggAssets(); const total=a.reduce((s,x)=>s+x.usd,0);
+          const a=this.allocAssets(); const total=a.reduce((s,x)=>s+x.usd,0);
           const out=a.slice(0,4).map(x=>({ asset:x.asset, usd:x.usd, pct: total>0? x.usd/total*100:0, isOthers:false }));
           const oth=a.slice(4).reduce((s,x)=>s+x.usd,0);
           if (oth>0) out.push({ asset:'Others', usd:oth, pct: total>0? oth/total*100:0, isOthers:true });
