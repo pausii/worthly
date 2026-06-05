@@ -6,7 +6,7 @@ export interface AssetValue {
   asset: string;
   amount: number;
   usd: number;
-  origin: 'cex' | 'onchain' | 'manual';
+  origin: 'cex' | 'onchain' | 'manual' | 'stock';
 }
 
 export interface PortfolioValue {
@@ -85,12 +85,14 @@ export async function computeValuation(env: Env): Promise<ValuationResult> {
 
   for (const b of balances) {
     const origin =
-      b.account_type === 'tron' ||
-      b.account_type === 'eth' ||
-      b.account_type === 'bsc' ||
-      b.account_type === 'btc'
-        ? 'onchain'
-        : 'cex';
+      b.account_type === 'idx'
+        ? 'stock'
+        : b.account_type === 'tron' ||
+            b.account_type === 'eth' ||
+            b.account_type === 'bsc' ||
+            b.account_type === 'btc'
+          ? 'onchain'
+          : 'cex';
     addAsset(b.portfolio_id, b.asset, b.total, origin);
   }
   for (const m of manuals) addAsset(m.portfolio_id, m.currency, m.amount, 'manual');

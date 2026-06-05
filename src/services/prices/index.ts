@@ -102,11 +102,93 @@ export async function getDailyCloses(env: Env, symbol: string, limit: number): P
   return cached?.pts ?? [];
 }
 
-export function classifyAsset(asset: string): 'stable' | 'fiat' | 'crypto' {
+export function classifyAsset(asset: string): 'stable' | 'fiat' | 'crypto' | 'stock' {
   const a = asset.toUpperCase();
   if (STABLES.has(a)) return 'stable';
   if (FIATS.has(a)) return 'fiat';
+  if (/\.JK$/.test(a)) return 'stock'; // saham IDX (simbol Yahoo, mis. BBCA.JK)
   return 'crypto';
+}
+
+// Host Yahoo Finance (chart API publik). query2 dipakai sebagai fallback bila query1 gagal.
+const YAHOO_HOSTS = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
+// UA mirip browser — endpoint Yahoo sering menolak request tanpa User-Agent yang wajar.
+const YAHOO_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+const STOCK_TTL_MS = 120_000; // anggap quote saham valid 2 menit
+const STOCK_KV_TTL_SECONDS = 7 * 24 * 60 * 60; // simpan lama sbg fallback saat Yahoo gagal
+
+export interface StockQuote {
+  priceIdr: number; // harga pasar terakhir (IDR per lembar)
+  changePct: number; // perubahan harian (%) vs previous close
+}
+
+/** Ambil satu quote saham dari Yahoo chart API; coba tiap host sampai OK. */
+async function fetchYahooQuote(symbol: string): Promise<StockQuote | null> {
+  const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1d`;
+  for (const host of YAHOO_HOSTS) {
+    try {
+      const res = await fetch(host + path, {
+        headers: { Accept: 'application/json', 'User-Agent': YAHOO_UA },
+      });
+      if (!res.ok) {
+        console.error(`[prices] Yahoo ${res.status} ${host} ${symbol}`);
+        continue;
+      }
+      const data = (await res.json()) as {
+        chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; chartPreviousClose?: number; previousClose?: number } }> };
+      };
+      const meta = data.chart?.result?.[0]?.meta;
+      const price = Number(meta?.regularMarketPrice);
+      const prev = Number(meta?.chartPreviousClose ?? meta?.previousClose);
+      if (!isFinite(price) || price <= 0) return null;
+      const changePct = isFinite(prev) && prev > 0 ? ((price - prev) / prev) * 100 : 0;
+      return { priceIdr: price, changePct };
+    } catch (e) {
+      console.error(`[prices] Yahoo fetch gagal ${host} ${symbol}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return null;
+}
+
+/**
+ * Quote saham IDX (mis. "BBCA.JK") -> { priceIdr, changePct }, di-cache di KV ~2 menit
+ * (di-merge per simbol; simbol yang gagal di-fetch jatuh ke nilai cache lama bila ada).
+ * Satu subrequest Yahoo per simbol yang perlu di-refresh.
+ */
+export async function getStockQuotes(env: Env, symbolsRaw: string[]): Promise<Record<string, StockQuote>> {
+  const symbols = Array.from(new Set(symbolsRaw.map((s) => s.toUpperCase()).filter((s) => /\.JK$/.test(s))));
+  const KEY = 'yahoo:idx';
+  let store: { ts: number; q: Record<string, StockQuote> } | null = null;
+  try {
+    store = (await env.KV.get(KEY, 'json')) as { ts: number; q: Record<string, StockQuote> } | null;
+  } catch {
+    store = null;
+  }
+  const cached = store?.q ?? {};
+  if (!symbols.length) return cached;
+
+  const fresh = store && Date.now() - store.ts < STOCK_TTL_MS;
+  if (fresh && symbols.every((s) => cached[s])) return cached;
+
+  const out: Record<string, StockQuote> = { ...cached };
+  let changed = false;
+  for (const sym of symbols) {
+    if (fresh && cached[sym]) continue; // masih segar — pakai cache
+    const q = await fetchYahooQuote(sym);
+    if (q) {
+      out[sym] = q;
+      changed = true;
+    }
+  }
+  if (changed) {
+    try {
+      await env.KV.put(KEY, JSON.stringify({ ts: Date.now(), q: out }), { expirationTtl: STOCK_KV_TTL_SECONDS });
+    } catch {
+      /* abaikan kegagalan tulis cache */
+    }
+  }
+  return out;
 }
 
 /** Ambil rate USD untuk daftar aset. Hasil: { ASSET: usdPerUnit }. */
@@ -115,6 +197,7 @@ export async function getUsdRates(env: Env, assetsRaw: string[]): Promise<Record
   const result: Record<string, number> = {};
   const needCrypto: string[] = [];
   const needFiat: string[] = [];
+  const needStock: string[] = [];
 
   // 1) Gunakan cache di tabel `prices` yang masih segar.
   const cached = await queryAll<{ asset: string; usd: number; updated_at: number }>(
@@ -136,6 +219,7 @@ export async function getUsdRates(env: Env, assetsRaw: string[]): Promise<Record
       continue;
     }
     if (kind === 'fiat') needFiat.push(asset);
+    else if (kind === 'stock') needStock.push(asset);
     else needCrypto.push(asset);
   }
 
@@ -143,20 +227,22 @@ export async function getUsdRates(env: Env, assetsRaw: string[]): Promise<Record
   const fetched: Record<string, number> = {};
   if (needCrypto.length) Object.assign(fetched, await fetchCryptoUsd(env, needCrypto));
   if (needFiat.length) Object.assign(fetched, await fetchFiatUsd(needFiat));
+  if (needStock.length) Object.assign(fetched, await fetchStockUsd(env, needStock));
 
   // 3) Simpan ke cache + isi hasil. Kalau gagal fetch, fallback ke cache lama bila ada.
   const ts = now();
-  for (const asset of [...needCrypto, ...needFiat]) {
+  for (const asset of [...needCrypto, ...needFiat, ...needStock]) {
     const value = fetched[asset];
     if (typeof value === 'number' && isFinite(value) && value > 0) {
       result[asset] = value;
+      const source = classifyAsset(asset) === 'stock' ? 'yahoo' : FIATS.has(asset) ? 'frankfurter' : 'binance';
       await run(
         env,
         `INSERT INTO prices (asset, usd, source, updated_at) VALUES (?, ?, ?, ?)
          ON CONFLICT(asset) DO UPDATE SET usd = excluded.usd, source = excluded.source, updated_at = excluded.updated_at`,
         asset,
         value,
-        FIATS.has(asset) ? 'frankfurter' : 'binance',
+        source,
         ts,
       );
     } else {
@@ -208,12 +294,40 @@ async function fetchCryptoUsd(env: Env, assets: string[]): Promise<Record<string
   return out;
 }
 
+/** Harga saham IDX -> USD: harga Yahoo (IDR) × kurs IDR→USD. */
+async function fetchStockUsd(env: Env, symbols: string[]): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  const quotes = await getStockQuotes(env, symbols);
+  const fiat = await fetchFiatUsd(['IDR']);
+  const idrUsd = fiat['IDR'];
+  if (!idrUsd || idrUsd <= 0) return out; // tanpa kurs IDR tak bisa konversi
+  for (const sym of symbols) {
+    const q = quotes[sym.toUpperCase()];
+    if (q && q.priceIdr > 0) out[sym.toUpperCase()] = q.priceIdr * idrUsd;
+  }
+  return out;
+}
+
 /**
  * Persentase perubahan harga 24 jam per aset crypto (Binance `/ticker/24hr`).
  * Hanya minta simbol yang valid (ada di map ticker) agar batch tak kena 400.
  * Hasil di-cache & di-merge di KV ~60 dtk (key stabil).
  */
 export async function get24hChangePct(env: Env, assetsRaw: string[]): Promise<Record<string, number>> {
+  const chg = await getCryptoChangePct(env, assetsRaw);
+  // Saham IDX: perubahan harian dari quote Yahoo (sudah di-cache di getStockQuotes).
+  const stockSyms = assetsRaw.map((a) => a.toUpperCase()).filter((a) => classifyAsset(a) === 'stock');
+  if (stockSyms.length) {
+    const quotes = await getStockQuotes(env, stockSyms);
+    for (const sym of stockSyms) {
+      const q = quotes[sym];
+      if (q && isFinite(q.changePct)) chg[sym] = q.changePct;
+    }
+  }
+  return chg;
+}
+
+async function getCryptoChangePct(env: Env, assetsRaw: string[]): Promise<Record<string, number>> {
   const map = await getBinanceTickerMap(env);
   const assets = Array.from(new Set(assetsRaw.map((a) => a.toUpperCase()))).filter(
     (a) => classifyAsset(a) === 'crypto' && map[a + 'USDT'] !== undefined,

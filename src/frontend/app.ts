@@ -219,10 +219,10 @@ export const appHtml = `<!doctype html>
               <div>
                 <div class="mt-1 flex items-center gap-2">
                   <span class="relative h-6 w-6 shrink-0">
-                    <span class="absolute inset-0 rounded-full flex items-center justify-center text-[9px] font-semibold text-white" :style="'background:'+tokenGradient(largestHolding().asset)" x-text="tokenInitial(largestHolding().asset)"></span>
+                    <span class="absolute inset-0 rounded-full flex items-center justify-center text-[9px] font-semibold text-white" :style="'background:'+tokenGradient(largestHolding().asset)" x-text="tokenInitial(assetLabel(largestHolding().asset))"></span>
                     <img :src="tokenIcon(largestHolding().asset)" class="absolute inset-0 h-6 w-6 rounded-full object-cover" @error="$el.style.display='none'" alt="">
                   </span>
-                  <span class="text-2xl font-semibold" x-text="largestHolding().asset"></span>
+                  <span class="text-2xl font-semibold" x-text="assetLabel(largestHolding().asset)"></span>
                   <span class="text-sm font-medium text-slate-400 dark:text-slate-500" x-text="largestHolding().pct.toFixed(0)+'%'"></span>
                 </div>
                 <div class="mt-1 text-xs text-slate-400 dark:text-slate-500" x-text="fmtDisplay(largestHolding().usd)"></div>
@@ -343,13 +343,13 @@ export const appHtml = `<!doctype html>
                   <div class="flex items-center justify-between text-sm">
                     <div class="flex items-center gap-2">
                       <span class="inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium"
-                        :class="a.origin==='manual' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : a.origin==='onchain' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'"
+                        :class="a.origin==='manual' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : a.origin==='onchain' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : a.origin==='stock' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'"
                         x-text="a.origin"></span>
                       <span class="relative h-5 w-5 shrink-0">
-                        <span class="absolute inset-0 rounded-full flex items-center justify-center text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(a.asset)" x-text="tokenInitial(a.asset)"></span>
+                        <span class="absolute inset-0 rounded-full flex items-center justify-center text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(a.asset)" x-text="tokenInitial(assetLabel(a.asset))"></span>
                         <img :src="tokenIcon(a.asset)" class="absolute inset-0 h-5 w-5 rounded-full object-cover" @error="$el.style.display='none'" alt="">
                       </span>
-                      <span class="font-medium" x-text="a.asset"></span>
+                      <span class="font-medium" x-text="assetLabel(a.asset)"></span>
                       <span class="text-slate-400 dark:text-slate-500" x-text="fmtNum(a.amount)"></span>
                     </div>
                     <div class="text-right">
@@ -536,7 +536,7 @@ export const appHtml = `<!doctype html>
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
             <h3 class="mb-4 text-sm font-semibold">Source Composition</h3>
             <div class="space-y-3">
-              <template x-for="src in [{k:'cex',label:'Exchange (CEX)',c:'#6366f1'},{k:'onchain',label:'On-chain',c:'#10b981'},{k:'manual',label:'Manual',c:'#f59e0b'}]" :key="src.k">
+              <template x-for="src in [{k:'cex',label:'Exchange (CEX)',c:'#6366f1'},{k:'onchain',label:'On-chain',c:'#10b981'},{k:'stock',label:'Saham IDX',c:'#a855f7'},{k:'manual',label:'Manual',c:'#f59e0b'}]" :key="src.k">
                 <div>
                   <div class="flex items-center justify-between text-xs">
                     <span class="text-slate-600 dark:text-slate-300" x-text="src.label"></span>
@@ -818,6 +818,74 @@ export const appHtml = `<!doctype html>
         </div>
       </section>
 
+      <!-- SAHAM IDX -->
+      <section x-show="view==='stocks'" class="space-y-4">
+        <!-- Ringkasan -->
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Total Modal</div>
+            <div class="mt-1 text-xl font-semibold" x-text="fmtDisplay(stocksData.totals.costUsd||0)"></div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Nilai Pasar</div>
+            <div class="mt-1 text-xl font-semibold" x-text="fmtDisplay(stocksData.totals.marketUsd||0)"></div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Untung / Rugi</div>
+            <div class="mt-1 text-xl font-semibold" :class="pctClass(stocksData.totals.plUsd)">
+              <span x-text="((stocksData.totals.plUsd||0)>=0?'+':'−')+fmtDisplay(Math.abs(stocksData.totals.plUsd||0))"></span>
+              <span class="text-sm" x-text="'('+fmtPct(stocksData.totals.plPct,false)+')'"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+          <table class="min-w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+            <thead class="bg-slate-50 dark:bg-slate-700/50 text-left text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              <tr>
+                <th class="px-4 py-3">Saham</th>
+                <th class="px-4 py-3 text-right">Lot</th>
+                <th class="px-4 py-3 text-right">Lembar</th>
+                <th class="px-4 py-3 text-right">Harga Beli</th>
+                <th class="px-4 py-3 text-right">Harga Terakhir</th>
+                <th class="px-4 py-3 text-right">Modal</th>
+                <th class="px-4 py-3 text-right">Nilai Pasar</th>
+                <th class="px-4 py-3 text-right">Untung/Rugi</th>
+                <th class="px-4 py-3 text-right">24h</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+              <template x-for="s in stocksData.positions" :key="s.ticker">
+                <tr>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <span class="relative h-6 w-6 shrink-0">
+                        <span class="absolute inset-0 rounded-full flex items-center justify-center text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(s.ticker)" x-text="tokenInitial(s.ticker)"></span>
+                      </span>
+                      <span class="font-semibold" x-text="s.ticker"></span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3 text-right" x-text="fmtNum(s.lots)"></td>
+                  <td class="px-4 py-3 text-right text-slate-500 dark:text-slate-400" x-text="fmtNum(s.shares)"></td>
+                  <td class="px-4 py-3 text-right" x-text="fmtRp(s.avgPriceIdr)"></td>
+                  <td class="px-4 py-3 text-right" x-text="s.priceIdr>0 ? fmtRp(s.priceIdr) : '—'"></td>
+                  <td class="px-4 py-3 text-right" x-text="fmtDisplay(s.costUsd)"></td>
+                  <td class="px-4 py-3 text-right font-medium" x-text="fmtDisplay(s.marketUsd)"></td>
+                  <td class="px-4 py-3 text-right font-medium" :class="pctClass(s.plUsd)">
+                    <div x-text="((s.plUsd||0)>=0?'+':'−')+fmtDisplay(Math.abs(s.plUsd||0))"></div>
+                    <div class="text-[10px]" x-text="fmtPct(s.plPct,false)"></div>
+                  </td>
+                  <td class="px-4 py-3 text-right text-xs font-medium" :class="pctClass(s.changePct)" x-text="fmtPct(s.changePct,false)"></td>
+                </tr>
+              </template>
+              <tr x-show="!stocksLoading && stocksData.positions.length===0"><td colspan="9" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">Belum ada saham. Tambah lewat menu <b>Accounts → Saham IDX</b>.</td></tr>
+              <tr x-show="stocksLoading"><td colspan="9" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">Memuat…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-xs text-slate-400 dark:text-slate-500">Harga per-lembar dalam IDR (sumber: Yahoo Finance). Modal/Nilai/Untung-Rugi mengikuti toggle mata uang.</p>
+      </section>
+
       <!-- DEPOSITS -->
       <section x-show="view==='deposits'" class="space-y-4">
         <div class="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
@@ -1049,7 +1117,7 @@ export const appHtml = `<!doctype html>
     </template>
     <button @click="moreOpen=true"
       class="relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors"
-      :class="['holdings','deposits','activity','settings'].includes(view) ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'">
+      :class="['holdings','stocks','deposits','activity','settings'].includes(view) ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h6v6H4zM14 6h6v6h-6zM4 16h6v4H4zM14 16h6v4h-6z"/></svg>
       <span>More</span>
       <span x-show="unreadCount>0" class="absolute right-[30%] top-1 h-1.5 w-1.5 rounded-full bg-rose-500"></span>
@@ -1192,6 +1260,7 @@ export const appHtml = `<!doctype html>
             class="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 disabled:opacity-60">
             <option value="binance">Binance</option><option value="bybit">Bybit</option>
             <option value="eth">Ethereum</option><option value="bsc">BSC</option><option value="tron">Tron</option><option value="btc">Bitcoin</option>
+            <option value="idx">Saham IDX</option>
           </select>
           <select x-model.number="ac.portfolio_id"
             class="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
@@ -1247,6 +1316,28 @@ export const appHtml = `<!doctype html>
             </template>
           </div>
         </template>
+        <template x-if="ac.type==='idx'">
+          <div class="space-y-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 p-3">
+            <p class="text-xs text-slate-500 dark:text-slate-400">Daftar posisi saham bursa Indonesia (IDX). <b>1 lot = 100 lembar</b>. Harga beli = rata-rata per lembar (IDR). Harga pasar diambil dari Yahoo Finance.</p>
+            <div class="space-y-2">
+              <div class="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                <span class="col-span-5">Ticker</span><span class="col-span-3">Lot</span><span class="col-span-3">Harga beli</span><span class="col-span-1"></span>
+              </div>
+              <template x-for="(pos, i) in ac.positions" :key="i">
+                <div class="grid grid-cols-12 gap-2">
+                  <input x-model="pos.ticker" placeholder="BBCA" @input="pos.ticker=(pos.ticker||'').toUpperCase()"
+                    class="col-span-5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 px-2 py-2 text-sm outline-none focus:border-indigo-500" />
+                  <input x-model.number="pos.lots" type="number" min="0" step="1" placeholder="10"
+                    class="col-span-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 px-2 py-2 text-sm outline-none focus:border-indigo-500" />
+                  <input x-model.number="pos.avgPrice" type="number" min="0" step="any" placeholder="9000"
+                    class="col-span-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 px-2 py-2 text-sm outline-none focus:border-indigo-500" />
+                  <button type="button" @click="ac.positions.splice(i,1)" class="col-span-1 flex items-center justify-center text-rose-500 hover:text-rose-600" title="Hapus">&times;</button>
+                </div>
+              </template>
+            </div>
+            <button type="button" @click="ac.positions.push({ticker:'',lots:null,avgPrice:null})" class="rounded-lg bg-slate-200 dark:bg-slate-600 px-3 py-1.5 text-xs font-medium hover:bg-slate-300 dark:hover:bg-slate-500">+ Tambah posisi</button>
+          </div>
+        </template>
         <p x-show="ac.error" x-text="ac.error" class="rounded-lg bg-rose-50 dark:bg-rose-900/30 px-3 py-2 text-sm text-rose-600 dark:text-rose-400"></p>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" @click="modal=null" class="rounded-xl px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</button>
@@ -1277,6 +1368,7 @@ export const appHtml = `<!doctype html>
           { id:'portfolios', label:'Portfolios', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10\\'/></svg>' },
           { id:'accounts', label:'Accounts', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2m-3-7h6m-3-3v6\\'/></svg>' },
           { id:'holdings', label:'Manual Holdings', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1\\'/></svg>' },
+          { id:'stocks', label:'Saham IDX', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M3 17l6-6 4 4 8-8m0 0h-5m5 0v5\\'/></svg>' },
           { id:'deposits', label:'Deposits', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4\\'/></svg>' },
           { id:'activity', label:'Activity', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9\\'/></svg>' },
           { id:'settings', label:'Settings', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z\\'/><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M15 12a3 3 0 11-6 0 3 3 0 016 0z\\'/></svg>' }
@@ -1285,6 +1377,7 @@ export const appHtml = `<!doctype html>
         aiInsight: '', aiInsightLoading: false, aiCached: false,
         returns: null,
         portfolios: [], accounts: [], holdings: [], deposits: [],
+        stocksData: { positions: [], totals: { costUsd:0, marketUsd:0, plUsd:0, plPct:0, plIdr:0, marketIdr:0, costIdr:0, idrUsd:0 } }, stocksLoading: false,
         depositPage: 1, depositTotal: 0, depositLimit: 25,
         history: [], historyRange: 30, historyPortfolio: '', chart: null, pieChart: null,
         analysisPeriod: '1M', analysisHistory: [], analysisLoading: false, analysisChart: null, analysisPie: null, topLimit: 10,
@@ -1297,7 +1390,7 @@ export const appHtml = `<!doctype html>
         allocHideStable: false, // toggle chart Asset Allocation: sembunyikan stablecoin/fiat
         pf: { id:null, name:'', description:'' },
         hd: { id:null, portfolio_id:'', label:'', currency:'USD', amount:null, note:'', added_at:'' },
-        ac: { id:null, type:'binance', portfolio_id:'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, error:'' },
+        ac: { id:null, type:'binance', portfolio_id:'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, positions:[], error:'' },
         pw: { current:'', next:'' },
         // Preset token per jaringan. Simbol disimpan sesuai harga (BTC/ETH), bukan nama on-chain (BTCB).
         TOKEN_PRESETS: {
@@ -1330,7 +1423,7 @@ export const appHtml = `<!doctype html>
           if (window.__bip) this.installPrompt = window.__bip;
           window.addEventListener('bip-ready', ()=>{ this.installPrompt = window.__bip; });
           window.addEventListener('appinstalled', ()=>{ this.installPrompt = null; this.installed = true; this.flash('App installed'); });
-          const VIEWS = ['dashboard','analysis','portfolios','accounts','holdings','deposits','activity','settings'];
+          const VIEWS = ['dashboard','analysis','portfolios','accounts','holdings','stocks','deposits','activity','settings'];
           const hash = window.location.hash.slice(1);
           if (VIEWS.includes(hash)) this.view = hash;
           window.addEventListener('hashchange', () => {
@@ -1339,6 +1432,7 @@ export const appHtml = `<!doctype html>
               this.view = h;
               if (h === 'dashboard') this.$nextTick(()=>{ this.renderChart(); this.renderPieChart(); });
               if (h === 'analysis') this.loadAnalysis();
+              if (h === 'stocks') this.loadStocks();
             }
           });
           const me = await this.api('GET','/auth/me');
@@ -1395,6 +1489,7 @@ export const appHtml = `<!doctype html>
           window.location.hash = id;
           if (id==='dashboard') this.$nextTick(()=>{ this.renderChart(); this.renderPieChart(); });
           if (id==='analysis') this.loadAnalysis();
+          if (id==='stocks') this.loadStocks();
         },
         navLabel() { const n=this.nav.find(x=>x.id===this.view); return n?n.label:''; },
         portfolioName(id) { const p=this.portfolios.find(x=>x.id===id); return p?p.name:'—'; },
@@ -1489,11 +1584,15 @@ export const appHtml = `<!doctype html>
           if (this.displayCurrency === 'IDR') return 'Rp ' + Math.round(v * (this.idrRate||0)).toLocaleString('en-US');
           return '$' + v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
         },
+        // Harga saham IDX inheren dalam IDR — selalu tampil Rp (tak ikut toggle USD/IDR).
+        fmtRp(v) { if (this.hideAmounts) return 'Rp ••••'; return 'Rp ' + (Number(v)||0).toLocaleString('en-US',{maximumFractionDigits:2}); },
         formatAmountInput(v) { const n=parseFloat((v||'').replace(/,/g,'')); return n ? n.toLocaleString('en-US',{maximumFractionDigits:8}) : ''; },
         accountsTotalUsd() { return (this.accounts||[]).reduce((s,a)=>s+(Number(a.value_usd)||0),0); },
         accountsCount(st) { return (this.accounts||[]).filter(a=>(a.status||'pending')===st).length; },
         statusClass(st) { return st==='ok' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : st==='error' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'; },
-        accountTypeSymbol(t) { return t==='eth'?'ETH':t==='bsc'?'BNB':t==='tron'?'TRX':t==='btc'?'BTC':t; },
+        accountTypeSymbol(t) { return t==='eth'?'ETH':t==='bsc'?'BNB':t==='tron'?'TRX':t==='btc'?'BTC':t==='idx'?'IDX':t; },
+        // Label tampilan aset: buang suffix .JK pada simbol saham IDX (BBCA.JK -> BBCA).
+        assetLabel(sym) { return String(sym||'').replace(/\\.JK$/,''); },
 
         async loadOverview() {
           const r = await this.api('GET','/dashboard/overview');
@@ -1518,6 +1617,12 @@ export const appHtml = `<!doctype html>
         async loadPortfolios() { const r=await this.api('GET','/portfolios'); if(r&&r.ok) this.portfolios=r.data; },
         async loadAccounts() { const r=await this.api('GET','/accounts'); if(r&&r.ok){ this.accounts=r.data; this.refreshLastSync(); } },
         async loadHoldings() { const r=await this.api('GET','/holdings'); if(r&&r.ok) this.holdings=r.data; },
+        async loadStocks() {
+          this.stocksLoading=true;
+          const r=await this.api('GET','/stocks');
+          if(r&&r.ok) this.stocksData=r.data;
+          this.stocksLoading=false;
+        },
         async loadDeposits(page=1) {
           this.depositPage=page;
           const r=await this.api('GET','/dashboard/deposits?page='+page+'&limit='+this.depositLimit);
@@ -1672,9 +1777,9 @@ export const appHtml = `<!doctype html>
           return out;
         },
         composition() {
-          const m={ cex:0, onchain:0, manual:0 };
+          const m={ cex:0, onchain:0, manual:0, stock:0 };
           for (const p of (this.overview.portfolios||[])) for (const a of (p.assets||[])) { if (a.usd>0 && m[a.origin]!==undefined) m[a.origin]+=a.usd; }
-          return { cex:m.cex, onchain:m.onchain, manual:m.manual, total:m.cex+m.onchain+m.manual };
+          return { cex:m.cex, onchain:m.onchain, manual:m.manual, stock:m.stock, total:m.cex+m.onchain+m.manual+m.stock };
         },
         compPct(v) { const c=this.composition(); return c.total>0? (Number(v)||0)/c.total*100 : 0; },
         isStableAsset(sym) { return this.STABLES_SET.indexOf(sym)>=0 || this.FIATS_SET.indexOf(sym)>=0; },
@@ -1850,9 +1955,10 @@ export const appHtml = `<!doctype html>
             const cfg = a.config || {};
             const presets = this.TOKEN_PRESETS[a.type]||[];
             const tokens = presets.filter(t=>(cfg.tokens||[]).some(ct=>(ct.contract||'').toLowerCase()===t.contract.toLowerCase())).map(t=>t.symbol);
-            this.ac = { id:a.id, type:a.type, portfolio_id:a.portfolio_id, label:a.label, apiKey:'', apiSecret:'', address:cfg.address||'', rpcUrl:'', trackNative:cfg.trackNative!==false, tokens, autoDetect:cfg.autoDetect===true, error:'' };
+            const positions = (cfg.positions||[]).map(p=>({ ticker:p.ticker||'', lots:p.lots, avgPrice:p.avgPrice }));
+            this.ac = { id:a.id, type:a.type, portfolio_id:a.portfolio_id, label:a.label, apiKey:'', apiSecret:'', address:cfg.address||'', rpcUrl:'', trackNative:cfg.trackNative!==false, tokens, autoDetect:cfg.autoDetect===true, positions, error:'' };
           } else {
-            this.ac = { id:null, type:'binance', portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, error:'' };
+            this.ac = { id:null, type:'binance', portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, positions:[], error:'' };
           }
           this.modal='account';
         },
@@ -1860,6 +1966,12 @@ export const appHtml = `<!doctype html>
           this.ac.error='';
           const body={ type:this.ac.type, portfolio_id:this.ac.portfolio_id, label:this.ac.label };
           if (this.ac.type==='binance'||this.ac.type==='bybit') { if(this.ac.apiKey) body.apiKey=this.ac.apiKey; if(this.ac.apiSecret) body.apiSecret=this.ac.apiSecret; }
+          else if (this.ac.type==='idx') {
+            body.positions = (this.ac.positions||[])
+              .map(p=>({ ticker:String(p.ticker||'').trim().toUpperCase(), lots:Number(p.lots), avgPrice:Number(p.avgPrice) }))
+              .filter(p=>p.ticker && p.lots>0 && p.avgPrice>=0);
+            if (!body.positions.length) { this.ac.error='Minimal satu posisi saham (ticker + lot + harga beli) wajib diisi'; return; }
+          }
           else {
             body.address=this.ac.address; body.trackNative=this.ac.trackNative;
             body.autoDetect=this.ac.autoDetect;

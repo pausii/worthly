@@ -44,8 +44,8 @@ export type Variables = {
 
 export type AppContext = Context<{ Bindings: Env; Variables: Variables }>;
 
-export type AccountType = 'binance' | 'bybit' | 'tron' | 'eth' | 'bsc' | 'btc';
-export type WalletType = 'spot' | 'futures' | 'earn' | 'funding' | 'onchain';
+export type AccountType = 'binance' | 'bybit' | 'tron' | 'eth' | 'bsc' | 'btc' | 'idx';
+export type WalletType = 'spot' | 'futures' | 'earn' | 'funding' | 'onchain' | 'stock';
 
 export interface NormalizedBalance {
   walletType: WalletType;
@@ -90,4 +90,16 @@ export interface OnchainConfig {
   trackNative: boolean;
   tokens: TrackedToken[];
   autoDetect?: boolean; // EVM: deteksi otomatis semua token ERC-20/BEP-20 non-zero
+}
+
+// Satu posisi saham IDX (disimpan di kolom config account type 'idx', non-rahasia).
+// avgPrice = harga beli rata-rata per LEMBAR dalam IDR (basis modal untuk hitung untung/rugi).
+export interface StockPosition {
+  ticker: string; // simbol polos tanpa suffix, mis. "BBCA"
+  lots: number; // 1 lot = 100 lembar
+  avgPrice: number; // IDR per lembar
+}
+
+export interface StockConfig {
+  positions: StockPosition[];
 }

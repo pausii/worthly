@@ -5,6 +5,7 @@ import type {
   NormalizedDeposit,
   OnchainConfig,
   OnchainCredentials,
+  StockConfig,
 } from '../types';
 import { now, queryAll, queryOne, run } from '../lib/db';
 import { decryptSecret } from '../lib/crypto';
@@ -240,6 +241,25 @@ async function syncBitcoinAccount(env: Env, acc: AccountRow, config: OnchainConf
   }
 }
 
+/**
+ * Saham IDX: tak ada API broker — posisi (ticker + lot) berasal dari config.
+ * Cukup cerminkan posisi ke tabel `balances` (asset = TICKER.JK, total = lembar);
+ * harga & valuasi USD ditangani layanan harga (Yahoo) saat computeValuation.
+ */
+async function syncStockAccount(env: Env, acc: AccountRow): Promise<void> {
+  const config = JSON.parse(acc.config ?? '{}') as StockConfig;
+  const positions = Array.isArray(config.positions) ? config.positions : [];
+  const balances: NormalizedBalance[] = [];
+  for (const p of positions) {
+    const ticker = String(p.ticker ?? '').trim().toUpperCase();
+    const lots = Number(p.lots);
+    if (!ticker || !isFinite(lots) || lots <= 0) continue;
+    const shares = lots * 100;
+    balances.push({ walletType: 'stock', asset: `${ticker}.JK`, free: shares, locked: 0, total: shares });
+  }
+  await upsertBalances(env, acc.id, balances);
+}
+
 async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
   const config = JSON.parse(acc.config ?? '{}') as OnchainConfig;
   if (!config.address) throw new Error('Address on-chain belum diisi');
@@ -293,6 +313,7 @@ export async function syncAccount(env: Env, acc: AccountRow): Promise<void> {
   if (isCex && (await isCooling(env, `cex:${acc.type}`))) return;
   try {
     if (isCex) await syncCexAccount(env, acc);
+    else if (acc.type === 'idx') await syncStockAccount(env, acc);
     else await syncOnchainAccount(env, acc);
     await run(
       env,

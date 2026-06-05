@@ -12,7 +12,20 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const CEX_TYPES = new Set<AccountType>(['binance', 'bybit']);
 const ONCHAIN_TYPES = new Set<AccountType>(['tron', 'eth', 'bsc', 'btc']);
-const ALL_TYPES = new Set<AccountType>([...CEX_TYPES, ...ONCHAIN_TYPES]);
+const STOCK_TYPES = new Set<AccountType>(['idx']);
+const ALL_TYPES = new Set<AccountType>([...CEX_TYPES, ...ONCHAIN_TYPES, ...STOCK_TYPES]);
+
+/** Normalisasi posisi saham dari body request → [{ ticker, lots, avgPrice }] (buang yang tak valid). */
+function parsePositions(raw: unknown): { ticker: string; lots: number; avgPrice: number }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((p: any) => ({
+      ticker: String(p?.ticker ?? '').trim().toUpperCase(),
+      lots: Number(p?.lots),
+      avgPrice: Number(p?.avgPrice),
+    }))
+    .filter((p) => p.ticker && isFinite(p.lots) && p.lots > 0 && isFinite(p.avgPrice) && p.avgPrice >= 0);
+}
 
 interface AccountRow {
   id: number;
@@ -130,6 +143,11 @@ app.post('/', async (c) => {
     const apiSecret = (body.apiSecret ?? '').trim();
     if (!apiKey || !apiSecret) return fail(c, 'API key & secret wajib diisi');
     encCredentials = await encryptSecret(JSON.stringify({ apiKey, apiSecret }), c.env.MASTER_KEY);
+  } else if (STOCK_TYPES.has(type)) {
+    // Saham IDX: tanpa kredensial. Posisi (ticker + lot + harga beli) disimpan di config.
+    const positions = parsePositions(body.positions);
+    if (!positions.length) return fail(c, 'Minimal satu posisi saham wajib diisi');
+    config = JSON.stringify({ positions });
   } else {
     const address = (body.address ?? '').trim();
     if (!address) return fail(c, 'Address wallet wajib diisi');
@@ -191,6 +209,10 @@ app.put('/:id', async (c) => {
     const autoDetect = body.autoDetect !== undefined ? body.autoDetect === true : prev.autoDetect === true;
     config = JSON.stringify({ address, trackNative, tokens, autoDetect });
     if (body.rpcUrl) encCredentials = await encryptSecret(JSON.stringify({ rpcUrl: String(body.rpcUrl).trim() }), c.env.MASTER_KEY);
+  } else if (STOCK_TYPES.has(type)) {
+    const prev = row.config ? JSON.parse(row.config) : {};
+    const positions = body.positions !== undefined ? parsePositions(body.positions) : prev.positions ?? [];
+    config = JSON.stringify({ positions });
   } else {
     // Rotasi kredensial CEX hanya bila keduanya dikirim.
     if (body.apiKey && body.apiSecret) {
