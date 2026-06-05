@@ -5,7 +5,7 @@ import { ok, fail } from '../lib/response';
 import { syncAll } from '../services/sync';
 import { getStoredOverview, refreshOverview } from '../services/overview';
 import { computeCostBasis } from '../services/returns';
-import { classifyAsset, getDailyCloses, getUsdRates } from '../services/prices';
+import { classifyAsset, getCryptoCandles, getDailyCloses, getStockCandles, getUsdRates } from '../services/prices';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -130,6 +130,44 @@ app.get('/asset-history', async (c) => {
   const peaks = allPeaks.slice().sort((a, b) => b.usd - a.usd).slice(0, 6);
 
   return ok(c, { points: rows, peaks });
+});
+
+// Candle OHLC untuk satu aset (dipakai modal chart saat aset di-klik).
+// Crypto → Binance klines; saham IDX (.JK) → Yahoo chart. ?symbol=BTC|BBCA.JK &period=1W|1M|3M|6M|1Y
+app.get('/asset-chart', async (c) => {
+  const symbol = (c.req.query('symbol') || '').toUpperCase().trim();
+  const period = c.req.query('period') || '1M';
+  if (!symbol) return fail(c, 'Parameter symbol wajib diisi', 400);
+
+  const kind = classifyAsset(symbol);
+  if (kind !== 'crypto' && kind !== 'stock') {
+    return fail(c, 'Aset ini tidak memiliki chart harga', 400);
+  }
+
+  // Map periode → granularity. Range pendek pakai candle intraday agar tidak terlalu jarang.
+  const CRYPTO: Record<string, { interval: string; limit: number }> = {
+    '1W': { interval: '1h', limit: 168 },
+    '1M': { interval: '1d', limit: 30 },
+    '3M': { interval: '1d', limit: 90 },
+    '6M': { interval: '1d', limit: 180 },
+    '1Y': { interval: '1d', limit: 365 },
+  };
+  const STOCK: Record<string, { range: string; interval: string }> = {
+    '1W': { range: '5d', interval: '60m' },
+    '1M': { range: '1mo', interval: '1d' },
+    '3M': { range: '3mo', interval: '1d' },
+    '6M': { range: '6mo', interval: '1d' },
+    '1Y': { range: '1y', interval: '1d' },
+  };
+
+  if (kind === 'crypto') {
+    const cfg = CRYPTO[period] || CRYPTO['1M'];
+    const candles = await getCryptoCandles(c.env, symbol + 'USDT', cfg.interval, cfg.limit);
+    return ok(c, { symbol, period, unit: 'USD', candles });
+  }
+  const cfg = STOCK[period] || STOCK['1M'];
+  const candles = await getStockCandles(c.env, symbol, cfg.range, cfg.interval);
+  return ok(c, { symbol, period, unit: 'IDR', candles });
 });
 
 // Riwayat deposit dengan server-side pagination.

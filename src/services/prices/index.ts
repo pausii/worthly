@@ -102,6 +102,95 @@ export async function getDailyCloses(env: Env, symbol: string, limit: number): P
   return cached?.pts ?? [];
 }
 
+export interface Candle {
+  t: number; // openTime (epoch ms)
+  o: number; // open
+  h: number; // high
+  l: number; // low
+  c: number; // close
+}
+
+/**
+ * Candle OHLC crypto via Binance `/api/v3/klines` untuk chart per-aset (modal).
+ * `interval` mis. '1h' | '1d'. Di-cache di KV: candle intraday di-refresh tiap ~10 menit,
+ * candle harian tiap ~6 jam; keduanya disimpan lama sebagai fallback saat Binance gagal.
+ * Mengembalikan [] bila simbol tak ada / ter-geo-block.
+ */
+export async function getCryptoCandles(env: Env, symbol: string, interval: string, limit: number): Promise<Candle[]> {
+  const lim = Math.min(Math.max(limit, 1), 1000);
+  const KEY = `candles:${symbol}:${interval}:${lim}`;
+  const freshMs = interval === '1d' ? KLINES_FRESH_MS : 10 * 60 * 1000;
+  let cached: { ts: number; pts: Candle[] } | null = null;
+  try {
+    cached = (await env.KV.get(KEY, 'json')) as { ts: number; pts: Candle[] } | null;
+    if (cached && Date.now() - cached.ts < freshMs) return cached.pts;
+    const res = await binancePublicGet(env, `/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${lim}`);
+    if (res) {
+      const rows = (await res.json()) as unknown[][];
+      const pts: Candle[] = [];
+      for (const r of rows) {
+        const t = Number(r[0]);
+        const o = parseFloat(String(r[1])), h = parseFloat(String(r[2])), l = parseFloat(String(r[3])), c = parseFloat(String(r[4]));
+        if (isFinite(t) && isFinite(o) && isFinite(h) && isFinite(l) && isFinite(c) && c > 0) pts.push({ t, o, h, l, c });
+      }
+      // Hanya timpa cache bila benar-benar dapat data; jangan kosongkan fallback.
+      if (pts.length) await env.KV.put(KEY, JSON.stringify({ ts: Date.now(), pts }), { expirationTtl: KLINES_TTL_SECONDS });
+      return pts.length ? pts : (cached?.pts ?? []);
+    }
+  } catch (e) {
+    console.error(`[prices] getCryptoCandles ${symbol} gagal: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return cached?.pts ?? [];
+}
+
+/**
+ * Candle OHLC saham IDX via Yahoo chart API (mis. "BBCA.JK"). `range`/`interval` mengikuti
+ * konvensi Yahoo (mis. range='1mo' interval='1d', range='5d' interval='60m'). Harga dalam IDR.
+ * Di-cache di KV seperti getCryptoCandles. Mengembalikan [] bila gagal.
+ */
+export async function getStockCandles(env: Env, symbolRaw: string, range: string, interval: string): Promise<Candle[]> {
+  const symbol = symbolRaw.toUpperCase();
+  const KEY = `candles:stock:${symbol}:${range}:${interval}`;
+  const freshMs = interval === '1d' ? KLINES_FRESH_MS : 10 * 60 * 1000;
+  let cached: { ts: number; pts: Candle[] } | null = null;
+  try {
+    cached = (await env.KV.get(KEY, 'json')) as { ts: number; pts: Candle[] } | null;
+    if (cached && Date.now() - cached.ts < freshMs) return cached.pts;
+    const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
+    for (const host of YAHOO_HOSTS) {
+      try {
+        const res = await fetch(host + path, { headers: { Accept: 'application/json', 'User-Agent': YAHOO_UA } });
+        if (!res.ok) {
+          console.error(`[prices] Yahoo candles ${res.status} ${host} ${symbol}`);
+          continue;
+        }
+        const data = (await res.json()) as {
+          chart?: { result?: Array<{ timestamp?: number[]; indicators?: { quote?: Array<{ open?: (number | null)[]; high?: (number | null)[]; low?: (number | null)[]; close?: (number | null)[] }> } }> };
+        };
+        const r0 = data.chart?.result?.[0];
+        const tsArr = r0?.timestamp || [];
+        const q = r0?.indicators?.quote?.[0];
+        const pts: Candle[] = [];
+        if (q) {
+          for (let i = 0; i < tsArr.length; i++) {
+            const o = Number(q.open?.[i]), h = Number(q.high?.[i]), l = Number(q.low?.[i]), c = Number(q.close?.[i]);
+            if (isFinite(o) && isFinite(h) && isFinite(l) && isFinite(c) && c > 0) pts.push({ t: tsArr[i] * 1000, o, h, l, c });
+          }
+        }
+        if (pts.length) {
+          await env.KV.put(KEY, JSON.stringify({ ts: Date.now(), pts }), { expirationTtl: KLINES_TTL_SECONDS });
+          return pts;
+        }
+      } catch (e) {
+        console.error(`[prices] Yahoo candles fetch gagal ${host} ${symbol}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  } catch (e) {
+    console.error(`[prices] getStockCandles ${symbol} gagal: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return cached?.pts ?? [];
+}
+
 export function classifyAsset(asset: string): 'stable' | 'fiat' | 'crypto' | 'stock' {
   const a = asset.toUpperCase();
   if (STABLES.has(a)) return 'stable';

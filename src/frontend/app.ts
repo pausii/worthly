@@ -623,7 +623,7 @@ export const appHtml = `<!doctype html>
               </thead>
               <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
                 <template x-for="(a,i) in topAssets()" :key="a.asset">
-                  <tr>
+                  <tr @click="openAssetChart(a.asset)" :class="assetChartable(a.asset) ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40' : ''">
                     <td class="px-4 py-3 text-slate-400 dark:text-slate-500" x-text="i+1"></td>
                     <td class="px-4 py-3">
                       <div class="flex items-center gap-2">
@@ -856,7 +856,7 @@ export const appHtml = `<!doctype html>
             </thead>
             <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
               <template x-for="s in stocksData.positions" :key="s.ticker">
-                <tr>
+                <tr @click="openAssetChart(s.ticker+'.JK')" class="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40">
                   <td class="px-4 py-3">
                     <div class="flex items-center gap-2">
                       <span class="relative h-6 w-6 shrink-0">
@@ -1347,6 +1347,39 @@ export const appHtml = `<!doctype html>
     </div>
   </div>
 
+  <!-- MODAL: Asset price chart (candlestick) -->
+  <div x-show="modal==='assetChart'" class="fixed inset-0 z-40 flex items-center justify-center p-4">
+    <div @click="closeAssetChart()" class="absolute inset-0 bg-slate-900/50"></div>
+    <div class="relative w-full max-w-3xl rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-xl">
+      <div class="mb-3 flex items-center justify-between gap-3">
+        <div class="flex min-w-0 items-center gap-2">
+          <span class="relative h-7 w-7 shrink-0">
+            <span class="absolute inset-0 flex items-center justify-center rounded-full text-[9px] font-semibold text-white" :style="'background:'+tokenGradient(symLabel(chartAsset))" x-text="tokenInitial(symLabel(chartAsset))"></span>
+            <img :src="tokenIcon(symLabel(chartAsset))" class="absolute inset-0 h-7 w-7 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+          </span>
+          <div class="min-w-0">
+            <h3 class="text-base font-semibold leading-tight" x-text="symLabel(chartAsset)"></h3>
+            <p class="text-[11px] text-slate-400 dark:text-slate-500" x-text="'Harga '+chartAssetUnit+(assetKind(chartAsset)==='stock'?' · Yahoo Finance':' · Binance')"></p>
+          </div>
+        </div>
+        <button type="button" @click="closeAssetChart()" class="rounded-xl px-2 py-1 text-slate-400 hover:bg-slate-100 dark:text-slate-500 dark:hover:bg-slate-700">✕</button>
+      </div>
+      <div class="mb-3 inline-flex rounded-xl bg-slate-100 dark:bg-slate-700/50 p-1">
+        <template x-for="p in ASSET_PERIODS" :key="p">
+          <button @click="setAssetChartPeriod(p)"
+            class="rounded-lg px-3 py-1.5 text-xs font-medium transition"
+            :class="assetChartPeriod===p ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
+            x-text="p"></button>
+        </template>
+      </div>
+      <div class="relative" style="height:360px">
+        <div x-show="assetChartLoading" class="absolute inset-0 z-10 flex items-center justify-center text-sm text-slate-400 dark:text-slate-500">Memuat…</div>
+        <div x-show="!assetChartLoading && assetCandles.length===0" class="absolute inset-0 flex items-center justify-center text-sm text-slate-400 dark:text-slate-500">Data chart tidak tersedia.</div>
+        <div x-ref="assetChartWrap" class="h-full w-full"></div>
+      </div>
+    </div>
+  </div>
+
   <script nonce="__CSP_NONCE__">
     requestAnimationFrame(()=>requestAnimationFrame(()=>document.body.classList.add('theme-ready')));
 
@@ -1384,6 +1417,9 @@ export const appHtml = `<!doctype html>
         valueMode: 'snapshot', // 'snapshot' = riwayat snapshot nyata; 'holdings' = simulasi holdings kini × harga historis
         assetPeaks: [], peaksOpen: true, // ringkasan peak harga per-aset (mode holdings); peaksOpen = panel buka/tutup
         chartRange: null, // {min,max} ms saat chart di-zoom/pan; perf() mengikuti rentang ini
+        // Modal chart per-aset (candlestick OHLC). chartAsset = simbol yang dibuka (mis. BTC / BBCA.JK)
+        chartAsset: '', chartAssetUnit: 'USD', assetCandles: [], assetChartPeriod: '1M', assetChart: null, assetChartLoading: false,
+        ASSET_PERIODS: ['1W','1M','3M','6M','1Y'],
         STABLES_SET: ['USDT','USDC','BUSD','DAI','TUSD','FDUSD','USDD','USDP','USD'],
         FIATS_SET: ['IDR','EUR','JPY','GBP','AUD','CAD','CHF','CNY','HKD','SGD','KRW','INR','MYR','THB','PHP','NZD','SEK','NOK','DKK','ZAR','TRY','BRL','MXN'],
         ALLOC_COLORS: ['#6366f1','#22d3ee','#34d399','#fbbf24','#fb7185','#a855f7','#38bdf8','#a3e635','#f472b6','#94a3b8'],
@@ -1723,6 +1759,48 @@ export const appHtml = `<!doctype html>
             stroke:{ width:0 },
           });
           this.pieChart.render();
+        },
+
+        // ---- Asset price chart (modal candlestick) ----
+        assetKind(a){ const u=(a||'').toUpperCase(); if(this.STABLES_SET.includes(u)) return 'stable'; if(this.FIATS_SET.includes(u)) return 'fiat'; if(/\\.JK$/.test(u)) return 'stock'; return 'crypto'; },
+        assetChartable(a){ const k=this.assetKind(a); return k==='crypto'||k==='stock'; },
+        symLabel(s){ return (s||'').replace(/\\.JK$/,''); },
+        openAssetChart(sym){
+          if (!this.assetChartable(sym)) { this.flash('Aset ini tidak punya chart harga','info'); return; }
+          this.chartAsset=sym; this.assetChartPeriod='1M'; this.assetCandles=[];
+          if (this.assetChart){ this.assetChart.destroy(); this.assetChart=null; }
+          this.modal='assetChart';
+          this.loadAssetChart();
+        },
+        closeAssetChart(){ if(this.assetChart){ this.assetChart.destroy(); this.assetChart=null; } this.modal=null; },
+        setAssetChartPeriod(p){ if(this.assetChartPeriod===p) return; this.assetChartPeriod=p; this.loadAssetChart(); },
+        async loadAssetChart(){
+          this.assetChartLoading=true;
+          const r=await this.api('GET','/dashboard/asset-chart?symbol='+encodeURIComponent(this.chartAsset)+'&period='+this.assetChartPeriod);
+          this.assetChartLoading=false;
+          if (r&&r.ok){ this.assetCandles=r.data.candles||[]; this.chartAssetUnit=r.data.unit||'USD'; this.$nextTick(()=>this.renderAssetChart()); }
+          else { this.assetCandles=[]; if(this.assetChart){this.assetChart.destroy();this.assetChart=null;} if(r) this.flash(r.error,'error'); }
+        },
+        renderAssetChart(){
+          const wrap=this.$refs.assetChartWrap;
+          if (!wrap || typeof ApexCharts==='undefined' || !wrap.isConnected) return;
+          if (wrap.clientWidth===0){ setTimeout(()=>this.renderAssetChart(),100); return; }
+          const dark=this.darkMode, unit=this.chartAssetUnit, self=this;
+          const data=this.assetCandles.map(k=>({x:Number(k.t),y:[Number(k.o),Number(k.h),Number(k.l),Number(k.c)]}));
+          if (this.assetChart){ this.assetChart.destroy(); this.assetChart=null; }
+          if (!data.length) return;
+          const fmtP=(v)=>{ const n=Number(v); if(unit==='IDR') return 'Rp '+Math.round(n).toLocaleString('en-US'); return '$'+n.toLocaleString('en-US',{minimumFractionDigits:n<1?4:2,maximumFractionDigits:n<1?6:2}); };
+          this.assetChart=new ApexCharts(wrap,{
+            chart:{ type:'candlestick', height:'100%', background:'transparent', animations:{enabled:false}, toolbar:{show:false}, fontFamily:'ui-sans-serif,system-ui,sans-serif' },
+            theme:{ mode:dark?'dark':'light' },
+            series:[{ data }],
+            xaxis:{ type:'datetime', labels:{ style:{colors:dark?'#94a3b8':'#64748b',fontSize:'11px'}, datetimeUTC:false }, axisBorder:{show:false}, axisTicks:{show:false} },
+            yaxis:{ tooltip:{enabled:true}, labels:{ style:{colors:dark?'#94a3b8':'#64748b',fontSize:'11px'}, formatter:(v)=>fmtP(v) }, tickAmount:5, forceNiceScale:true },
+            plotOptions:{ candlestick:{ colors:{ upward:'#34d399', downward:'#fb7185' } } },
+            grid:{ borderColor:dark?'rgba(148,163,184,0.14)':'rgba(100,116,139,0.14)', xaxis:{lines:{show:false}} },
+            tooltip:{ theme:dark?'dark':'light', x:{format:'dd MMM yyyy HH:mm'} },
+          });
+          this.assetChart.render();
         },
 
         // ---- Analysis ----
