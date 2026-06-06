@@ -117,4 +117,114 @@ app.delete('/:id', async (c) => {
   return ok(c, { deleted: true });
 });
 
+/**
+ * Parser CSV minimal (RFC 4180): menangani field ber-quote, koma & newline di dalam quote,
+ * serta escape "" -> ". Mengembalikan array baris (array sel string).
+ */
+function parseCsv(text: string): string[][] {
+  const s = text.replace(/^\uFEFF/, ''); // buang BOM
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (s[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += ch;
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(field); field = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && s[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      // Lewati baris kosong sepenuhnya.
+      if (row.length > 1 || row[0] !== '') rows.push(row);
+      row = [];
+    } else field += ch;
+  }
+  if (field !== '' || row.length) { row.push(field); if (row.length > 1 || row[0] !== '') rows.push(row); }
+  return rows;
+}
+
+/** Import manual holdings dari CSV (kompatibel format export /export/holdings.csv). */
+app.post('/import', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { csv?: string; portfolio_id?: number };
+  const text = (body.csv ?? '').trim();
+  if (!text) return fail(c, 'CSV is empty');
+
+  const rows = parseCsv(text);
+  if (rows.length < 2) return fail(c, 'CSV has no data rows');
+
+  // Petakan header (case-insensitive) -> index kolom.
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const col = (name: string) => header.indexOf(name);
+  const iLabel = col('label');
+  const iCurrency = col('currency');
+  const iAmount = col('amount');
+  const iNote = col('note');
+  const iAdded = col('added_at');
+  const iPortfolio = col('portfolio');
+  if (iLabel < 0 || iCurrency < 0 || iAmount < 0) {
+    return fail(c, 'CSV must have columns: label, currency, amount');
+  }
+
+  // Pra-ambil portfolio: peta nama->id (case-insensitive) + himpunan id valid.
+  const pfRows = await queryAll<{ id: number; name: string }>(c.env, 'SELECT id, name FROM portfolios');
+  const byName = new Map(pfRows.map((p) => [p.name.trim().toLowerCase(), p.id]));
+  const validId = new Set(pfRows.map((p) => p.id));
+  const fallbackId = Number(body.portfolio_id) || null;
+  if (fallbackId && !validId.has(fallbackId)) return fail(c, 'Fallback portfolio not found', 404);
+
+  const ts = now();
+  const errors: { row: number; error: string }[] = [];
+  let imported = 0;
+
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r];
+    const get = (i: number) => (i >= 0 && i < cells.length ? cells[i].trim() : '');
+
+    // Resolusi portfolio: kolom `portfolio` (by name) -> fallback portfolio_id.
+    const pfName = get(iPortfolio);
+    let portfolioId = pfName ? byName.get(pfName.toLowerCase()) ?? null : null;
+    if (!portfolioId) portfolioId = fallbackId;
+
+    const label = get(iLabel);
+    const currency = get(iCurrency).toUpperCase();
+    const amount = Number(get(iAmount).replace(/[,\s]/g, ''));
+    const addedRaw = get(iAdded);
+    const parsedAdded = addedRaw ? (/^\d+$/.test(addedRaw) ? Number(addedRaw) : Date.parse(addedRaw)) : NaN;
+    const addedAt = isFinite(parsedAdded) && parsedAdded > 0 ? parsedAdded : ts;
+    const note = get(iNote) || null;
+
+    if (!portfolioId) { errors.push({ row: r + 1, error: pfName ? `Unknown portfolio "${pfName}"` : 'No portfolio' }); continue; }
+    if (!label) { errors.push({ row: r + 1, error: 'Missing label' }); continue; }
+    if (!ALLOWED_CURRENCIES.has(currency)) { errors.push({ row: r + 1, error: `Invalid currency "${currency}"` }); continue; }
+    if (!isFinite(amount) || amount === 0) { errors.push({ row: r + 1, error: 'Amount cannot be zero' }); continue; }
+
+    const assetClass = amount < 0 ? 'expense' : 'fiat';
+    await run(
+      c.env,
+      `INSERT INTO manual_holdings (portfolio_id, label, asset_class, currency, amount, note, added_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      portfolioId,
+      label,
+      assetClass,
+      currency,
+      amount,
+      note,
+      addedAt,
+      ts,
+      ts,
+    );
+    imported++;
+  }
+
+  if (imported) await refreshOverview(c.env).catch(() => undefined);
+  return ok(c, { imported, failed: errors.length, total: rows.length - 1, errors: errors.slice(0, 50) });
+});
+
 export default app;

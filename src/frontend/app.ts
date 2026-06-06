@@ -781,7 +781,8 @@ export const appHtml = `<!doctype html>
 
       <!-- HOLDINGS -->
       <section x-show="view==='holdings'" class="space-y-4">
-        <div class="flex justify-end">
+        <div class="flex justify-end gap-2">
+          <button @click="openImportModal()" class="rounded-xl border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Import CSV</button>
           <button @click="openHoldingModal()" class="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">+ Manual Holding</button>
         </div>
         <div class="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
@@ -820,18 +821,18 @@ export const appHtml = `<!doctype html>
 
       <!-- SAHAM IDX -->
       <section x-show="view==='stocks'" class="space-y-4">
-        <!-- Ringkasan -->
+        <!-- Summary -->
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Total Modal</div>
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Total Cost</div>
             <div class="mt-1 text-xl font-semibold" x-text="fmtDisplay(stocksData.totals.costUsd||0)"></div>
           </div>
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Nilai Pasar</div>
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Market Value</div>
             <div class="mt-1 text-xl font-semibold" x-text="fmtDisplay(stocksData.totals.marketUsd||0)"></div>
           </div>
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
-            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Untung / Rugi</div>
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Profit / Loss</div>
             <div class="mt-1 text-xl font-semibold" :class="pctClass(stocksData.totals.plUsd)">
               <span x-text="((stocksData.totals.plUsd||0)>=0?'+':'−')+fmtDisplay(Math.abs(stocksData.totals.plUsd||0))"></span>
               <span class="text-sm" x-text="'('+fmtPct(stocksData.totals.plPct,false)+')'"></span>
@@ -843,14 +844,14 @@ export const appHtml = `<!doctype html>
           <table class="min-w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm">
             <thead class="bg-slate-50 dark:bg-slate-700/50 text-left text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
               <tr>
-                <th class="px-4 py-3">Saham</th>
+                <th class="px-4 py-3">Stock</th>
                 <th class="px-4 py-3 text-right">Lot</th>
-                <th class="px-4 py-3 text-right">Lembar</th>
-                <th class="px-4 py-3 text-right">Harga Beli</th>
-                <th class="px-4 py-3 text-right">Harga Terakhir</th>
-                <th class="px-4 py-3 text-right">Modal</th>
-                <th class="px-4 py-3 text-right">Nilai Pasar</th>
-                <th class="px-4 py-3 text-right">Untung/Rugi</th>
+                <th class="px-4 py-3 text-right">Shares</th>
+                <th class="px-4 py-3 text-right">Avg Price</th>
+                <th class="px-4 py-3 text-right">Last Price</th>
+                <th class="px-4 py-3 text-right">Cost</th>
+                <th class="px-4 py-3 text-right">Market Value</th>
+                <th class="px-4 py-3 text-right">Profit/Loss</th>
                 <th class="px-4 py-3 text-right">24h</th>
               </tr>
             </thead>
@@ -861,6 +862,7 @@ export const appHtml = `<!doctype html>
                     <div class="flex items-center gap-2">
                       <span class="relative h-6 w-6 shrink-0">
                         <span class="absolute inset-0 rounded-full flex items-center justify-center text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(s.ticker)" x-text="tokenInitial(s.ticker)"></span>
+                        <img :src="stockIcon(s.ticker)" class="absolute inset-0 h-6 w-6 rounded-full object-cover" @error="$el.style.display='none'" alt="">
                       </span>
                       <span class="font-semibold" x-text="s.ticker"></span>
                     </div>
@@ -878,12 +880,12 @@ export const appHtml = `<!doctype html>
                   <td class="px-4 py-3 text-right text-xs font-medium" :class="pctClass(s.changePct)" x-text="fmtPct(s.changePct,false)"></td>
                 </tr>
               </template>
-              <tr x-show="!stocksLoading && stocksData.positions.length===0"><td colspan="9" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">Belum ada saham. Tambah lewat menu <b>Accounts → Saham IDX</b>.</td></tr>
-              <tr x-show="stocksLoading"><td colspan="9" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">Memuat…</td></tr>
+              <tr x-show="!stocksLoading && stocksData.positions.length===0"><td colspan="9" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No stocks yet. Add them via <b>Accounts → IDX Stocks</b>.</td></tr>
+              <tr x-show="stocksLoading"><td colspan="9" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">Loading…</td></tr>
             </tbody>
           </table>
         </div>
-        <p class="text-xs text-slate-400 dark:text-slate-500">Harga per-lembar dalam IDR (sumber: Yahoo Finance). Modal/Nilai/Untung-Rugi mengikuti toggle mata uang.</p>
+        <p class="text-xs text-slate-400 dark:text-slate-500">Price per share in IDR (source: Yahoo Finance). Cost/Value/Profit-Loss follow the currency toggle.</p>
       </section>
 
       <!-- DEPOSITS -->
@@ -1249,6 +1251,41 @@ export const appHtml = `<!doctype html>
     </div>
   </div>
 
+  <!-- MODAL: Import CSV -->
+  <div x-show="modal==='import'" class="fixed inset-0 z-40 flex items-center justify-center p-4">
+    <div @click="modal=null" class="absolute inset-0 bg-slate-900/50"></div>
+    <div class="relative w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-xl">
+      <h3 class="mb-1 text-base font-semibold">Import Holdings (CSV)</h3>
+      <p class="mb-4 text-xs text-slate-500 dark:text-slate-400">Columns: <code>label, currency, amount</code> required. Optional: <code>portfolio, note, added_at</code>. Compatible with the exported holdings.csv.</p>
+      <form @submit.prevent="runHoldingImport()" class="space-y-3">
+        <input type="file" accept=".csv,text/csv" @change="onImportFile($event)"
+          class="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-indigo-700" />
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Fallback portfolio <span class="text-slate-400">(for rows without a portfolio column)</span></label>
+          <select x-model.number="importPortfolioId"
+            class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+            <option value="">None</option>
+            <template x-for="p in portfolios" :key="p.id"><option :value="p.id" x-text="p.name"></option></template>
+          </select>
+        </div>
+        <p x-show="importCsv" class="text-xs text-slate-500 dark:text-slate-400" x-text="importRowCount+' data row(s) detected.'"></p>
+        <template x-if="importResult">
+          <div class="rounded-xl bg-slate-50 dark:bg-slate-700/50 p-3 text-xs space-y-1">
+            <div class="font-medium text-emerald-600 dark:text-emerald-400" x-text="'Imported '+importResult.imported+' of '+importResult.total+'.'"></div>
+            <div x-show="importResult.failed>0" class="text-rose-600 dark:text-rose-400" x-text="importResult.failed+' row(s) skipped.'"></div>
+            <template x-for="e in (importResult.errors||[])" :key="e.row">
+              <div class="text-slate-500 dark:text-slate-400" x-text="'Row '+e.row+': '+e.error"></div>
+            </template>
+          </div>
+        </template>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" @click="modal=null" class="rounded-xl px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">Close</button>
+          <button :disabled="!importCsv || importing" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50" x-text="importing ? 'Importing…' : 'Import'"></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL: Account -->
   <div x-show="modal==='account'" class="fixed inset-0 z-40 flex items-center justify-center p-4">
     <div @click="modal=null" class="absolute inset-0 bg-slate-900/50"></div>
@@ -1395,13 +1432,14 @@ export const appHtml = `<!doctype html>
         displayCurrency: localStorage.getItem('currency') || 'USD',
         hideAmounts: localStorage.getItem('hideAmounts')==='1',
         idrRate: 0,
+        importCsv: '', importPortfolioId: '', importRowCount: 0, importing: false, importResult: null,
         nav: [
           { id:'dashboard', label:'Dashboard', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6\\'/></svg>' },
           { id:'analysis', label:'Analysis', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z\\'/></svg>' },
           { id:'portfolios', label:'Portfolios', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10\\'/></svg>' },
           { id:'accounts', label:'Accounts', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2m-3-7h6m-3-3v6\\'/></svg>' },
           { id:'holdings', label:'Manual Holdings', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1\\'/></svg>' },
-          { id:'stocks', label:'Saham IDX', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M3 17l6-6 4 4 8-8m0 0h-5m5 0v5\\'/></svg>' },
+          { id:'stocks', label:'IDX Stocks', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M3 17l6-6 4 4 8-8m0 0h-5m5 0v5\\'/></svg>' },
           { id:'deposits', label:'Deposits', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4\\'/></svg>' },
           { id:'activity', label:'Activity', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9\\'/></svg>' },
           { id:'settings', label:'Settings', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z\\'/><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M15 12a3 3 0 11-6 0 3 3 0 016 0z\\'/></svg>' }
@@ -1479,6 +1517,7 @@ export const appHtml = `<!doctype html>
             await Promise.all([this.loadOverview(), this.loadAccounts(), this.loadHoldings(), this.loadDeposits(), this.loadSystemEvents(), this.loadReturns()]);
             await this.loadHistory();
             if (this.view==='analysis') this.loadAnalysis();
+            if (this.view==='stocks') this.loadStocks();
           } finally {
             this.loading = false;
           }
@@ -1605,6 +1644,7 @@ export const appHtml = `<!doctype html>
         },
         assetChg(sym) { const m=this.overview.assetChange; return (m && m[sym]!==undefined) ? m[sym] : null; },
         tokenIcon(sym) { return 'https://assets.coincap.io/assets/icons/'+(sym||'').toLowerCase().replace(/[^a-z0-9]/g,'')+'@2x.png'; },
+        stockIcon(ticker) { return 'https://assets.stockbit.com/logos/companies/'+(ticker||'').toUpperCase().replace(/[^A-Z0-9]/g,'')+'.png'; },
         tokenGradient(sym) { let h=0; for(const c of (sym||'?').toUpperCase()) h=(h*31+c.charCodeAt(0))&0xffff; const h1=h%360, h2=(h1+45)%360; return 'linear-gradient(135deg,hsl('+h1+',65%,58%),hsl('+h2+',65%,42%))'; },
         tokenInitial(sym) { const s=(sym||'?').toUpperCase(); return s.length===3 ? s.slice(0,2) : s.charAt(0); },
 
@@ -2019,6 +2059,23 @@ export const appHtml = `<!doctype html>
           if (r&&r.ok) { this.modal=null; await this.loadHoldings(); await this.loadOverview(); } else if(r) this.flash(r.error, 'error');
         },
         async deleteHolding(id) { if(!(await this.askConfirm({ title:'Delete holding?', message:'This manual holding will be removed.', confirmText:'Delete' }))) return; const r=await this.api('DELETE','/holdings/'+id); if(r&&r.ok){ await this.loadHoldings(); await this.loadOverview(); } },
+
+        openImportModal() { this.importCsv=''; this.importRowCount=0; this.importResult=null; this.importing=false; this.importPortfolioId=(this.portfolios[0]&&this.portfolios[0].id)||''; this.modal='import'; },
+        onImportFile(ev) {
+          const f = ev.target.files && ev.target.files[0]; this.importResult=null;
+          if (!f) { this.importCsv=''; this.importRowCount=0; return; }
+          const reader = new FileReader();
+          reader.onload = () => { this.importCsv = String(reader.result||''); const lines=this.importCsv.replace(/^\\uFEFF/,'').split(/\\r\\n|\\n|\\r/).filter(l=>l.trim()!==''); this.importRowCount = Math.max(0, lines.length-1); };
+          reader.readAsText(f);
+        },
+        async runHoldingImport() {
+          if (!this.importCsv || this.importing) return;
+          this.importing=true; this.importResult=null;
+          const r = await this.api('POST','/holdings/import', { csv:this.importCsv, portfolio_id:this.importPortfolioId||undefined });
+          this.importing=false;
+          if (r&&r.ok) { this.importResult=r.data; if(r.data.imported>0){ await this.loadHoldings(); await this.loadOverview(); this.flash('Imported '+r.data.imported+' holding(s)', 'success'); } if(r.data.imported===0) this.flash('No rows imported', 'error'); }
+          else if (r) this.flash(r.error, 'error');
+        },
 
         nativeSymbol() {
           if (this.ac.type==='eth') return 'ETH';
