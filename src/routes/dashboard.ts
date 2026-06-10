@@ -1,31 +1,23 @@
 import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
-import { queryAll, queryOne } from '../lib/db';
-import { ok, fail } from '../lib/response';
+import { queryAll } from '../lib/db';
+import { ok } from '../lib/response';
+import { computeValuation } from '../services/valuation';
 import { syncAll } from '../services/sync';
-import { getStoredOverview, refreshOverview } from '../services/overview';
-import { computeCostBasis } from '../services/returns';
-import { classifyAsset, getCryptoCandles, getDailyCloses, getStockCandles, getUsdRates } from '../services/prices';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// Ringkasan nilai semua portofolio. Dibaca LANGSUNG dari DB (hasil hitungan worker/cron) —
-// tidak ada fetch harga / valuasi live di sini agar UI instan & murni dari DB.
+// Ringkasan nilai semua portofolio (live, dihitung dari saldo + harga terbaru).
 app.get('/overview', async (c) => {
-  const stored = await getStoredOverview(c.env);
-  if (stored) return ok(c, stored);
-  // Fallback sekali (mis. sebelum cron pertama mengisi cache): hitung & simpan.
-  return ok(c, await refreshOverview(c.env));
+  const valuation = await computeValuation(c.env);
+  return ok(c, valuation);
 });
 
 // Data chart pergerakan nilai. ?portfolio_id= (kosong = agregat semua), ?days=30
 app.get('/history', async (c) => {
   const pid = c.req.query('portfolio_id');
-  const daysParam = c.req.query('days');
-  const all = daysParam === 'all';
-  // 'all' = seluruh riwayat (since 0). Selain itu clamp 1..3650 hari.
-  const days = all ? 0 : Math.min(Math.max(Number(daysParam) || 30, 1), 3650);
-  const since = all ? 0 : Date.now() - days * 24 * 60 * 60 * 1000;
+  const days = Math.min(Math.max(Number(c.req.query('days')) || 30, 1), 365);
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
 
   if (pid) {
     const rows = await queryAll<{ captured_at: number; total_usd: number }>(
@@ -46,285 +38,20 @@ app.get('/history', async (c) => {
   return ok(c, rows);
 });
 
-// Chart "what-if": nilai portofolio bila holdings SAAT INI dipegang sepanjang periode.
-// Ambil jumlah aset terkini (overview cache) × harga historis harian (Binance klines).
-// Berguna saat snapshot belum punya riwayat panjang (mis. baru deposit hari ini).
-app.get('/asset-history', async (c) => {
-  const daysParam = c.req.query('days');
-  const all = daysParam === 'all';
-  // interval harian; Binance klines max 1000 candle. 'all' = ambil sebanyak mungkin.
-  const days = all ? 1000 : Math.min(Math.max(Number(daysParam) || 30, 1), 1000);
-
-  const overview = (await getStoredOverview(c.env)) || (await refreshOverview(c.env));
-
-  // Agregasi jumlah + nilai USD per aset (gabungan semua portofolio), sama seperti aggAssets() di UI.
-  const amounts = new Map<string, number>();
-  const usdValue = new Map<string, number>();
-  for (const p of overview.portfolios) {
-    for (const a of p.assets) {
-      const amt = Number(a.amount);
-      if (!isFinite(amt) || amt === 0) continue;
-      const sym = a.asset.toUpperCase();
-      amounts.set(sym, (amounts.get(sym) || 0) + amt);
-      usdValue.set(sym, (usdValue.get(sym) || 0) + (Number(a.usd) || 0));
-    }
-  }
-
-  // Crypto → butuh klines. Stable/fiat → dinilai konstan pada kurs USD terkini.
-  // Worker punya batas subrequest (≈50/permintaan) & banyak dust token tak punya pair USDT —
-  // jadi hanya ambil klines untuk crypto bernilai signifikan; dust diabaikan (kontribusi ~0).
-  const MIN_CRYPTO_USD = 1;
-  const cryptoAssets: string[] = [];
-  const constAssets: string[] = [];
-  for (const sym of amounts.keys()) {
-    if (classifyAsset(sym) !== 'crypto') constAssets.push(sym);
-    else if ((usdValue.get(sym) || 0) >= MIN_CRYPTO_USD) cryptoAssets.push(sym);
-  }
-  const constRates = constAssets.length ? await getUsdRates(c.env, constAssets) : {};
-
-  const series = await Promise.all(
-    cryptoAssets.map(async (sym) => ({ sym, m: new Map((await getDailyCloses(c.env, sym + 'USDT', days)).map((p) => [p.t, p.c])) })),
-  );
-
-  // Timeline = union semua tanggal kline yang tersedia.
-  const daySet = new Set<number>();
-  for (const s of series) for (const t of s.m.keys()) daySet.add(t);
-  const timeline = [...daySet].sort((a, b) => a - b);
-
-  // Nilai per hari: Σ(jumlah × harga). Harga di-carry-forward dari close terakhir yang diketahui
-  // (sebelum aset pertama kali ada di Binance, kontribusinya 0). Stable/fiat konstan.
-  const constUsd = constAssets.reduce((s, a) => s + (amounts.get(a) || 0) * (constRates[a] || 0), 0);
-  const last: Record<string, number> = {};
-  const rows = timeline.map((t) => {
-    let total = constUsd;
-    for (const s of series) {
-      const close = s.m.get(t);
-      if (close !== undefined) last[s.sym] = close;
-      const price = last[s.sym];
-      if (price !== undefined) total += (amounts.get(s.sym) || 0) * price;
-    }
-    return { captured_at: t, total_usd: total };
-  });
-
-  // Ringkasan harga per-aset: puncak harga di periode + harga terkini + jarak dari puncak.
-  const allPeaks = series
-    .map((s) => {
-      let peak = 0, peakAt = 0, current = 0, currentAt = -1;
-      for (const [t, close] of s.m) {
-        if (close > peak) { peak = close; peakAt = t; }
-        if (t >= currentAt) { current = close; currentAt = t; }
-      }
-      return {
-        asset: s.sym,
-        peak,
-        peakAt,
-        current,
-        fromPeakPct: peak > 0 ? ((current - peak) / peak) * 100 : 0,
-        usd: usdValue.get(s.sym) || 0,
-      };
-    })
-    .filter((p) => p.peak > 0);
-
-  // Tampilkan per-aset diurut nilai terbesar, dibatasi agar ringkas.
-  // Total/highest/lowest gabungan dihitung di frontend dari `points` (kurva portofolio).
-  const peaks = allPeaks.slice().sort((a, b) => b.usd - a.usd).slice(0, 6);
-
-  return ok(c, { points: rows, peaks });
-});
-
-// Candle OHLC untuk satu aset (dipakai modal chart saat aset di-klik).
-// Crypto → Binance klines; saham IDX (.JK) → Yahoo chart. ?symbol=BTC|BBCA.JK &period=1W|1M|3M|6M|1Y
-app.get('/asset-chart', async (c) => {
-  const symbol = (c.req.query('symbol') || '').toUpperCase().trim();
-  const period = c.req.query('period') || '1M';
-  if (!symbol) return fail(c, 'Parameter symbol wajib diisi', 400);
-
-  const kind = classifyAsset(symbol);
-  if (kind !== 'crypto' && kind !== 'stock') {
-    return fail(c, 'Aset ini tidak memiliki chart harga', 400);
-  }
-
-  // Map periode → granularity. Range pendek pakai candle intraday agar tidak terlalu jarang.
-  const CRYPTO: Record<string, { interval: string; limit: number }> = {
-    '1W': { interval: '1h', limit: 168 },
-    '1M': { interval: '1d', limit: 30 },
-    '3M': { interval: '1d', limit: 90 },
-    '6M': { interval: '1d', limit: 180 },
-    '1Y': { interval: '1d', limit: 365 },
-  };
-  const STOCK: Record<string, { range: string; interval: string }> = {
-    '1W': { range: '5d', interval: '60m' },
-    '1M': { range: '1mo', interval: '1d' },
-    '3M': { range: '3mo', interval: '1d' },
-    '6M': { range: '6mo', interval: '1d' },
-    '1Y': { range: '1y', interval: '1d' },
-  };
-
-  if (kind === 'crypto') {
-    const cfg = CRYPTO[period] || CRYPTO['1M'];
-    const candles = await getCryptoCandles(c.env, symbol + 'USDT', cfg.interval, cfg.limit);
-    return ok(c, { symbol, period, unit: 'USD', candles });
-  }
-  const cfg = STOCK[period] || STOCK['1M'];
-  const candles = await getStockCandles(c.env, symbol, cfg.range, cfg.interval);
-  return ok(c, { symbol, period, unit: 'IDR', candles });
-});
-
-// Riwayat deposit dengan server-side pagination.
+// Riwayat deposit terbaru (semua account).
 app.get('/deposits', async (c) => {
-  const page  = Math.max(Number(c.req.query('page'))  || 1,  1);
-  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 25, 1), 100);
-  const offset = (page - 1) * limit;
-
-  const BASE_FROM = `FROM deposits d
-     JOIN accounts a ON a.id = d.account_id
-     JOIN portfolios p ON p.id = a.portfolio_id`;
-
-  const [countRow, rows] = await Promise.all([
-    queryOne<{ total: number }>(c.env, `SELECT COUNT(*) AS total ${BASE_FROM}`),
-    queryAll(c.env,
-      `SELECT d.id, d.asset, d.amount, d.network, d.address, d.status, d.ts,
-              a.label AS account_label, a.type AS account_type, p.name AS portfolio_name
-       ${BASE_FROM}
-       ORDER BY d.ts DESC LIMIT ? OFFSET ?`,
-      limit, offset,
-    ),
-  ]);
-
-  const total = countRow?.total ?? 0;
-  return ok(c, { data: rows, total, page, limit, pages: Math.ceil(total / limit) || 1 });
-});
-
-// Total return all-time: nilai kini (grandTotalUsd) vs cost basis (modal masuk).
-// Cost basis di-cache di KV; di-invalidasi otomatis saat deposit/holding berubah
-// (signature = jumlah & timestamp terakhir deposit + manual holdings).
-const RETURNS_KV_KEY = 'returns_basis';
-
-app.get('/returns', async (c) => {
-  const overview = (await getStoredOverview(c.env)) || (await refreshOverview(c.env));
-  const currentValue = overview?.grandTotalUsd ?? 0;
-
-  const sig = await queryOne<{ dc: number; dts: number; mc: number; mts: number }>(
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 100, 1), 500);
+  const rows = await queryAll(
     c.env,
-    `SELECT
-       (SELECT COUNT(*) FROM deposits WHERE status != 'pending') AS dc,
-       (SELECT COALESCE(MAX(ts), 0) FROM deposits) AS dts,
-       (SELECT COUNT(*) FROM manual_holdings) AS mc,
-       (SELECT COALESCE(MAX(updated_at), 0) FROM manual_holdings) AS mts`,
+    `SELECT d.id, d.asset, d.amount, d.network, d.address, d.status, d.ts,
+            a.label AS account_label, a.type AS account_type, p.name AS portfolio_name
+     FROM deposits d
+     JOIN accounts a ON a.id = d.account_id
+     JOIN portfolios p ON p.id = a.portfolio_id
+     ORDER BY d.ts DESC LIMIT ?`,
+    limit,
   );
-  const sigStr = `${sig?.dc ?? 0}:${sig?.dts ?? 0}:${sig?.mc ?? 0}:${sig?.mts ?? 0}`;
-
-  let basis = null as Awaited<ReturnType<typeof computeCostBasis>> | null;
-  const cachedRaw = await c.env.KV.get(RETURNS_KV_KEY);
-  if (cachedRaw) {
-    try {
-      const cached = JSON.parse(cachedRaw) as { sig: string; result: typeof basis };
-      if (cached.sig === sigStr && cached.result) basis = cached.result;
-    } catch { /* abaikan cache rusak */ }
-  }
-  if (!basis) {
-    basis = await computeCostBasis(c.env);
-    await c.env.KV.put(RETURNS_KV_KEY, JSON.stringify({ sig: sigStr, result: basis }), { expirationTtl: 21600 });
-  }
-
-  const costBasis = basis.costBasis;
-  const abs = currentValue - costBasis;
-  const pct = costBasis > 0 ? (abs / costBasis) * 100 : null;
-  return ok(c, {
-    currentValue,
-    costBasis,
-    abs,
-    pct,
-    pricedItems: basis.pricedItems,
-    totalItems: basis.totalItems,
-    unpricedAssets: basis.unpricedAssets,
-    earliestTs: basis.earliestTs,
-  });
-});
-
-// Ringkasan portofolio bertenaga Workers AI (LLM). On-demand (dipicu tombol),
-// di-cache di KV per-`computedAt` overview agar klik berulang tidak bakar Neuron.
-const INSIGHT_KV_KEY = 'ai_insight';
-const INSIGHT_MODEL = '@cf/meta/llama-3.1-8b-instruct';
-
-app.get('/insight', async (c) => {
-  const overview = (await getStoredOverview(c.env)) || (await refreshOverview(c.env));
-  if (!overview || overview.portfolios.length === 0) {
-    return ok(c, { text: 'Belum ada data portofolio untuk dianalisis.', cached: false, computedAt: 0 });
-  }
-
-  // Cache hit: data belum berubah sejak insight terakhir → kembalikan tanpa panggil AI.
-  const cachedRaw = await c.env.KV.get(INSIGHT_KV_KEY);
-  if (cachedRaw) {
-    try {
-      const cached = JSON.parse(cachedRaw) as { computedAt: number; text: string };
-      if (cached.computedAt === overview.computedAt) {
-        return ok(c, { text: cached.text, cached: true, computedAt: cached.computedAt });
-      }
-    } catch { /* abaikan cache rusak */ }
-  }
-
-  // Ringkas overview jadi konteks padat (hemat token): total, per-portofolio, top aset.
-  const total = overview.grandTotalUsd || 0;
-  const assetUsd = new Map<string, number>();
-  for (const p of overview.portfolios) {
-    for (const a of p.assets) {
-      if (!(a.usd > 0)) continue;
-      assetUsd.set(a.asset, (assetUsd.get(a.asset) || 0) + a.usd);
-    }
-  }
-  const topAssets = [...assetUsd.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([sym, usd]) => {
-      const pct = total > 0 ? ((usd / total) * 100).toFixed(1) : '0';
-      const chg = overview.assetChange[sym];
-      const chgStr = chg !== undefined && chg !== null ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : 'n/a';
-      return `- ${sym}: $${usd.toFixed(2)} (${pct}% dari total, 24h ${chgStr})`;
-    });
-  const portfolioLines = overview.portfolios.map((p) => {
-    const chg = p.change24hPct;
-    const chgStr = chg !== null && chg !== undefined ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : 'n/a';
-    return `- ${p.name}: $${p.totalUsd.toFixed(2)} (24h ${chgStr})`;
-  });
-  const grandChg = overview.grandChangePct;
-  const grandChgStr = grandChg !== null && grandChg !== undefined ? `${grandChg >= 0 ? '+' : ''}${grandChg.toFixed(2)}%` : 'n/a';
-
-  const dataContext = [
-    `Total nilai: $${total.toFixed(2)} (perubahan 24 jam: ${grandChgStr})`,
-    `Portofolio (${overview.portfolios.length}):`,
-    ...portfolioLines,
-    `Aset terbesar:`,
-    ...topAssets,
-  ].join('\n');
-
-  const systemPrompt =
-    'Kamu analis portofolio kripto. Berdasarkan data yang diberikan, tulis ringkasan singkat ' +
-    'dalam Bahasa Indonesia, 3-4 kalimat, objektif dan padat. Sebutkan: total nilai & pergerakan 24 jam, ' +
-    'kontributor/penggerak utama, dan satu catatan risiko (mis. konsentrasi pada satu aset atau porsi stablecoin). ' +
-    'JANGAN memberi nasihat beli/jual atau prediksi harga. JANGAN mengarang angka di luar data yang diberikan.';
-
-  try {
-    const result = (await c.env.AI.run(INSIGHT_MODEL as any, {
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: dataContext },
-      ],
-      max_tokens: 400,
-    } as any)) as { response?: string };
-    const text = (result?.response || '').trim();
-    if (!text) return fail(c, 'AI tidak mengembalikan teks', 502);
-
-    await c.env.KV.put(
-      INSIGHT_KV_KEY,
-      JSON.stringify({ computedAt: overview.computedAt, text }),
-      { expirationTtl: 86400 },
-    );
-    return ok(c, { text, cached: false, computedAt: overview.computedAt });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return fail(c, 'Gagal membuat insight: ' + msg.slice(0, 200), 502);
-  }
+  return ok(c, rows);
 });
 
 // Trigger sinkronisasi penuh secara manual.

@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "apexcharts": "^5.13.0",
+    "graphql": "^16.14.2",
+    "graphql-yoga": "^5.21.2",
     "hono": "^4.7.10"
   },
   "devDependencies": {

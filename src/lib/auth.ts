@@ -44,6 +44,29 @@ export const securityHeaders: M = async (c, next) => {
   h.set('Referrer-Policy', 'no-referrer');
   h.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   h.set('Cross-Origin-Opener-Policy', 'same-origin');
+
+  // Halaman GraphiQL ("yoga-server") di GET /graphql memuat aset dari CDN unpkg dan
+  // menjalankan skrip inline tanpa nonce → butuh CSP longgar khusus rute ini.
+  // (Halaman ini sudah di-gate login + password di index.ts.)
+  if (c.req.method === 'GET' && c.req.path === '/graphql') {
+    h.set(
+      'Content-Security-Policy',
+      [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com",
+        "style-src 'self' 'unsafe-inline' https://unpkg.com",
+        "font-src 'self' data: https://unpkg.com",
+        "img-src 'self' data: https://unpkg.com https://raw.githubusercontent.com",
+        // GraphiQL mengambil Monaco editor worker bundle via fetch() dari unpkg lalu jadi blob worker.
+        "connect-src 'self' https://unpkg.com",
+        "worker-src 'self' blob:",
+        "base-uri 'self'",
+        "frame-ancestors 'none'",
+      ].join('; '),
+    );
+    return;
+  }
+
   // Frontend kini di-self-host (Tailwind precompiled + Alpine + Chart.js via Workers Assets) —
   // tidak ada CDN pihak ketiga & tanpa 'unsafe-inline'. Skrip inline diizinkan lewat nonce.
   // 'unsafe-eval' tetap dibutuhkan: Alpine mengevaluasi ekspresi atribut via Function().

@@ -1103,6 +1103,14 @@ export const appHtml = `<!doctype html>
             <button @click="exportCsv('snapshots')" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Snapshots</button>
           </div>
         </div>
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+          <h3 class="mb-1 text-sm font-semibold">Developer</h3>
+          <p class="mb-4 text-xs text-slate-400 dark:text-slate-500">Jalankan query GraphQL manual (butuh password tambahan).</p>
+          <a href="/graphql" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+            GraphQL Console
+          </a>
+        </div>
       </section>
     </main>
   </div>
@@ -1509,7 +1517,7 @@ export const appHtml = `<!doctype html>
               if (h === 'stocks') this.loadStocks();
             }
           });
-          const me = await this.api('GET','/auth/me');
+          const me = await this.gql('Me');
           if (!me) return;
           this.csrf = me.data.csrf; this.username = me.data.username;
           try {
@@ -1549,14 +1557,64 @@ export const appHtml = `<!doctype html>
           if (this.view === 'analysis') this.$nextTick(()=>{ this.renderAnalysisChart(); this.renderAllocPie(); });
         },
 
-        async api(method, path, body) {
-          const opts = { method, headers: {} };
-          if (body !== undefined) { opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(body); }
-          if (method !== 'GET') opts.headers['X-CSRF-Token'] = this.csrf;
-          const res = await fetch('/api'+path, opts);
+        // Peta operasi GraphQL (nama operasi = nilai ?q= di URL, agar mudah di-debug di Network tab).
+        Q: {
+          Me: 'query Me { me { username csrf } }',
+          Overview: 'query Overview { overview }',
+          Returns: 'query Returns { returns { currentValue costBasis abs pct pricedItems totalItems unpricedAssets earliestTs } }',
+          Insight: 'query Insight { insight }',
+          Portfolios: 'query Portfolios { portfolios { id name description sort_order created_at updated_at } }',
+          Accounts: 'query Accounts { accounts }',
+          Holdings: 'query Holdings($portfolioId:Int){ holdings(portfolioId:$portfolioId) }',
+          Stocks: 'query Stocks { stocks }',
+          Deposits: 'query Deposits($page:Int,$limit:Int){ deposits(page:$page,limit:$limit) }',
+          SystemEvents: 'query SystemEvents { systemEvents }',
+          SystemQueue: 'query SystemQueue { systemQueue }',
+          History: 'query History($portfolioId:Int,$days:String){ history(portfolioId:$portfolioId,days:$days) }',
+          AssetHistory: 'query AssetHistory($days:String){ assetHistory(days:$days) }',
+          AssetChart: 'query AssetChart($symbol:String!,$period:String){ assetChart(symbol:$symbol,period:$period) }',
+          ExportCsv: 'query ExportCsv($type:String!){ exportCsv(type:$type) }',
+          MarkEventsRead: 'mutation MarkEventsRead { markEventsRead }',
+          ClearEvents: 'mutation ClearEvents { clearEvents }',
+          SyncAll: 'mutation SyncAll { syncAll }',
+          SyncAccount: 'mutation SyncAccount($id:Int!){ syncAccount(id:$id) }',
+          BackfillDeposits: 'mutation BackfillDeposits($id:Int!){ backfillDeposits(id:$id) }',
+          CreatePortfolio: 'mutation CreatePortfolio($input:JSON!){ createPortfolio(input:$input) }',
+          UpdatePortfolio: 'mutation UpdatePortfolio($id:Int!,$input:JSON!){ updatePortfolio(id:$id,input:$input) }',
+          DeletePortfolio: 'mutation DeletePortfolio($id:Int!){ deletePortfolio(id:$id) }',
+          CreateHolding: 'mutation CreateHolding($input:JSON!){ createHolding(input:$input) }',
+          UpdateHolding: 'mutation UpdateHolding($id:Int!,$input:JSON!){ updateHolding(id:$id,input:$input) }',
+          DeleteHolding: 'mutation DeleteHolding($id:Int!){ deleteHolding(id:$id) }',
+          ImportHoldings: 'mutation ImportHoldings($input:JSON!){ importHoldings(input:$input) }',
+          CreateAccount: 'mutation CreateAccount($input:JSON!){ createAccount(input:$input) }',
+          UpdateAccount: 'mutation UpdateAccount($id:Int!,$input:JSON!){ updateAccount(id:$id,input:$input) }',
+          DeleteAccount: 'mutation DeleteAccount($id:Int!){ deleteAccount(id:$id) }',
+          ChangePassword: 'mutation ChangePassword($current:String!,$next:String!){ changePassword(current:$current,next:$next) }',
+          Logout: 'mutation Logout { logout }',
+        },
+
+        // Helper GraphQL. Mengembalikan { ok, data, error } seperti helper REST lama agar call-site lain tak berubah.
+        // data = nilai root-field tunggal operasi (mirror payload data REST).
+        async gql(op, variables) {
+          const query = this.Q[op];
+          const res = await fetch('/graphql?q='+op, {
+            method: 'POST',
+            headers: this.csrf
+              ? { 'Content-Type':'application/json', 'X-CSRF-Token':this.csrf }
+              : { 'Content-Type':'application/json' },
+            body: JSON.stringify({ operationName: op, query, variables: variables||{} }),
+          });
           if (res.status === 401) { location.href='/login'; return null; }
-          const data = await res.json().catch(()=>({ ok:false, error:'Invalid response' }));
-          return data;
+          const json = await res.json().catch(()=>null);
+          if (!json) return { ok:false, error:'Invalid response' };
+          if (json.errors && json.errors.length) {
+            const e0 = json.errors[0];
+            if (e0.extensions && e0.extensions.code==='UNAUTHORIZED') { location.href='/login'; return null; }
+            return { ok:false, error: e0.message };
+          }
+          const data = json.data || {};
+          const keys = Object.keys(data);
+          return { ok:true, data: keys.length===1 ? data[keys[0]] : data };
         },
 
         go(id) {
@@ -1671,7 +1729,7 @@ export const appHtml = `<!doctype html>
         assetLabel(sym) { return String(sym||'').replace(/\\.JK$/,''); },
 
         async loadOverview() {
-          const r = await this.api('GET','/dashboard/overview');
+          const r = await this.gql('Overview');
           if (r&&r.ok) {
             this.overview = r.data;
             this.idrRate = r.data.idrRate || 0;
@@ -1679,49 +1737,49 @@ export const appHtml = `<!doctype html>
           }
         },
         async loadReturns() {
-          const r=await this.api('GET','/dashboard/returns');
+          const r=await this.gql('Returns');
           if (r&&r.ok) this.returns=r.data;
         },
         async loadInsight() {
           if (this.aiInsightLoading) return;
           this.aiInsightLoading=true;
-          const r=await this.api('GET','/dashboard/insight');
+          const r=await this.gql('Insight');
           if (r&&r.ok) { this.aiInsight=r.data.text||''; this.aiCached=!!r.data.cached; }
           else this.flash((r&&r.error)||'Gagal membuat insight','error');
           this.aiInsightLoading=false;
         },
-        async loadPortfolios() { const r=await this.api('GET','/portfolios'); if(r&&r.ok) this.portfolios=r.data; },
-        async loadAccounts() { const r=await this.api('GET','/accounts'); if(r&&r.ok){ this.accounts=r.data; this.refreshLastSync(); } },
-        async loadHoldings() { const r=await this.api('GET','/holdings'); if(r&&r.ok) this.holdings=r.data; },
+        async loadPortfolios() { const r=await this.gql('Portfolios'); if(r&&r.ok) this.portfolios=r.data; },
+        async loadAccounts() { const r=await this.gql('Accounts'); if(r&&r.ok){ this.accounts=r.data; this.refreshLastSync(); } },
+        async loadHoldings() { const r=await this.gql('Holdings'); if(r&&r.ok) this.holdings=r.data; },
         async loadStocks() {
           this.stocksLoading=true;
-          const r=await this.api('GET','/stocks');
+          const r=await this.gql('Stocks');
           if(r&&r.ok) this.stocksData=r.data;
           this.stocksLoading=false;
         },
         async loadDeposits(page=1) {
           this.depositPage=page;
-          const r=await this.api('GET','/dashboard/deposits?page='+page+'&limit='+this.depositLimit);
+          const r=await this.gql('Deposits', { page, limit: this.depositLimit });
           if(r&&r.ok){ this.deposits=r.data.data; this.depositTotal=r.data.total; }
         },
         depositPages() { return Math.max(1,Math.ceil(this.depositTotal/this.depositLimit)); },
         depositFrom() { return this.depositTotal===0?0:(this.depositPage-1)*this.depositLimit+1; },
         depositTo() { return Math.min(this.depositPage*this.depositLimit,this.depositTotal); },
         async loadSystemEvents() {
-          const r = await this.api('GET','/system/events');
+          const r = await this.gql('SystemEvents');
           if (r&&r.ok) { this.systemEvents=r.data.events; this.unreadCount=r.data.unreadCount; }
         },
         async loadQueue() {
-          const r = await this.api('GET','/system/queue');
+          const r = await this.gql('SystemQueue');
           if (r&&r.ok) { this.activityQueue=r.data.accounts; this.queueMeta={ nextSnapshot:r.data.nextSnapshot, snapshotIntervalMin:r.data.snapshotIntervalMin }; }
         },
         async markAllRead() {
-          await this.api('POST','/system/events/read-all', {});
+          await this.gql('MarkEventsRead');
           await this.loadSystemEvents();
         },
         async clearEvents() {
           if (!(await this.askConfirm({ title:'Clear all events?', message:'This cannot be undone.', confirmText:'Clear all' }))) return;
-          await this.api('DELETE','/system/events');
+          await this.gql('ClearEvents');
           await this.loadSystemEvents();
         },
         backfillPct(bf) {
@@ -1734,8 +1792,7 @@ export const appHtml = `<!doctype html>
           return Math.max(0, Math.min(100, Math.round((1 - remaining / total) * 100)));
         },
         async loadHistory() {
-          const q = '/dashboard/history?days='+this.historyRange+(this.historyPortfolio?('&portfolio_id='+this.historyPortfolio):'');
-          const r = await this.api('GET', q);
+          const r = await this.gql('History', { days: String(this.historyRange), portfolioId: this.historyPortfolio ? Number(this.historyPortfolio) : null });
           if (r&&r.ok) { this.history=r.data; this.$nextTick(()=>this.renderChart()); }
         },
 
@@ -1816,7 +1873,7 @@ export const appHtml = `<!doctype html>
         setAssetChartPeriod(p){ if(this.assetChartPeriod===p) return; this.assetChartPeriod=p; this.loadAssetChart(); },
         async loadAssetChart(){
           this.assetChartLoading=true;
-          const r=await this.api('GET','/dashboard/asset-chart?symbol='+encodeURIComponent(this.chartAsset)+'&period='+this.assetChartPeriod);
+          const r=await this.gql('AssetChart', { symbol: this.chartAsset, period: this.assetChartPeriod });
           this.assetChartLoading=false;
           if (r&&r.ok){ this.assetCandles=r.data.candles||[]; this.chartAssetUnit=r.data.unit||'USD'; this.$nextTick(()=>this.renderAssetChart()); }
           else { this.assetCandles=[]; if(this.assetChart){this.assetChart.destroy();this.assetChart=null;} if(r) this.flash(r.error,'error'); }
@@ -1848,8 +1905,9 @@ export const appHtml = `<!doctype html>
         periodDays() { const p=this.PERIODS.find(x=>x.k===this.analysisPeriod); return p?p.d:30; },
         async loadAnalysisHistory() {
           this.analysisLoading=true;
-          const ep = this.valueMode==='holdings' ? '/dashboard/asset-history' : '/dashboard/history';
-          const r=await this.api('GET',ep+'?days='+this.periodDays());
+          const r = this.valueMode==='holdings'
+            ? await this.gql('AssetHistory', { days: String(this.periodDays()) })
+            : await this.gql('History', { days: String(this.periodDays()) });
           this.analysisLoading=false;
           if (r&&r.ok) {
             if (this.valueMode==='holdings') { this.analysisHistory=(r.data&&r.data.points)||[]; this.assetPeaks=(r.data&&r.data.peaks)||[]; }
@@ -2025,19 +2083,19 @@ export const appHtml = `<!doctype html>
 
         async syncAll() {
           this.syncing=true;
-          const r=await this.api('POST','/dashboard/sync', {});
+          const r=await this.gql('SyncAll');
           this.syncing=false;
           if (r&&r.ok) { this.flash('Sync complete ('+r.data.synced+' accounts)', 'success'); await Promise.all([this.loadOverview(),this.loadAccounts(),this.loadDeposits(),this.loadHistory(),this.loadReturns()]); if(this.view==='analysis') this.loadAnalysis(); }
           else this.flash('Sync failed', 'error');
         },
         async syncAccount(id) {
-          const r=await this.api('POST','/accounts/'+id+'/sync', {});
+          const r=await this.gql('SyncAccount', { id: Number(id) });
           if (r&&r.ok) { this.flash('Account synced', 'success'); await Promise.all([this.loadAccounts(),this.loadOverview()]); }
           else if(r) this.flash(r.error||'Sync failed', 'error');
         },
         async backfillDeposits(id) {
           if (!(await this.askConfirm({ title:'Fetch full deposit history?', message:'Runs in the background (may take several minutes) and auto-resumes every 10 minutes.', confirmText:'Start backfill', danger:false }))) return;
-          const r=await this.api('POST','/accounts/'+id+'/backfill-deposits', {});
+          const r=await this.gql('BackfillDeposits', { id: Number(id) });
           if (r&&r.ok) { this.flash('Backfill started — running in the background. Monitor status in the account card / Deposits tab.', 'success'); await this.loadAccounts(); }
           else if(r) this.flash(r.error, 'error');
         },
@@ -2045,20 +2103,20 @@ export const appHtml = `<!doctype html>
         openPortfolioModal(p) { this.pf = p ? { id:p.id, name:p.name, description:p.description||'' } : { id:null, name:'', description:'' }; this.modal='portfolio'; },
         async savePortfolio() {
           const body={ name:this.pf.name, description:this.pf.description };
-          const r = this.pf.id ? await this.api('PUT','/portfolios/'+this.pf.id, body) : await this.api('POST','/portfolios', body);
+          const r = this.pf.id ? await this.gql('UpdatePortfolio', { id: Number(this.pf.id), input: body }) : await this.gql('CreatePortfolio', { input: body });
           if (r&&r.ok) { this.modal=null; await this.loadPortfolios(); await this.loadOverview(); } else if(r) this.flash(r.error, 'error');
         },
-        async deletePortfolio(id) { if(!(await this.askConfirm({ title:'Delete portfolio?', message:'This portfolio and all its contents will be removed.', confirmText:'Delete' }))) return; const r=await this.api('DELETE','/portfolios/'+id); if(r&&r.ok){ await this.loadPortfolios(); await this.loadOverview(); } },
+        async deletePortfolio(id) { if(!(await this.askConfirm({ title:'Delete portfolio?', message:'This portfolio and all its contents will be removed.', confirmText:'Delete' }))) return; const r=await this.gql('DeletePortfolio', { id: Number(id) }); if(r&&r.ok){ await this.loadPortfolios(); await this.loadOverview(); } },
 
         openHoldingModal(h) { const amt=h?Math.abs(Number(h.amount)||0):null; this.hd = h ? { id:h.id, portfolio_id:h.portfolio_id, label:h.label, currency:h.currency||'USD', amountDisplay:amt?amt.toLocaleString('en-US',{maximumFractionDigits:8}):'', direction:(Number(h.amount)<0?'out':'in'), note:h.note||'', added_at:this.toDateInput(h.added_at||h.created_at) } : { id:null, portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', label:'', currency:'USD', amountDisplay:'', direction:'in', note:'', added_at:this.toDateInput(null) }; this.modal='holding'; },
         async saveHolding() {
           const mag = Math.abs(parseFloat((this.hd.amountDisplay||'').replace(/,/g,''))||0);
           const amount = this.hd.direction==='out' ? -mag : mag;
           const body={ portfolio_id:this.hd.portfolio_id, label:this.hd.label, currency:this.hd.currency, amount, note:this.hd.note, added_at:this.hd.added_at?new Date(this.hd.added_at).getTime():null };
-          const r = this.hd.id ? await this.api('PUT','/holdings/'+this.hd.id, body) : await this.api('POST','/holdings', body);
+          const r = this.hd.id ? await this.gql('UpdateHolding', { id: Number(this.hd.id), input: body }) : await this.gql('CreateHolding', { input: body });
           if (r&&r.ok) { this.modal=null; await this.loadHoldings(); await this.loadOverview(); } else if(r) this.flash(r.error, 'error');
         },
-        async deleteHolding(id) { if(!(await this.askConfirm({ title:'Delete holding?', message:'This manual holding will be removed.', confirmText:'Delete' }))) return; const r=await this.api('DELETE','/holdings/'+id); if(r&&r.ok){ await this.loadHoldings(); await this.loadOverview(); } },
+        async deleteHolding(id) { if(!(await this.askConfirm({ title:'Delete holding?', message:'This manual holding will be removed.', confirmText:'Delete' }))) return; const r=await this.gql('DeleteHolding', { id: Number(id) }); if(r&&r.ok){ await this.loadHoldings(); await this.loadOverview(); } },
 
         openImportModal() { this.importCsv=''; this.importRowCount=0; this.importResult=null; this.importing=false; this.importPortfolioId=(this.portfolios[0]&&this.portfolios[0].id)||''; this.modal='import'; },
         onImportFile(ev) {
@@ -2071,7 +2129,7 @@ export const appHtml = `<!doctype html>
         async runHoldingImport() {
           if (!this.importCsv || this.importing) return;
           this.importing=true; this.importResult=null;
-          const r = await this.api('POST','/holdings/import', { csv:this.importCsv, portfolio_id:this.importPortfolioId||undefined });
+          const r = await this.gql('ImportHoldings', { input: { csv:this.importCsv, portfolio_id:this.importPortfolioId||undefined } });
           this.importing=false;
           if (r&&r.ok) { this.importResult=r.data; if(r.data.imported>0){ await this.loadHoldings(); await this.loadOverview(); this.flash('Imported '+r.data.imported+' holding(s)', 'success'); } if(r.data.imported===0) this.flash('No rows imported', 'error'); }
           else if (r) this.flash(r.error, 'error');
@@ -2114,27 +2172,27 @@ export const appHtml = `<!doctype html>
             body.tokens = presets.filter(t=>this.ac.tokens.includes(t.symbol));
             if (this.ac.rpcUrl) body.rpcUrl=this.ac.rpcUrl;
           }
-          const r = this.ac.id ? await this.api('PUT','/accounts/'+this.ac.id, body) : await this.api('POST','/accounts', body);
+          const r = this.ac.id ? await this.gql('UpdateAccount', { id: Number(this.ac.id), input: body }) : await this.gql('CreateAccount', { input: body });
           if (r&&r.ok) { this.modal=null; await this.loadAccounts(); if(this.ac.id===null && r.data.id){ await this.syncAccount(r.data.id);} } else if(r) this.ac.error=r.error;
         },
-        async deleteAccount(id) { if(!(await this.askConfirm({ title:'Delete account?', message:'This connected account and its synced balances will be removed.', confirmText:'Delete' }))) return; const r=await this.api('DELETE','/accounts/'+id); if(r&&r.ok){ await this.loadAccounts(); await this.loadOverview(); } },
+        async deleteAccount(id) { if(!(await this.askConfirm({ title:'Delete account?', message:'This connected account and its synced balances will be removed.', confirmText:'Delete' }))) return; const r=await this.gql('DeleteAccount', { id: Number(id) }); if(r&&r.ok){ await this.loadAccounts(); await this.loadOverview(); } },
 
         async changePassword() {
           if (this.pw.next.length<10) { this.flash('New password must be at least 10 characters', 'error'); return; }
-          const r=await this.api('POST','/auth/change-password', { current:this.pw.current, next:this.pw.next });
+          const r=await this.gql('ChangePassword', { current:this.pw.current, next:this.pw.next });
           if (r&&r.ok) { this.pw={current:'',next:''}; this.flash('Password changed successfully', 'success'); } else if(r) this.flash(r.error, 'error');
         },
         async exportCsv(type) {
-          const res = await fetch('/api/export/'+type+'.csv');
-          if (res.status===401) { location.href='/login'; return; }
-          if (!res.ok) { this.flash('Export failed', 'error'); return; }
-          const blob = await res.blob();
+          const r = await this.gql('ExportCsv', { type });
+          if (!r) return;
+          if (!r.ok) { this.flash('Export failed', 'error'); return; }
+          const blob = new Blob([r.data.content], { type:'text/csv;charset=utf-8' });
           const url = URL.createObjectURL(blob);
-          const a = document.createElement('a'); a.href=url; a.download=type+'.csv';
+          const a = document.createElement('a'); a.href=url; a.download=r.data.filename||(type+'.csv');
           document.body.appendChild(a); a.click(); a.remove();
           setTimeout(()=>URL.revokeObjectURL(url), 1000);
         },
-        async logout() { await this.api('POST','/auth/logout', {}); location.href='/login'; }
+        async logout() { await this.gql('Logout'); location.href='/login'; }
       };
     }
   </script>

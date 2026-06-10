@@ -1,19 +1,14 @@
 import { Hono } from 'hono';
+import { getCookie, setCookie } from 'hono/cookie';
 import type { Env, Variables, AppContext } from './types';
-import { securityHeaders, requireAuth, requireCsrf } from './lib/auth';
+import { securityHeaders } from './lib/auth';
 import { getSession, readSessionCookie } from './lib/session';
 import { loginHtml } from './frontend/login';
 import { appHtml } from './frontend/app';
 import { iconSvg, manifestJson, swJs } from './frontend/pwa';
 
-import authRoutes from './routes/auth';
-import portfolioRoutes from './routes/portfolios';
-import accountRoutes from './routes/accounts';
-import holdingRoutes from './routes/holdings';
-import stockRoutes from './routes/stocks';
-import dashboardRoutes from './routes/dashboard';
-import exportRoutes from './routes/export';
-import systemRoutes from './routes/system';
+import { yoga } from './graphql/yoga';
+import { graphiqlGate } from './graphql/graphiqlGate';
 import { syncAll } from './services/sync';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -59,23 +54,49 @@ app.get('/sw.js', (c) => {
   return c.body(swJs);
 });
 
-// --- API publik (auth) ---
-app.route('/api/auth', authRoutes);
+// --- GraphQL API ---
+// Seluruh REST lama (/api/*) digantikan oleh satu endpoint GraphQL.
+// Auth (requireAuth) & CSRF (requireCsrf) kini ditegakkan di authPlugin (lihat graphql/authPlugin.ts).
+const GRAPHIQL_COOKIE = 'graphiql_unlocked';
 
-// --- API terproteksi ---
-const api = new Hono<{ Bindings: Env; Variables: Variables }>();
-api.use('*', requireAuth, requireCsrf);
-api.route('/portfolios', portfolioRoutes);
-api.route('/accounts', accountRoutes);
-api.route('/holdings', holdingRoutes);
-api.route('/stocks', stockRoutes);
-api.route('/dashboard', dashboardRoutes);
-api.route('/export', exportRoutes);
-api.route('/system', systemRoutes);
-app.route('/api', api);
+const sessionOf = async (c: AppContext) => {
+  const sid = readSessionCookie(c);
+  return sid ? await getSession(c.env, sid) : null;
+};
+
+// Gerbang password GraphiQL: verifikasi password lalu set cookie unlock.
+app.post('/graphql/unlock', async (c) => {
+  if (!(await sessionOf(c))) return c.redirect('/login', 302);
+  const form = await c.req.parseBody();
+  const password = typeof form.password === 'string' ? form.password : '';
+  const gatePassword = c.env.GRAPHIQL_PASSWORD;
+  if (!gatePassword || password !== gatePassword) {
+    return c.html(withNonce(graphiqlGate(true), c.get('cspNonce')), 401);
+  }
+  setCookie(c, GRAPHIQL_COOKIE, '1', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Strict',
+    path: '/',
+    maxAge: 60 * 60 * 12, // 12 jam
+  });
+  return c.redirect('/graphql', 302);
+});
+
+// Endpoint GraphQL (POST query/mutation) + halaman GraphiQL (GET text/html, di-gate).
+app.all('/graphql', async (c) => {
+  const wantsHtml = c.req.method === 'GET' && (c.req.header('accept') || '').includes('text/html');
+  if (wantsHtml) {
+    if (!(await sessionOf(c))) return c.redirect('/login', 302);
+    if (getCookie(c, GRAPHIQL_COOKIE) !== '1') {
+      return c.html(withNonce(graphiqlGate(false), c.get('cspNonce')));
+    }
+  }
+  return yoga.fetch(c.req.raw, { env: c.env, executionCtx: c.executionCtx, cookieJar: [] });
+});
 
 app.notFound((c) => {
-  if (c.req.path.startsWith('/api')) return c.json({ ok: false, error: 'not_found' }, 404);
+  if (c.req.path === '/graphql') return c.json({ ok: false, error: 'not_found' }, 404);
   return c.redirect('/', 302);
 });
 

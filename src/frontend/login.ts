@@ -141,6 +141,18 @@ export const loginHtml = `<!doctype html>
     // Enable smooth transitions after first paint (avoids transition on initial dark apply)
     requestAnimationFrame(()=>requestAnimationFrame(()=>document.body.classList.add('theme-ready')));
 
+    // Helper GraphQL untuk halaman login (operasi publik: tanpa session/CSRF).
+    // Nama operasi dikirim di ?q= agar mudah di-debug di Network tab.
+    async function gql(op, query, variables) {
+      const res = await fetch('/graphql?q=' + op, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operationName: op, query, variables: variables || {} })
+      });
+      const json = await res.json().catch(() => null);
+      return json || { errors: [{ message: 'Network error' }] };
+    }
+
     function loginPage() {
       return {
         mode: 'login', username: '', password: '', error: '', loading: false,
@@ -148,28 +160,22 @@ export const loginHtml = `<!doctype html>
         async init() {
           if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
           try {
-            const r = await fetch('/api/auth/status').then(x => x.json());
-            if (r.data && r.data.authenticated) { location.href = '/'; return; }
-            if (r.data && r.data.needsSetup) this.mode = 'setup';
+            const r = await gql('AuthStatus', 'query AuthStatus { authStatus { needsSetup authenticated } }');
+            const d = r.data && r.data.authStatus;
+            if (d && d.authenticated) { location.href = '/'; return; }
+            if (d && d.needsSetup) this.mode = 'setup';
           } catch (e) {}
         },
         async submit() {
           this.error = ''; this.loading = true;
           try {
-            const path = this.mode === 'setup' ? '/api/auth/setup' : '/api/auth/login';
-            const res = await fetch(path, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username: this.username, password: this.password })
-            });
-            const data = await res.json();
-            if (!res.ok || !data.ok) { this.error = data.error || 'Failed'; this.loading = false; return; }
             if (this.mode === 'setup') {
-              // after setup, auto login
-              const lr = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: this.username, password: this.password }) });
-              const ld = await lr.json();
-              if (!lr.ok || !ld.ok) { this.error = ld.error || 'Login failed'; this.loading = false; return; }
+              const sr = await gql('Setup', 'mutation Setup($username:String!,$password:String!){ setup(username:$username,password:$password) }', { username: this.username, password: this.password });
+              if (sr.errors && sr.errors.length) { this.error = sr.errors[0].message || 'Failed'; this.loading = false; return; }
             }
+            // Login (mode setup auto-login setelah setup berhasil).
+            const lr = await gql('Login', 'mutation Login($username:String!,$password:String!){ login(username:$username,password:$password) }', { username: this.username, password: this.password });
+            if (lr.errors && lr.errors.length) { this.error = lr.errors[0].message || 'Login failed'; this.loading = false; return; }
             location.href = '/';
           } catch (e) { this.error = 'Network error'; this.loading = false; }
         }

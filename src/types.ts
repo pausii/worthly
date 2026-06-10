@@ -10,6 +10,7 @@ export interface Env {
 
   // Secrets / vars
   MASTER_KEY: string; // base64, 32 byte — kunci enkripsi kredensial
+  GRAPHIQL_PASSWORD?: string; // password proteksi konsol GraphiQL
   ENVIRONMENT?: string;
   SNAPSHOT_INTERVAL_MINUTES?: string;
   // Round-robin sync: jumlah account yang disinkron per tick cron (0/kosong = semua).

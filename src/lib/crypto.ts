@@ -15,7 +15,9 @@ export function b64encode(buf: ArrayBuffer | Uint8Array): string {
   return btoa(s);
 }
 
-export function b64decode(str: string): Uint8Array {
+// Tipe kembalian dipersempit ke Uint8Array<ArrayBuffer> (memang ArrayBuffer-backed) agar
+// kompatibel dengan BufferSource ketat dari lib DOM yang ikut tertarik dependensi graphql-yoga.
+export function b64decode(str: string): Uint8Array<ArrayBuffer> {
   const bin = atob(str);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);

@@ -3,29 +3,13 @@ import type { AccountType, Env, Variables } from '../types';
 import { now, queryAll, queryOne, run } from '../lib/db';
 import { encryptSecret } from '../lib/crypto';
 import { ok, fail } from '../lib/response';
-import { syncOne, startDepositBackfill, runDepositBackfill } from '../services/sync';
-import { refreshOverview } from '../services/overview';
-import { getUsdRates } from '../services/prices';
-import { isCooling } from '../lib/cooldown';
+import { syncOne } from '../services/sync';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const CEX_TYPES = new Set<AccountType>(['binance', 'bybit']);
-const ONCHAIN_TYPES = new Set<AccountType>(['tron', 'eth', 'bsc', 'btc']);
-const STOCK_TYPES = new Set<AccountType>(['idx']);
-const ALL_TYPES = new Set<AccountType>([...CEX_TYPES, ...ONCHAIN_TYPES, ...STOCK_TYPES]);
-
-/** Normalisasi posisi saham dari body request → [{ ticker, lots, avgPrice }] (buang yang tak valid). */
-function parsePositions(raw: unknown): { ticker: string; lots: number; avgPrice: number }[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((p: any) => ({
-      ticker: String(p?.ticker ?? '').trim().toUpperCase(),
-      lots: Number(p?.lots),
-      avgPrice: Number(p?.avgPrice),
-    }))
-    .filter((p) => p.ticker && isFinite(p.lots) && p.lots > 0 && isFinite(p.avgPrice) && p.avgPrice >= 0);
-}
+const ONCHAIN_TYPES = new Set<AccountType>(['tron', 'eth', 'bsc']);
+const ALL_TYPES = new Set<AccountType>([...CEX_TYPES, ...ONCHAIN_TYPES]);
 
 interface AccountRow {
   id: number;
@@ -68,59 +52,7 @@ function publicView(row: AccountRow) {
 
 app.get('/', async (c) => {
   const rows = await queryAll<AccountRow>(c.env, 'SELECT * FROM accounts ORDER BY portfolio_id, id');
-  const states = await queryAll<{ account_id: number; value: string }>(
-    c.env,
-    "SELECT account_id, value FROM sync_state WHERE key = 'deposit_backfill'",
-  );
-  const stateMap = new Map(states.map((s) => [s.account_id, s.value]));
-
-  // Nilai USD + jumlah aset + top aset per-account (untuk kartu di halaman Accounts).
-  const bals = await queryAll<{ account_id: number; asset: string; total: number }>(
-    c.env,
-    'SELECT account_id, asset, SUM(total) AS total FROM balances GROUP BY account_id, asset',
-  );
-  const assetSet = new Set<string>();
-  for (const b of bals) assetSet.add(b.asset.toUpperCase());
-  const rates = await getUsdRates(c.env, [...assetSet]);
-  const valByAcc = new Map<number, { usd: number; count: number; assets: { asset: string; usd: number }[] }>();
-  for (const b of bals) {
-    if (!(b.total > 0)) continue;
-    const usd = b.total * (rates[b.asset.toUpperCase()] ?? 0);
-    let e = valByAcc.get(b.account_id);
-    if (!e) {
-      e = { usd: 0, count: 0, assets: [] };
-      valByAcc.set(b.account_id, e);
-    }
-    e.usd += usd;
-    e.count += 1;
-    e.assets.push({ asset: b.asset.toUpperCase(), usd });
-  }
-
-  return ok(
-    c,
-    rows.map((r) => {
-      let backfill: unknown = null;
-      const v = stateMap.get(r.id);
-      if (v) {
-        try {
-          backfill = JSON.parse(v);
-        } catch {
-          backfill = null;
-        }
-      }
-      const val = valByAcc.get(r.id);
-      const topAssets = val
-        ? [...val.assets].sort((a, b) => b.usd - a.usd).slice(0, 3).map((a) => a.asset)
-        : [];
-      return {
-        ...publicView(r),
-        deposit_backfill: backfill,
-        value_usd: val?.usd ?? 0,
-        asset_count: val?.count ?? 0,
-        top_assets: topAssets,
-      };
-    }),
-  );
+  return ok(c, rows.map(publicView));
 });
 
 app.post('/', async (c) => {
@@ -143,11 +75,6 @@ app.post('/', async (c) => {
     const apiSecret = (body.apiSecret ?? '').trim();
     if (!apiKey || !apiSecret) return fail(c, 'API key & secret wajib diisi');
     encCredentials = await encryptSecret(JSON.stringify({ apiKey, apiSecret }), c.env.MASTER_KEY);
-  } else if (STOCK_TYPES.has(type)) {
-    // Saham IDX: tanpa kredensial. Posisi (ticker + lot + harga beli) disimpan di config.
-    const positions = parsePositions(body.positions);
-    if (!positions.length) return fail(c, 'Minimal satu posisi saham wajib diisi');
-    config = JSON.stringify({ positions });
   } else {
     const address = (body.address ?? '').trim();
     if (!address) return fail(c, 'Address wallet wajib diisi');
@@ -160,7 +87,7 @@ app.post('/', async (c) => {
             decimals: Number(t.decimals) || 18,
           }))
       : [];
-    config = JSON.stringify({ address, trackNative: body.trackNative !== false, tokens, autoDetect: body.autoDetect === true });
+    config = JSON.stringify({ address, trackNative: body.trackNative !== false, tokens });
     const rpcUrl = (body.rpcUrl ?? '').trim();
     if (rpcUrl) encCredentials = await encryptSecret(JSON.stringify({ rpcUrl }), c.env.MASTER_KEY);
   }
@@ -206,13 +133,8 @@ app.put('/:id', async (c) => {
               decimals: Number(t.decimals) || 18,
             }))
         : prev.tokens ?? [];
-    const autoDetect = body.autoDetect !== undefined ? body.autoDetect === true : prev.autoDetect === true;
-    config = JSON.stringify({ address, trackNative, tokens, autoDetect });
+    config = JSON.stringify({ address, trackNative, tokens });
     if (body.rpcUrl) encCredentials = await encryptSecret(JSON.stringify({ rpcUrl: String(body.rpcUrl).trim() }), c.env.MASTER_KEY);
-  } else if (STOCK_TYPES.has(type)) {
-    const prev = row.config ? JSON.parse(row.config) : {};
-    const positions = body.positions !== undefined ? parsePositions(body.positions) : prev.positions ?? [];
-    config = JSON.stringify({ positions });
   } else {
     // Rotasi kredensial CEX hanya bila keduanya dikirim.
     if (body.apiKey && body.apiSecret) {
@@ -247,25 +169,8 @@ app.post('/:id/sync', async (c) => {
   const id = Number(c.req.param('id'));
   const found = await syncOne(c.env, id);
   if (!found) return fail(c, 'Account tidak ditemukan', 404);
-  await refreshOverview(c.env).catch(() => undefined);
   const row = await queryOne<AccountRow>(c.env, 'SELECT * FROM accounts WHERE id = ?', id);
   return ok(c, row ? publicView(row) : { synced: true });
-});
-
-// Mulai backfill full-history deposit (Binance): mundur per jendela 90 hari sampai transaksi terlama.
-// Sebagian besar diproses di latar belakang (waitUntil), sisanya dilanjutkan cron tiap 10 menit.
-app.post('/:id/backfill-deposits', async (c) => {
-  const id = Number(c.req.param('id'));
-  const acc = await queryOne<AccountRow>(c.env, 'SELECT * FROM accounts WHERE id = ?', id);
-  if (!acc) return fail(c, 'Account tidak ditemukan', 404);
-  if (acc.type !== 'binance') return fail(c, 'Backfill saat ini hanya untuk Binance');
-  if (await isCooling(c.env, 'cex:binance'))
-    return fail(c, 'Binance sedang cooldown (geo-block 451). Coba lagi setelah ~15 menit.');
-  const started = await startDepositBackfill(c.env, id);
-  if (!started) return fail(c, 'Gagal memulai backfill');
-  // Burst awal kecil (8 jendela, jeda 1 dtk) agar tak memicu flag IP; sisanya disebar cron 3/tick.
-  c.executionCtx.waitUntil(runDepositBackfill(c.env, id, 8).catch(() => undefined));
-  return ok(c, { started: true });
 });
 
 // Saldo terkini untuk satu account.
