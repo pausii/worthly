@@ -1,4 +1,4 @@
-import type { CexCredentials, NormalizedBalance, NormalizedDeposit, WalletType } from '../../types';
+import type { CexBalanceFetch, CexCredentials, NormalizedBalance, NormalizedDeposit, WalletType } from '../../types';
 import { hmacSha256Hex } from '../../lib/crypto';
 
 const BASE = 'https://api.bybit.com';
@@ -83,9 +83,15 @@ async function getWalletBalance(
   return out;
 }
 
+/**
+ * Earn. Sebagian akun tidak punya akses, jadi kegagalan satu kategori ditoleransi — tapi kalau
+ * SEMUA kategori gagal, lempar error agar pemadaman tidak terbaca sebagai "earn kosong".
+ */
 export async function getEarnBalances(creds: CexCredentials): Promise<NormalizedBalance[]> {
   const out: NormalizedBalance[] = [];
-  for (const category of ['FlexibleSaving', 'OnChain']) {
+  const categories = ['FlexibleSaving', 'OnChain'];
+  const errors: string[] = [];
+  for (const category of categories) {
     try {
       const result = await signedRequest<{ list: Array<{ coin: string; amount: string }> }>(
         creds,
@@ -97,27 +103,42 @@ export async function getEarnBalances(creds: CexCredentials): Promise<Normalized
         const total = parseFloat(p.amount || '0');
         if (total > 0) out.push({ walletType: 'earn', asset: p.coin, free: 0, locked: total, total });
       }
-    } catch {
-      /* sebagian akun tidak punya akses earn — abaikan */
+    } catch (e) {
+      errors.push(e instanceof Error ? e.message : String(e));
     }
   }
+  if (errors.length === categories.length) throw new Error(`Earn gagal — ${errors.join(' | ')}`);
   return out;
 }
 
-export async function getAllBalances(creds: CexCredentials): Promise<NormalizedBalance[]> {
+/**
+ * Ambil saldo semua dompet. Sama seperti Binance: tiap dompet dilaporkan terpisah agar
+ * kegagalan sebagian tidak menghapus saldo dompet lain.
+ */
+export async function getAllBalances(creds: CexCredentials): Promise<CexBalanceFetch> {
   // UNIFIED mencakup spot + derivatif untuk Unified Trading Account.
-  const results = await Promise.allSettled([
-    getWalletBalance(creds, 'UNIFIED', 'spot'),
-    getWalletBalance(creds, 'FUND', 'funding'),
-    getEarnBalances(creds),
-  ]);
-  const out: NormalizedBalance[] = [];
-  for (const r of results) if (r.status === 'fulfilled') out.push(...r.value);
-  if (out.length === 0 && results.every((r) => r.status === 'rejected')) {
-    const first = results.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
-    throw new Error(first?.reason?.message ?? 'Semua endpoint Bybit gagal');
-  }
-  return out;
+  const sources: Array<[WalletType, Promise<NormalizedBalance[]>]> = [
+    ['spot', getWalletBalance(creds, 'UNIFIED', 'spot')],
+    ['funding', getWalletBalance(creds, 'FUND', 'funding')],
+    ['earn', getEarnBalances(creds)],
+  ];
+  const results = await Promise.allSettled(sources.map(([, p]) => p));
+
+  const balances: NormalizedBalance[] = [];
+  const synced: WalletType[] = [];
+  const failures: CexBalanceFetch['failures'] = [];
+  results.forEach((r, i) => {
+    const wallet = sources[i][0];
+    if (r.status === 'fulfilled') {
+      balances.push(...r.value);
+      synced.push(wallet);
+    } else {
+      failures.push({ wallet, message: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+    }
+  });
+  if (!synced.length)
+    throw new Error(`Semua endpoint Bybit gagal — ${failures.map((f) => `${f.wallet}: ${f.message}`).join(' | ')}`);
+  return { balances, synced, failures };
 }
 
 export async function getDepositHistory(

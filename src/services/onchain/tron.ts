@@ -76,23 +76,26 @@ export async function getTronBalances(
   }
 
   const holderHex = tronAddressToHex20(address).padStart(64, '0');
+  // Token dipilih eksplisit lewat UI: kegagalan di-propagate supaya saldo lama dipertahankan,
+  // bukan tertulis nol tanpa jejak.
   for (const token of config.tokens ?? []) {
+    let result: { constant_result?: string[] };
     try {
-      const result = await post<{ constant_result?: string[] }>(url, '/wallet/triggerconstantcontract', {
+      result = await post<{ constant_result?: string[] }>(url, '/wallet/triggerconstantcontract', {
         owner_address: address,
         contract_address: token.contract,
         function_selector: 'balanceOf(address)',
         parameter: holderHex,
         visible: true,
       }, apiKey);
-      const hex = result.constant_result?.[0];
-      if (hex) {
-        const total = formatUnits(BigInt('0x' + hex), token.decimals);
-        if (total > 0)
-          out.push({ walletType: 'onchain', asset: token.symbol.toUpperCase(), free: total, locked: 0, total });
-      }
-    } catch {
-      // token bermasalah — lanjut
+    } catch (e) {
+      throw new Error(`${token.symbol.toUpperCase()}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    const hex = result.constant_result?.[0];
+    if (hex) {
+      const total = formatUnits(BigInt('0x' + hex), token.decimals);
+      if (total > 0)
+        out.push({ walletType: 'onchain', asset: token.symbol.toUpperCase(), free: total, locked: 0, total });
     }
   }
   return out;

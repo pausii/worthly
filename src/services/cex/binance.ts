@@ -1,4 +1,4 @@
-import type { CexCredentials, NormalizedBalance, NormalizedDeposit } from '../../types';
+import type { CexBalanceFetch, CexCredentials, NormalizedBalance, NormalizedDeposit, WalletType } from '../../types';
 import { hmacSha256Hex } from '../../lib/crypto';
 
 const SPOT_BASE = 'https://api.binance.com';
@@ -100,8 +100,14 @@ export async function getFuturesBalances(creds: CexCredentials, proxyUrl?: strin
     .filter((b) => b.total > 0);
 }
 
+/**
+ * Simple Earn (Flexible + Locked). Sebagian API key tidak punya akses Earn, jadi kegagalan
+ * satu kategori ditoleransi. Tapi kalau SEMUA kategori gagal, lempar error — kalau tidak,
+ * pemadaman total akan terbaca sebagai "earn kosong" dan menghapus saldo earn yang tersimpan.
+ */
 export async function getEarnBalances(creds: CexCredentials, proxyUrl?: string): Promise<NormalizedBalance[]> {
   const out: NormalizedBalance[] = [];
+  const errors: string[] = [];
   // Simple Earn — Flexible
   try {
     const flex = await signedRequest<{ rows: Array<{ asset: string; totalAmount: string }> }>(
@@ -116,8 +122,8 @@ export async function getEarnBalances(creds: CexCredentials, proxyUrl?: string):
       const total = parseFloat(r.totalAmount);
       if (total > 0) out.push({ walletType: 'earn', asset: r.asset, free: 0, locked: total, total });
     }
-  } catch {
-    /* abaikan */
+  } catch (e) {
+    errors.push(e instanceof Error ? e.message : String(e));
   }
   // Simple Earn — Locked
   try {
@@ -141,33 +147,24 @@ export async function getEarnBalances(creds: CexCredentials, proxyUrl?: string):
         }
       }
     }
-  } catch {
-    /* abaikan */
+  } catch (e) {
+    errors.push(e instanceof Error ? e.message : String(e));
   }
+  if (errors.length === 2) throw new Error(`Simple Earn gagal — ${errors.join(' | ')}`);
   return out;
 }
 
-export async function getAllBalances(creds: CexCredentials, proxyUrl?: string): Promise<NormalizedBalance[]> {
-  const results = await Promise.allSettled([
-    getSpotBalances(creds, proxyUrl),
-    getFuturesBalances(creds, proxyUrl),
-    getFundingBalances(creds, proxyUrl),
-    getEarnBalances(creds, proxyUrl),
-  ]);
-  const out: NormalizedBalance[] = [];
-  for (const r of results) if (r.status === 'fulfilled') out.push(...r.value);
-  // Lempar error bila hasil kosong PADAHAL ada endpoint yang gagal (mis. 451 geo / rate-limit).
-  // Tanpa ini, hasil [] akan menghapus saldo lama lewat upsert (DELETE-then-insert). Hanya
-  // anggap "wallet benar-benar kosong" jika SEMUA endpoint sukses tapi memang tak ada saldo.
-  const anyRejected = results.some((r) => r.status === 'rejected');
-  if (out.length === 0 && anyRejected) {
-    const first = results.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
-    throw new Error(first?.reason?.message ?? 'Sebagian/seluruh endpoint Binance gagal');
-  }
-  // Hindari double-count: posisi Simple Earn muncul lagi di spot sebagai "LD"+aset
-  // (token Flexible Savings). Buang entri spot LDx bila underlying-nya sudah ada di earn.
-  const earnAssets = new Set(out.filter((b) => b.walletType === 'earn').map((b) => b.asset.toUpperCase()));
-  return out.filter(
+/**
+ * Hindari double-count: posisi Simple Earn muncul lagi di spot sebagai "LD"+aset
+ * (token Flexible Savings). Buang entri spot LDx bila underlying-nya sudah dihitung di earn.
+ * `earnAssets` dipasok pemanggil karena dompet earn bisa saja gagal diambil pada siklus ini —
+ * yang dipakai lalu adalah aset earn yang tersimpan sebelumnya.
+ */
+export function dropEarnDuplicates(
+  balances: NormalizedBalance[],
+  earnAssets: Set<string>,
+): NormalizedBalance[] {
+  return balances.filter(
     (b) =>
       !(
         b.walletType === 'spot' &&
@@ -175,6 +172,37 @@ export async function getAllBalances(creds: CexCredentials, proxyUrl?: string): 
         earnAssets.has(b.asset.toUpperCase().slice(2))
       ),
   );
+}
+
+/**
+ * Ambil saldo semua dompet. Tiap dompet dilaporkan berhasil/gagal secara terpisah supaya
+ * kegagalan sebagian (mis. 451 geo, rate-limit, izin API key kurang) tidak menghapus saldo
+ * dompet lain — pemanggil hanya menimpa dompet yang ada di `synced`.
+ */
+export async function getAllBalances(creds: CexCredentials, proxyUrl?: string): Promise<CexBalanceFetch> {
+  const sources: Array<[WalletType, Promise<NormalizedBalance[]>]> = [
+    ['spot', getSpotBalances(creds, proxyUrl)],
+    ['futures', getFuturesBalances(creds, proxyUrl)],
+    ['funding', getFundingBalances(creds, proxyUrl)],
+    ['earn', getEarnBalances(creds, proxyUrl)],
+  ];
+  const results = await Promise.allSettled(sources.map(([, p]) => p));
+
+  const balances: NormalizedBalance[] = [];
+  const synced: WalletType[] = [];
+  const failures: CexBalanceFetch['failures'] = [];
+  results.forEach((r, i) => {
+    const wallet = sources[i][0];
+    if (r.status === 'fulfilled') {
+      balances.push(...r.value);
+      synced.push(wallet);
+    } else {
+      failures.push({ wallet, message: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+    }
+  });
+  if (!synced.length)
+    throw new Error(`Semua endpoint Binance gagal — ${failures.map((f) => `${f.wallet}: ${f.message}`).join(' | ')}`);
+  return { balances, synced, failures };
 }
 
 interface BinanceDepositRow {

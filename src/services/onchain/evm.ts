@@ -44,18 +44,22 @@ export async function getEvmBalances(
     if (total > 0) out.push({ walletType: 'onchain', asset: nativeSymbol, free: total, locked: 0, total });
   }
 
+  // Token di sini dipilih eksplisit lewat UI, jadi kegagalannya di-propagate: account ditandai
+  // `error` dan saldo lama dipertahankan, alih-alih tertulis nol tanpa jejak.
+  // (Token hasil auto-deteksi ditangani terpisah di getEvmAutoBalances yang memang toleran.)
   for (const token of config.tokens ?? []) {
+    let hex: string;
     try {
-      const hex = await rpc<string>(url, 'eth_call', [
+      hex = await rpc<string>(url, 'eth_call', [
         { to: token.contract, data: balanceOfData(address) },
         'latest',
       ]);
-      const total = formatUnits(hex, token.decimals);
-      if (total > 0)
-        out.push({ walletType: 'onchain', asset: token.symbol.toUpperCase(), free: total, locked: 0, total });
-    } catch {
-      // token bermasalah — lanjut ke token berikutnya
+    } catch (e) {
+      throw new Error(`${token.symbol.toUpperCase()}: ${e instanceof Error ? e.message : String(e)}`);
     }
+    const total = formatUnits(hex, token.decimals);
+    if (total > 0)
+      out.push({ walletType: 'onchain', asset: token.symbol.toUpperCase(), free: total, locked: 0, total });
   }
   return out;
 }

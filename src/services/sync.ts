@@ -6,6 +6,7 @@ import type {
   OnchainConfig,
   OnchainCredentials,
   StockConfig,
+  WalletType,
 } from '../types';
 import { now, queryAll, queryOne, run } from '../lib/db';
 import { decryptSecret } from '../lib/crypto';
@@ -53,10 +54,33 @@ async function setCursor(env: Env, accountId: number, key: string, value: string
   );
 }
 
-/** Tulis ulang saldo terkini untuk satu account (hapus yang sudah tidak ada). */
-async function upsertBalances(env: Env, accountId: number, balances: NormalizedBalance[]): Promise<void> {
+/**
+  * Tulis ulang saldo terkini untuk satu account (hapus yang sudah tidak ada).
+  *
+  * `syncedWallets` membatasi penghapusan hanya ke dompet yang datanya baru saja berhasil
+  * diambil. Dompet yang gagal diambil dibiarkan apa adanya — saldo lamanya dipertahankan
+  * supaya kegagalan sebagian tidak terbaca sebagai "saldo jadi nol" dan merusak snapshot.
+  * Tanpa argumen ini seluruh saldo account diganti (sumber tunggal: on-chain / saham).
+  */
+async function upsertBalances(
+  env: Env,
+  accountId: number,
+  balances: NormalizedBalance[],
+  syncedWallets?: WalletType[],
+): Promise<void> {
   const ts = now();
-  await run(env, 'DELETE FROM balances WHERE account_id = ?', accountId);
+  if (syncedWallets) {
+    if (!syncedWallets.length) return; // tak ada yang valid — jangan sentuh data lama
+    const placeholders = syncedWallets.map(() => '?').join(',');
+    await run(
+      env,
+      `DELETE FROM balances WHERE account_id = ? AND wallet_type IN (${placeholders})`,
+      accountId,
+      ...syncedWallets,
+    );
+  } else {
+    await run(env, 'DELETE FROM balances WHERE account_id = ?', accountId);
+  }
   for (const b of balances) {
     await run(
       env,
@@ -180,10 +204,53 @@ async function syncCexAccount(env: Env, acc: AccountRow): Promise<void> {
   const api = acc.type === 'binance' ? binance : bybit;
   const proxyUrl = acc.type === 'binance' ? (env.BINANCE_PROXY_URL || undefined) : undefined;
 
-  const balances = proxyUrl
+  const fetched = proxyUrl
     ? await binance.getAllBalances(creds, proxyUrl)
     : await api.getAllBalances(creds);
-  await upsertBalances(env, acc.id, balances);
+
+  // Dompet yang sudah punya saldo tersimpan — dipakai untuk memutuskan apakah kegagalan
+  // kali ini benar-benar "mempertahankan angka lama" (perlu diberitahukan) atau sekadar
+  // dompet yang memang tak pernah dipakai (jangan dijadikan peringatan berulang tiap cron).
+  const storedWallets = new Set(
+    (
+      await queryAll<{ wallet_type: string }>(
+        env,
+        'SELECT DISTINCT wallet_type FROM balances WHERE account_id = ?',
+        acc.id,
+      )
+    ).map((r) => r.wallet_type),
+  );
+
+  let balances = fetched.balances;
+  if (acc.type === 'binance') {
+    // Aset earn dipakai untuk membuang duplikat spot "LD"+aset. Kalau dompet earn gagal
+    // diambil, saldo earn lama tetap tersimpan — jadi acuannya diambil dari DB, bukan dari
+    // hasil fetch yang kosong (kalau tidak, LDx ikut terhitung dan jadi dobel).
+    const earnAssets = fetched.synced.includes('earn')
+      ? new Set(balances.filter((b) => b.walletType === 'earn').map((b) => b.asset.toUpperCase()))
+      : new Set(
+          (
+            await queryAll<{ asset: string }>(
+              env,
+              "SELECT asset FROM balances WHERE account_id = ? AND wallet_type = 'earn'",
+              acc.id,
+            )
+          ).map((r) => r.asset.toUpperCase()),
+        );
+    balances = binance.dropEarnDuplicates(balances, earnAssets);
+  }
+  await upsertBalances(env, acc.id, balances, fetched.synced);
+
+  const retained = fetched.failures.filter((f) => storedWallets.has(f.wallet));
+  if (retained.length) {
+    await addEvent(env, {
+      level: 'warning',
+      source: acc.type,
+      account_id: acc.id,
+      message: `Dompet ${retained.map((f) => f.wallet).join(', ')} gagal diambil — saldo lama dipertahankan`,
+      detail: retained.map((f) => `${f.wallet}: ${f.message}`).join(' | ').slice(0, 500),
+    });
+  }
 
   // Deposit incremental: mulai dari cursor terakhir (default 90 hari ke belakang).
   // Kegagalan di sini (mis. 451 geo) TIDAK boleh menggagalkan sync saldo — abaikan & coba lagi.

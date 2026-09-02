@@ -90,7 +90,8 @@ export async function computeValuation(env: Env): Promise<ValuationResult> {
         : b.account_type === 'tron' ||
             b.account_type === 'eth' ||
             b.account_type === 'bsc' ||
-            b.account_type === 'btc'
+            b.account_type === 'btc' ||
+            b.account_type === 'sol'
           ? 'onchain'
           : 'cex';
     addAsset(b.portfolio_id, b.asset, b.total, origin);

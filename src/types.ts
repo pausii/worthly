@@ -68,6 +68,17 @@ export interface NormalizedDeposit {
   raw?: unknown;
 }
 
+/**
+ * Hasil pengambilan saldo CEX. Sebuah CEX punya beberapa dompet (spot/futures/funding/earn)
+ * yang diambil terpisah, jadi sebagian bisa gagal. `synced` menandai dompet mana yang datanya
+ * benar-benar valid — hanya dompet itu yang boleh menimpa saldo lama, sisanya dipertahankan.
+ */
+export interface CexBalanceFetch {
+  balances: NormalizedBalance[];
+  synced: WalletType[];
+  failures: Array<{ wallet: WalletType; message: string }>;
+}
+
 // Kredensial CEX (terenkripsi di kolom enc_credentials)
 export interface CexCredentials {
   apiKey: string;

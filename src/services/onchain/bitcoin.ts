@@ -43,6 +43,9 @@ export async function getBitcoinBalances(
   apiCode?: string,
 ): Promise<NormalizedBalance[]> {
   const data = await getMultiaddr(base, active, 0, 0, apiCode);
+  // Respons 200 tapi tanpa `wallet` maupun `addresses` = balasan tak terduga (mis. halaman
+  // error/captcha blockchain.com), BUKAN saldo nol. Lempar error agar saldo lama dipertahankan.
+  if (!data.wallet && !data.addresses) throw new Error('blockchain.com multiaddr: respons tanpa data saldo');
   const sats =
     data.wallet?.final_balance ?? (data.addresses ?? []).reduce((s, a) => s + (a.final_balance ?? 0), 0);
   const total = sats / SATS;
