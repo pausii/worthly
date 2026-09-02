@@ -58,7 +58,8 @@ SYNC_BATCH_SIZE = "2"
 # wrangler secret put RPC_BSC_URL         -> Alchemy BNB Smart Chain
 # wrangler secret put RPC_TRON_URL        -> TronGrid (mis. https://api.trongrid.io)
 # wrangler secret put RPC_TRON_API_KEY    -> opsional, TronGrid API key (hindari rate-limit)
-# wrangler secret put RPC_SOL_URL         -> opsional, RPC Solana. Kosong = endpoint publik
-#                                            https://api.mainnet-beta.solana.com (rate-limit ketat)
+# wrangler secret put RPC_SOL_URL         -> SANGAT disarankan, mis. Helius free tier.
+#                                            api.mainnet-beta.solana.com memblokir IP Cloudflare Workers;
+#                                            tanpa ini dipakai endpoint publik yang sering kena 429.
 # wrangler secret put BINANCE_PROXY_URL   -> HTTP CONNECT proxy bypass geo-block Binance
 #                                            format: http://user:pass@host:port (opsional)

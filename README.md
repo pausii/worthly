@@ -65,7 +65,7 @@ npx wrangler secret put RPC_ETH_URL        # mis. https://eth-mainnet.g.alchemy.
 npx wrangler secret put RPC_BSC_URL        # mis. https://bnb-mainnet.g.alchemy.com/v2/KEY
 npx wrangler secret put RPC_TRON_URL       # mis. https://api.trongrid.io
 npx wrangler secret put RPC_TRON_API_KEY   # opsional, TronGrid API key (hindari rate-limit)
-npx wrangler secret put RPC_SOL_URL         # opsional, mis. Helius/QuickNode. Kosong = https://api.mainnet-beta.solana.com
+npx wrangler secret put RPC_SOL_URL         # disarankan, mis. Helius (api.mainnet-beta.solana.com memblokir IP Workers)
 
 # Opsional lain:
 npx wrangler secret put COINGECKO_API_KEY  # opsional, sumber harga tambahan
@@ -98,7 +98,8 @@ Buka aplikasi → akan diminta **setup user pertama** (username + password ≥ 1
 - **On-chain (BTC/ETH/BSC/Tron/Solana):** menu *Accounts* → pilih jaringan → isi address wallet,
   (opsional) URL RPC (Alchemy untuk EVM / TronGrid untuk TRON / JSON-RPC untuk Solana), dan daftar token
   ERC20/BEP20/TRC20/SPL yang ingin ditrack (contract atau mint, simbol, decimals). Solana: SOL native + USDT
-  (mint `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`) tersedia sebagai preset.
+  (mint `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`) tersedia sebagai preset. Untuk Solana isi RPC URL
+  (mis. Helius) atau set `RPC_SOL_URL` — endpoint publik cadangan sering kena rate-limit.
 - **Saham IDX:** menu *Accounts* → pilih **Saham IDX** → daftar posisi: ticker (mis. `BBCA`), jumlah **lot**
   (1 lot = 100 lembar), dan harga beli rata-rata (IDR per lembar). Tanpa API key — harga pasar diambil dari
   Yahoo Finance, untung/rugi dihitung dari cost basis. Lihat tab *Saham IDX* untuk rincian P/L.
