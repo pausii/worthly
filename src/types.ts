@@ -17,11 +17,12 @@ export interface Env {
   // Berguna di Workers Free (batas CPU per-invocation ketat) untuk memecah beban antar-tick.
   SYNC_BATCH_SIZE?: string;
   COINGECKO_API_KEY?: string;
-  // Endpoint RPC default (netral provider: Alchemy untuk EVM, TronGrid untuk TRON).
+  // Endpoint RPC default (netral provider: Alchemy untuk EVM, TronGrid untuk TRON, JSON-RPC untuk Solana).
   RPC_ETH_URL?: string;
   RPC_BSC_URL?: string;
   RPC_TRON_URL?: string;
   RPC_TRON_API_KEY?: string; // opsional: TronGrid TRON-PRO-API-KEY
+  RPC_SOL_URL?: string; // opsional: bila kosong pakai endpoint publik mainnet-beta
   // Proxy HTTP CONNECT untuk bypass geo-block Binance (format: http://user:pass@host:port).
   // Set via: wrangler secret put BINANCE_PROXY_URL
   BINANCE_PROXY_URL?: string;
@@ -45,7 +46,7 @@ export type Variables = {
 
 export type AppContext = Context<{ Bindings: Env; Variables: Variables }>;
 
-export type AccountType = 'binance' | 'bybit' | 'tron' | 'eth' | 'bsc' | 'btc' | 'idx';
+export type AccountType = 'binance' | 'bybit' | 'tron' | 'eth' | 'bsc' | 'btc' | 'sol' | 'idx';
 export type WalletType = 'spot' | 'futures' | 'earn' | 'funding' | 'onchain' | 'stock';
 
 export interface NormalizedBalance {
@@ -75,13 +76,13 @@ export interface CexCredentials {
 
 // Kredensial / konfigurasi on-chain (terenkripsi di enc_credentials)
 export interface OnchainCredentials {
-  rpcUrl?: string; // endpoint RPC (Alchemy/TronGrid); kalau kosong pakai default dari env
+  rpcUrl?: string; // endpoint RPC (Alchemy/TronGrid/Solana); kalau kosong pakai default dari env
   apiKey?: string; // opsional: TronGrid TRON-PRO-API-KEY
 }
 
 // Token yang ditrack untuk account on-chain (disimpan di kolom config, non-rahasia)
 export interface TrackedToken {
-  contract: string;
+  contract: string; // EVM/TRON: alamat kontrak. Solana: alamat mint SPL.
   symbol: string;
   decimals: number;
 }

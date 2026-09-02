@@ -1304,7 +1304,7 @@ export const appHtml = `<!doctype html>
           <select x-model="ac.type" :disabled="ac.id"
             class="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 disabled:opacity-60">
             <option value="binance">Binance</option><option value="bybit">Bybit</option>
-            <option value="eth">Ethereum</option><option value="bsc">BSC</option><option value="tron">Tron</option><option value="btc">Bitcoin</option>
+            <option value="eth">Ethereum</option><option value="bsc">BSC</option><option value="tron">Tron</option><option value="sol">Solana</option><option value="btc">Bitcoin</option>
             <option value="idx">Saham IDX</option>
           </select>
           <select x-model.number="ac.portfolio_id"
@@ -1324,7 +1324,7 @@ export const appHtml = `<!doctype html>
               class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
           </div>
         </template>
-        <template x-if="ac.type==='eth' || ac.type==='bsc' || ac.type==='tron' || ac.type==='btc'">
+        <template x-if="ac.type==='eth' || ac.type==='bsc' || ac.type==='tron' || ac.type==='sol' || ac.type==='btc'">
           <div class="space-y-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 p-3">
             <template x-if="ac.type==='btc'">
               <p class="text-xs text-slate-500 dark:text-slate-400">Enter a Bitcoin <b>address</b> or <b>xpub/ypub/zpub</b> (from your blockchain.com wallet → Receive / Settings). Tracking only — balance &amp; incoming history via blockchain.com. An xpub auto-tracks all derived addresses.</p>
@@ -1332,7 +1332,7 @@ export const appHtml = `<!doctype html>
             <template x-if="ac.type!=='btc'">
               <p class="text-xs text-slate-500 dark:text-slate-400">Enter your wallet address. RPC URL is optional when defaults are configured in the worker environment.</p>
             </template>
-            <input x-model="ac.address" :placeholder="ac.type==='btc' ? 'BTC address or xpub/ypub/zpub' : 'Wallet address (0x… or T…)'"
+            <input x-model="ac.address" :placeholder="ac.type==='btc' ? 'BTC address or xpub/ypub/zpub' : ac.type==='sol' ? 'Solana wallet address (base58)' : 'Wallet address (0x… or T…)'"
               class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
             <template x-if="ac.type!=='btc'">
               <div class="space-y-3">
@@ -1484,6 +1484,9 @@ export const appHtml = `<!doctype html>
             {symbol:'USDT',contract:'0x55d398326f99059fF775485246999027B3197955',decimals:18},
             {symbol:'BTC',contract:'0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c',decimals:18},
             {symbol:'ETH',contract:'0x2170Ed0880ac9A755fd29B2688956BD959F933F8',decimals:18}
+          ],
+          sol:[
+            {symbol:'USDT',contract:'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',decimals:6}
           ],
           tron:[
             {symbol:'USDT',contract:'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',decimals:6},
@@ -1724,7 +1727,7 @@ export const appHtml = `<!doctype html>
         accountsTotalUsd() { return (this.accounts||[]).reduce((s,a)=>s+(Number(a.value_usd)||0),0); },
         accountsCount(st) { return (this.accounts||[]).filter(a=>(a.status||'pending')===st).length; },
         statusClass(st) { return st==='ok' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : st==='error' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'; },
-        accountTypeSymbol(t) { return t==='eth'?'ETH':t==='bsc'?'BNB':t==='tron'?'TRX':t==='btc'?'BTC':t==='idx'?'IDX':t; },
+        accountTypeSymbol(t) { return t==='eth'?'ETH':t==='bsc'?'BNB':t==='tron'?'TRX':t==='sol'?'SOL':t==='btc'?'BTC':t==='idx'?'IDX':t; },
         // Label tampilan aset: buang suffix .JK pada simbol saham IDX (BBCA.JK -> BBCA).
         assetLabel(sym) { return String(sym||'').replace(/\\.JK$/,''); },
 
@@ -2139,6 +2142,7 @@ export const appHtml = `<!doctype html>
           if (this.ac.type==='eth') return 'ETH';
           if (this.ac.type==='bsc') return 'BNB';
           if (this.ac.type==='tron') return 'TRX';
+          if (this.ac.type==='sol') return 'SOL';
           if (this.ac.type==='btc') return 'BTC';
           return '';
         },

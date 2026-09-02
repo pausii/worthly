@@ -44,7 +44,7 @@ async function userCount(env: Env): Promise<number> {
 
 // =================== accounts (helpers) ===================
 const CEX_TYPES = new Set<AccountType>(['binance', 'bybit']);
-const ONCHAIN_TYPES = new Set<AccountType>(['tron', 'eth', 'bsc', 'btc']);
+const ONCHAIN_TYPES = new Set<AccountType>(['tron', 'eth', 'bsc', 'btc', 'sol']);
 const STOCK_TYPES = new Set<AccountType>(['idx']);
 const ALL_TYPES = new Set<AccountType>([...CEX_TYPES, ...ONCHAIN_TYPES, ...STOCK_TYPES]);
 

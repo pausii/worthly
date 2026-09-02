@@ -14,6 +14,7 @@ import * as bybit from './cex/bybit';
 import { getEvmBalances, getEvmAutoBalances } from './onchain/evm';
 import { getTronBalances } from './onchain/tron';
 import { getBitcoinBalances, getBitcoinDeposits } from './onchain/bitcoin';
+import { getSolanaBalances, SOLANA_DEFAULT_RPC } from './onchain/solana';
 import { computeValuation, type ValuationResult } from './valuation';
 import { refreshOverview } from './overview';
 import { isCooling, setCooldown } from '../lib/cooldown';
@@ -279,7 +280,9 @@ async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
         ? env.RPC_ETH_URL ?? ''
         : acc.type === 'bsc'
           ? env.RPC_BSC_URL ?? ''
-          : env.RPC_TRON_URL ?? '';
+          : acc.type === 'sol'
+            ? env.RPC_SOL_URL || SOLANA_DEFAULT_RPC // Solana punya endpoint publik sebagai fallback
+            : env.RPC_TRON_URL ?? '';
   }
   if (!rpcUrl) throw new Error(`Endpoint RPC untuk ${acc.type} belum dikonfigurasi`);
   if (!apiKey && acc.type === 'tron') apiKey = env.RPC_TRON_API_KEY ?? '';
@@ -287,6 +290,8 @@ async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
   let balances: NormalizedBalance[];
   if (acc.type === 'tron') {
     balances = await getTronBalances(rpcUrl, config, apiKey);
+  } else if (acc.type === 'sol') {
+    balances = await getSolanaBalances(rpcUrl, config);
   } else {
     balances = await getEvmBalances(rpcUrl, config, acc.type === 'eth' ? 'ETH' : 'BNB');
     // Auto-deteksi token: gabungkan, dahulukan token manual/native yang sudah ada.

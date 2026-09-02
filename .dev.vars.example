@@ -12,8 +12,10 @@ MASTER_KEY="ganti-dengan-base64-32-byte-acak"
 COINGECKO_API_KEY=""
 
 # Opsional: endpoint RPC default (boleh juga diisi per-account lewat UI).
-# EVM = Alchemy, TRON = TronGrid.
+# EVM = Alchemy, TRON = TronGrid, Solana = JSON-RPC apa pun (Helius/QuickNode/Alchemy).
+# RPC_SOL_URL kosong -> pakai endpoint publik https://api.mainnet-beta.solana.com (rate-limit ketat).
 RPC_ETH_URL=""
 RPC_BSC_URL=""
 RPC_TRON_URL=""
 RPC_TRON_API_KEY=""
+RPC_SOL_URL=""

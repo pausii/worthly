@@ -5,7 +5,7 @@ Personal crypto / CEX portfolio tracker yang berjalan di **Cloudflare Workers**.
 - **Backend:** Hono + Cloudflare D1 (database) + KV (session, rate limit, cache harga)
 - **Frontend:** Alpine.js + Tailwind CSS + ApexCharts, **self-hosted** (di-build lokal ke `public/`, disajikan via Workers Assets — bukan CDN), responsif + PWA
 - **CEX:** Binance & Bybit (saldo SPOT / FUTURES / EARN / FUNDING + riwayat deposit) via API resmi
-- **On-chain:** Ethereum & BSC (native + token) via Alchemy, TRON via TronGrid, Bitcoin
+- **On-chain:** Ethereum & BSC (native + token) via Alchemy, TRON via TronGrid, Solana (SOL + SPL seperti USDT) via JSON-RPC, Bitcoin
 - **Saham IDX:** posisi saham Bursa Efek Indonesia (harga via Yahoo Finance) + untung/rugi (cost basis)
 - **AI Insight:** ringkasan portofolio via Cloudflare Workers AI
 - **Sinkronisasi otomatis:** Cron Trigger tiap 10 menit (round-robin per batch account)
@@ -27,7 +27,7 @@ Harga: ticker publik Binance (crypto) + Frankfurter/ECB (fiat) ─► konversi k
 |---|---|
 | `src/lib` | kripto/keamanan, db, session, auth middleware, rate limit, cooldown, events |
 | `src/services/cex` | klien Binance & Bybit (signed request) |
-| `src/services/onchain` | klien EVM (ETH/BSC, Alchemy), TRON (TronGrid), Bitcoin |
+| `src/services/onchain` | klien EVM (ETH/BSC, Alchemy), TRON (TronGrid), Solana (JSON-RPC), Bitcoin |
 | `src/services/prices` | konversi harga ke USD + cache (crypto Binance, fiat Frankfurter, saham Yahoo) |
 | `src/services/sync.ts` | orkestrator sinkronisasi + snapshot |
 | `src/services/valuation.ts`, `overview.ts`, `returns.ts` | valuasi portofolio, ringkasan, perhitungan return |
@@ -60,11 +60,12 @@ npm run kv:create   # salin "id" ke wrangler.toml
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" | npx wrangler secret put MASTER_KEY
 
 # Opsional (default endpoint on-chain; bisa juga diisi per-account lewat UI):
-# EVM (ETH/BSC) pakai Alchemy, TRON pakai TronGrid.
+# EVM (ETH/BSC) pakai Alchemy, TRON pakai TronGrid, Solana pakai JSON-RPC apa pun.
 npx wrangler secret put RPC_ETH_URL        # mis. https://eth-mainnet.g.alchemy.com/v2/KEY
 npx wrangler secret put RPC_BSC_URL        # mis. https://bnb-mainnet.g.alchemy.com/v2/KEY
 npx wrangler secret put RPC_TRON_URL       # mis. https://api.trongrid.io
 npx wrangler secret put RPC_TRON_API_KEY   # opsional, TronGrid API key (hindari rate-limit)
+npx wrangler secret put RPC_SOL_URL         # opsional, mis. Helius/QuickNode. Kosong = https://api.mainnet-beta.solana.com
 
 # Opsional lain:
 npx wrangler secret put COINGECKO_API_KEY  # opsional, sumber harga tambahan
@@ -94,8 +95,10 @@ Buka aplikasi → akan diminta **setup user pertama** (username + password ≥ 1
 
 - **Binance / Bybit:** menu *Accounts* → pilih exchange → tempel **API key read-only**
   (matikan izin trade & withdraw di dashboard exchange). Key langsung dienkripsi.
-- **On-chain (BTC/ETH/BSC/Tron):** menu *Accounts* → pilih jaringan → isi address wallet,
-  (opsional) URL RPC (Alchemy untuk EVM / TronGrid untuk TRON), dan daftar token ERC20/BEP20/TRC20 yang ingin ditrack (contract, simbol, decimals).
+- **On-chain (BTC/ETH/BSC/Tron/Solana):** menu *Accounts* → pilih jaringan → isi address wallet,
+  (opsional) URL RPC (Alchemy untuk EVM / TronGrid untuk TRON / JSON-RPC untuk Solana), dan daftar token
+  ERC20/BEP20/TRC20/SPL yang ingin ditrack (contract atau mint, simbol, decimals). Solana: SOL native + USDT
+  (mint `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`) tersedia sebagai preset.
 - **Saham IDX:** menu *Accounts* → pilih **Saham IDX** → daftar posisi: ticker (mis. `BBCA`), jumlah **lot**
   (1 lot = 100 lembar), dan harga beli rata-rata (IDR per lembar). Tanpa API key — harga pasar diambil dari
   Yahoo Finance, untung/rugi dihitung dari cost basis. Lihat tab *Saham IDX* untuk rincian P/L.
