@@ -19,4 +19,7 @@ cpSync('node_modules/alpinejs/dist/cdn.min.js', 'public/vendor/alpine.js');
 // 3) ApexCharts — minify bundle
 run('npx esbuild node_modules/apexcharts/dist/apexcharts.min.js --minify --legal-comments=none --outfile=public/vendor/apexcharts.js');
 
+// Browser bundle must include its own helpers; never serialize Worker functions with toString().
+run('npx esbuild src/frontend/share-card.ts --bundle --format=iife --global-name=WorthlyShare --minify --outfile=public/vendor/share-card.js');
+
 console.log('[build-frontend] public/app.css, public/vendor/alpine.js, public/vendor/apexcharts.js siap.');

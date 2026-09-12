@@ -121,6 +121,16 @@ Buka aplikasi → akan diminta **setup user pertama** (username + password ≥ 1
   memakai riwayat taksiran aset tetap (nol sebelum pembelian), dengan kurs fiat terkini sebagai
   aproksimasi. Chart snapshot tetap menunjukkan saldo yang benar-benar tercatat saat itu.
 
+## Share Studio
+
+Di **Analysis**, klik **Create share card** untuk membuat PNG dari data yang sedang dimuat.
+Pilih **Overview**, **Allocation Only**, atau **Performance**, tema Midnight/Daylight, dan format
+Square (1080×1080), Story (1080×1920), atau Landscape (1600×900). Nama aset dan nominal
+disembunyikan secara default; Allocation Only selalu menampilkan persentase tanpa nominal.
+Performance mengikuti periode dan zoom chart saat kartu dibuat, dengan label snapshot atau simulasi.
+Gunakan **Refresh data** setelah mengganti filter Analysis. Preview dan ekspor dibuat di browser,
+tanpa mengunggah gambar atau membagikannya secara otomatis.
+
 ## Catatan keamanan
 
 - Gunakan **API key read-only** untuk CEX. App ini tidak pernah melakukan trade/withdraw.

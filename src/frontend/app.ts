@@ -19,6 +19,7 @@ export const appHtml = `<!doctype html>
   <script nonce="__CSP_NONCE__">if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark');
     window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__bip=e;window.dispatchEvent(new Event('bip-ready'));});</script>
   <script defer src="/vendor/apexcharts.js"></script>
+  <script defer src="/vendor/share-card.js"></script>
   <script defer src="/vendor/alpine.js"></script>
   <style>
     [x-cloak]{display:none!important}
@@ -648,6 +649,33 @@ export const appHtml = `<!doctype html>
             <button @click="topLimit += 10" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-4 py-2 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Load more (+10)</button>
           </div>
         </div>
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-indigo-950 to-slate-900 p-5 text-white">
+          <div><p class="text-xs uppercase tracking-widest text-indigo-300">Share Studio</p><p class="mt-1 text-sm">Your portfolio. A different perspective.</p></div>
+          <button @click="openShareStudio()" :disabled="analysisLoading" class="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-indigo-950 disabled:opacity-50">Create share card</button>
+        </div>
+        <section x-show="shareOpen" aria-label="Share Studio" class="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-800">
+          <div class="mb-5 flex items-center justify-between"><div><h3 class="font-semibold">Make it yours</h3><p class="text-xs text-slate-500 dark:text-slate-400">Preview and PNG match. Only the downloaded image is shared.</p></div><button @click="shareOpen=false" class="rounded-lg px-3 py-2 text-sm" aria-label="Close Share Studio">Close</button></div>
+          <div class="grid gap-6 lg:grid-cols-2">
+            <div class="space-y-5" @change="renderSharePreview()">
+              <fieldset><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">01 / Layout</legend>
+                <div class="grid gap-2 sm:grid-cols-3"><template x-for="t in [{id:'overview',name:'Overview',desc:'Value + allocation'},{id:'allocation',name:'Allocation Only',desc:'A private perspective'},{id:'performance',name:'Performance',desc:'Your value journey'}]" :key="t.id"><button @click="shareOptions.template=t.id; renderSharePreview()" :aria-pressed="shareOptions.template===t.id" class="rounded-xl border p-3 text-left text-sm" :class="shareOptions.template===t.id ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200' : 'border-slate-200 dark:border-slate-600'"><span class="block font-semibold" x-text="t.name"></span><span class="mt-1 block text-xs opacity-70" x-text="t.desc"></span></button></template></div>
+              </fieldset>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="text-sm">Theme<select x-model="shareOptions.theme" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="dark">Midnight</option><option value="light">Daylight</option></select></label>
+                <label class="text-sm">Format<select x-model="shareOptions.size" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="square">Square · 1080 × 1080</option><option value="story">Story · 1080 × 1920</option><option value="landscape">Landscape · 1600 × 900</option></select></label>
+              </div>
+              <fieldset class="space-y-3"><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">02 / Privacy</legend>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.amounts" :disabled="shareOptions.template==='allocation'"> Show amounts <span class="text-xs text-slate-500">(except Allocation Only)</span></label>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.names"> Show asset names</label>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Names and amounts start hidden. Percentages and chart shape remain visible.</p>
+              </fieldset>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Uses a copy of the currently loaded data and selected period. Performance includes the current chart zoom. Refresh the card after changing Analysis filters.</p>
+              <div class="flex flex-wrap gap-2"><button @click="downloadShareCard()" :disabled="shareBusy || shareRefreshing || !!shareError" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" x-text="shareBusy?'Preparing…':'Download PNG'"></button><button @click="refreshShareData()" :disabled="analysisLoading || shareRefreshing" class="rounded-xl border border-slate-300 px-4 py-2 text-sm dark:border-slate-600 disabled:opacity-50" x-text="shareRefreshing ? 'Refreshing…' : 'Refresh data'"></button></div>
+              <p x-show="shareError" x-text="shareError" role="alert" class="text-sm text-rose-600 dark:text-rose-400"></p>
+            </div>
+            <div class="flex items-start justify-center rounded-xl bg-slate-100 p-3 dark:bg-slate-950"><canvas x-ref="shareCanvas" role="img" aria-label="Preview of the portfolio share card" class="h-auto max-h-[650px] w-auto max-w-full rounded-lg shadow-xl"></canvas></div>
+          </div>
+        </section>
       </section>
 
       <!-- PORTFOLIOS -->
@@ -1632,6 +1660,55 @@ export const appHtml = `<!doctype html>
     function app() {
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
+        shareOpen: false, shareBusy: false, shareRefreshing: false, shareError: '', shareData: null,
+        shareOptions: {template:'allocation',theme:'dark',size:'square',amounts:false,names:false},
+        openShareStudio() {
+          if(this.analysisLoading) return;
+          const assets = new Map();
+          for(const p of this.overview.portfolios||[]) for(const a of p.assets||[]) {
+            const key=JSON.stringify([a.origin,a.asset]);
+            const current=assets.get(key)||{asset:a.asset,usd:0};
+            current.usd+=Number(a.usd)||0; assets.set(key,current);
+          }
+          const range=this.chartRange;
+          const history=(this.analysisHistory||[]).filter(p=>!range || ((range.min==null||p.captured_at>=range.min)&&(range.max==null||p.captured_at<=range.max)));
+          this.shareData=JSON.parse(JSON.stringify({assets:[...assets.values()].sort((a,b)=>b.usd-a.usd),total:this.overview.grandTotalUsd||0,history,mode:this.valueMode,period:this.analysisPeriod,currency:this.displayCurrency,idrRate:this.idrRate,asOf:this.overview.computedAt||Date.now()}));
+          this.shareOpen=true; this.$nextTick(()=>this.renderSharePreview());
+        },
+        renderSharePreview() {
+          if(!this.shareData || !this.$refs.shareCanvas) return;
+          try { WorthlyShare.renderShareCard(this.$refs.shareCanvas,this.shareData,this.shareOptions); this.shareError=''; }
+          catch(e) { console.error('[Share Studio] Render failed',e); this.shareError='Could not render the card. Reload the page and try again.'; }
+        },
+        async refreshShareData() {
+          if(this.shareRefreshing || this.analysisLoading) return;
+          this.shareRefreshing=true; this.shareError='';
+          const mode=this.valueMode, period=this.analysisPeriod, days=String(this.periodDays());
+          try {
+            const [overview,history]=await Promise.all([this.gql('Overview'),this.gql(mode==='holdings'?'AssetHistory':'History',{days})]);
+            if(!overview?.ok || !history?.ok) throw new Error('Data refresh failed');
+            if(mode!==this.valueMode || period!==this.analysisPeriod || this.analysisLoading) throw new Error('Analysis selection changed during refresh');
+            this.overview=overview.data; this.idrRate=overview.data.idrRate||0;
+            this.analysisHistory=mode==='holdings'?(history.data?.points||[]):history.data;
+            this.assetPeaks=mode==='holdings'?(history.data?.peaks||[]):[];
+            this.openShareStudio();
+          } catch(e) { console.error('[Share Studio] Refresh failed',e); this.shareError='Could not refresh data. Please try again.'; }
+          finally { this.shareRefreshing=false; }
+        },
+        async downloadShareCard() {
+          if(this.shareBusy) return;
+          this.shareBusy=true;
+          try {
+            this.renderSharePreview();
+            if(this.shareError) return;
+            const blob=await new Promise(resolve=>this.$refs.shareCanvas.toBlob(resolve,'image/png'));
+            if(!blob) throw new Error('Export failed');
+            const url=URL.createObjectURL(blob), a=document.createElement('a');
+            a.href=url; a.download='worthly-'+this.shareOptions.template+'-'+this.shareOptions.size+'.png';
+            document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000);
+          } catch(e) { this.shareError='Could not download the PNG. Please try again.'; }
+          finally { this.shareBusy=false; }
+        },
         syncing: false, toast: '', toastType: 'info', modal: null, updateReady: false, appVersion: '',
         loading: true, lastSync: 0, now: Date.now(),
         confirmState: { open: false, title: '', message: '', confirmText: 'Confirm', danger: true, _resolve: null },
