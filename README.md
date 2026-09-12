@@ -7,6 +7,7 @@ Personal crypto / CEX portfolio tracker yang berjalan di **Cloudflare Workers**.
 - **CEX:** Binance & Bybit (saldo SPOT / FUTURES / EARN / FUNDING + riwayat deposit) via API resmi
 - **On-chain:** Ethereum & BSC (native + token) via Alchemy, TRON via TronGrid, Solana (SOL + SPL seperti USDT) via JSON-RPC, Bitcoin
 - **Saham IDX:** posisi saham Bursa Efek Indonesia (harga via Yahoo Finance) + untung/rugi (cost basis)
+- **Aset tetap:** properti / kendaraan / emas fisik — harga beli sebagai cost basis, nilai kini ditaksir manual dengan riwayat valuasi
 - **AI Insight:** ringkasan portofolio via Cloudflare Workers AI
 - **Sinkronisasi otomatis:** Cron Trigger tiap 10 menit (round-robin per batch account)
 - **Keamanan:** login single-user (PBKDF2-HMAC-SHA256 100k iterasi + pepper), sesi httpOnly+Secure+SameSite=Strict,
@@ -83,11 +84,17 @@ npm run db:migrate:remote    # untuk produksi
 ### 6. Jalankan
 ```powershell
 npm run dev                  # build aset + lokal (wrangler dev)
-npm run deploy               # build aset + deploy ke Cloudflare
+npm run deploy               # typecheck + build aset + migration remote + deploy
 ```
 
 > `dev` dan `deploy` otomatis menjalankan `npm run build:assets` (Tailwind → `public/app.css`,
 > Alpine & ApexCharts → `public/vendor/`). Folder `public/` di-gitignore.
+
+`deploy` menjalankan migration remote sebelum Worker diunggah dan berhenti bila migration gagal.
+Migration `0004_fixed_assets.sql` harus ikut di-commit; tabelnya wajib tersedia bagi Worker baru.
+Untuk memeriksa bundle tanpa mengubah produksi, gunakan `npm run build:assets` lalu
+`npx wrangler deploy --dry-run` (jangan gunakan `npm run deploy` untuk dry-run).
+Tes regresi aset tetap: `npm run test:fixed-assets` (Node.js 22.13+ dengan `node:sqlite`).
 
 Buka aplikasi → akan diminta **setup user pertama** (username + password ≥ 10 karakter).
 
@@ -104,6 +111,15 @@ Buka aplikasi → akan diminta **setup user pertama** (username + password ≥ 1
   (1 lot = 100 lembar), dan harga beli rata-rata (IDR per lembar). Tanpa API key — harga pasar diambil dari
   Yahoo Finance, untung/rugi dihitung dari cost basis. Lihat tab *Saham IDX* untuk rincian P/L.
 - **Manual:** menu *Holding Manual* → mis. `IDR 100000000` atau `USD 300`. Otomatis dikonversi ke USD.
+- **Aset tetap:** menu *Fixed Assets* → tambah aset (jenis, label, mata uang, harga beli, tanggal beli, nilai kini).
+  Tidak ada feed harga: nilai diperbarui lewat **Update value** yang menyimpan riwayat valuasi (sumber: NJOP,
+  appraisal, dll). Harga beli dipakai untuk *cost basis* / all-time return; valuasi terbaru masuk ke nilai
+  portofolio dan tampil sebagai kategori *Fixed Assets* di chart komposisi. Karena nilainya besar dan tidak
+  likuid, pertimbangkan menaruhnya di portofolio terpisah agar tidak mendominasi chart.
+  Mata uang dikunci setelah pembuatan agar nominal riwayat tidak berubah arti. Nilai kini awal
+  dicatat pada waktu input; sebelum itu harga beli berlaku sejak tanggal beli. Chart simulasi
+  memakai riwayat taksiran aset tetap (nol sebelum pembelian), dengan kurs fiat terkini sebagai
+  aproksimasi. Chart snapshot tetap menunjukkan saldo yang benar-benar tercatat saat itu.
 
 ## Catatan keamanan
 

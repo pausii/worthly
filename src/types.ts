@@ -116,3 +116,7 @@ export interface StockPosition {
 export interface StockConfig {
   positions: StockPosition[];
 }
+
+// Jenis aset tetap (tabel fixed_assets). Tidak punya harga pasar otomatis; nilai ditaksir manual.
+export type FixedAssetKind = 'property' | 'vehicle' | 'gold' | 'other';
+export const FIXED_ASSET_KINDS: readonly FixedAssetKind[] = ['property', 'vehicle', 'gold', 'other'];

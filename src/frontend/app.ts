@@ -343,7 +343,7 @@ export const appHtml = `<!doctype html>
                   <div class="flex items-center justify-between text-sm">
                     <div class="flex items-center gap-2">
                       <span class="inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium"
-                        :class="a.origin==='manual' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : a.origin==='onchain' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : a.origin==='stock' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'"
+                        :class="a.origin==='manual' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : a.origin==='onchain' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : a.origin==='stock' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' : a.origin==='asset' ? 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'"
                         x-text="a.origin"></span>
                       <span class="relative h-5 w-5 shrink-0">
                         <span class="absolute inset-0 rounded-full flex items-center justify-center text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(a.asset)" x-text="tokenInitial(assetLabel(a.asset))"></span>
@@ -536,7 +536,7 @@ export const appHtml = `<!doctype html>
           <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
             <h3 class="mb-4 text-sm font-semibold">Source Composition</h3>
             <div class="space-y-3">
-              <template x-for="src in [{k:'cex',label:'Exchange (CEX)',c:'#6366f1'},{k:'onchain',label:'On-chain',c:'#10b981'},{k:'stock',label:'Saham IDX',c:'#a855f7'},{k:'manual',label:'Manual',c:'#f59e0b'}]" :key="src.k">
+              <template x-for="src in [{k:'cex',label:'Exchange (CEX)',c:'#6366f1'},{k:'onchain',label:'On-chain',c:'#10b981'},{k:'stock',label:'Saham IDX',c:'#a855f7'},{k:'asset',label:'Fixed Assets',c:'#0ea5e9'},{k:'manual',label:'Manual',c:'#f59e0b'}]" :key="src.k">
                 <div>
                   <div class="flex items-center justify-between text-xs">
                     <span class="text-slate-600 dark:text-slate-300" x-text="src.label"></span>
@@ -888,6 +888,114 @@ export const appHtml = `<!doctype html>
         <p class="text-xs text-slate-400 dark:text-slate-500">Price per share in IDR (source: Yahoo Finance). Cost/Value/Profit-Loss follow the currency toggle.</p>
       </section>
 
+      <!-- FIXED ASSETS -->
+      <section x-show="view==='assets'" class="space-y-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Total Cost</div>
+            <div class="mt-1 text-xl font-semibold" x-text="fmtDisplay(fixedData.totals.costUsd||0)"></div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Current Value</div>
+            <div class="mt-1 text-xl font-semibold" x-text="fmtDisplay(fixedData.totals.valueUsd||0)"></div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+            <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Unrealized Gain</div>
+            <div class="mt-1 text-xl font-semibold" :class="pctClass(fixedData.totals.plUsd)">
+              <span x-text="((fixedData.totals.plUsd||0)>=0?'+':'−')+fmtDisplay(Math.abs(fixedData.totals.plUsd||0))"></span>
+              <span class="text-sm" x-text="'('+fmtPct(fixedData.totals.plPct,false)+')'"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end">
+          <button @click="openFixedAssetModal()" class="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">+ Fixed Asset</button>
+        </div>
+
+        <div class="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+          <table class="min-w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+            <thead class="bg-slate-50 dark:bg-slate-700/50 text-left text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              <tr>
+                <th class="px-4 py-3">Asset</th>
+                <th class="px-4 py-3">Portfolio</th>
+                <th class="px-4 py-3 text-right">Purchase Price</th>
+                <th class="px-4 py-3 text-right">Current Value</th>
+                <th class="px-4 py-3 text-right">Gain / Loss</th>
+                <th class="px-4 py-3">Last Valued</th>
+                <th class="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+              <template x-for="a in fixedData.assets" :key="a.id">
+                <tr>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <span class="relative h-6 w-6 shrink-0">
+                        <span class="absolute inset-0 rounded-full flex items-center justify-center text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(a.label)" x-text="tokenInitial(a.label)"></span>
+                      </span>
+                      <div class="min-w-0">
+                        <div class="font-semibold" x-text="a.label"></div>
+                        <div class="text-[11px] text-slate-400 dark:text-slate-500">
+                          <span class="rounded bg-sky-100 dark:bg-sky-900/30 px-1.5 py-0.5 text-sky-700 dark:text-sky-400" x-text="kindLabel(a.kind)"></span>
+                          <span class="ml-1" x-text="'Bought '+fmtDateOnly(a.purchase_date)"></span>
+                          <span class="ml-1" x-show="a.note" x-text="'· '+a.note"></span>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3 text-slate-500 dark:text-slate-400" x-text="portfolioName(a.portfolio_id)"></td>
+                  <td class="px-4 py-3 text-right">
+                    <div x-text="fmtDisplay(a.costUsd)"></div>
+                    <div class="whitespace-nowrap text-[10px] text-slate-400 dark:text-slate-500" x-text="a.currency+' '+fmtNum(a.purchase_price)"></div>
+                  </td>
+                  <td class="px-4 py-3 text-right font-medium">
+                    <div x-text="fmtDisplay(a.valueUsd)"></div>
+                    <div class="whitespace-nowrap text-[10px] text-slate-400 dark:text-slate-500" x-text="a.currency+' '+fmtNum(a.value)"></div>
+                  </td>
+                  <td class="px-4 py-3 text-right font-medium" :class="pctClass(a.plUsd)">
+                    <div x-text="((a.plUsd||0)>=0?'+':'−')+fmtDisplay(Math.abs(a.plUsd||0))"></div>
+                    <div class="text-[10px]" x-text="fmtPct(a.plPct,false)"></div>
+                  </td>
+                  <td class="px-4 py-3 whitespace-nowrap text-slate-500 dark:text-slate-400">
+                    <div x-text="fmtDateOnly(a.valued_at)"></div>
+                    <button @click="fixedExpanded = fixedExpanded===a.id ? null : a.id" class="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline" x-text="(fixedExpanded===a.id?'Hide':'Show')+' history ('+a.valuations.length+')'"></button>
+                  </td>
+                  <td class="px-4 py-3 text-right whitespace-nowrap">
+                    <button @click="openValuationModal(a)" class="text-xs text-emerald-600 dark:text-emerald-400 hover:underline">Update value</button>
+                    <button @click="openFixedAssetModal(a)" class="ml-3 text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Edit</button>
+                    <button @click="deleteFixedAsset(a.id)" class="ml-3 text-xs text-rose-600 dark:text-rose-400 hover:underline">Delete</button>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!fixedLoading && fixedData.assets.length===0"><td colspan="7" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No fixed assets yet. Add a property, vehicle, or gold holding.</td></tr>
+              <tr x-show="fixedLoading"><td colspan="7" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Valuation history for the expanded asset -->
+        <template x-if="fixedExpanded && fixedData.assets.find(x=>x.id===fixedExpanded)">
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+            <div class="mb-3 flex items-center justify-between">
+              <h3 class="text-sm font-semibold" x-text="'Valuation history — '+fixedData.assets.find(x=>x.id===fixedExpanded).label"></h3>
+              <button @click="fixedExpanded=null" class="text-xs text-slate-400 hover:underline">Close</button>
+            </div>
+            <div class="space-y-2">
+              <template x-for="v in fixedData.assets.find(x=>x.id===fixedExpanded).valuations" :key="v.id">
+                <div class="flex items-center justify-between text-sm">
+                  <div>
+                    <span class="font-medium" x-text="fixedData.assets.find(x=>x.id===fixedExpanded).currency+' '+fmtNum(v.value)"></span>
+                    <span class="ml-2 text-xs text-slate-400 dark:text-slate-500" x-text="fmtDateOnly(v.valued_at)+(v.source?' · '+v.source:'')"></span>
+                  </div>
+                  <button @click="deleteValuation(v.id)" class="text-xs text-rose-600 dark:text-rose-400 hover:underline">Delete</button>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+        <p class="text-xs text-slate-400 dark:text-slate-500">Values are your own estimates (no market feed). Purchase price is used as cost basis; the latest valuation counts toward portfolio value.</p>
+      </section>
+
       <!-- DEPOSITS -->
       <section x-show="view==='deposits'" class="space-y-4">
         <div class="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
@@ -1100,6 +1208,7 @@ export const appHtml = `<!doctype html>
           <div class="flex flex-wrap gap-2">
             <button @click="exportCsv('balances')" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Balances</button>
             <button @click="exportCsv('holdings')" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Manual Holdings</button>
+            <button @click="exportCsv('assets')" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Fixed Assets</button>
             <button @click="exportCsv('snapshots')" class="rounded-xl bg-slate-100 dark:bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Snapshots</button>
           </div>
         </div>
@@ -1127,7 +1236,7 @@ export const appHtml = `<!doctype html>
     </template>
     <button @click="moreOpen=true"
       class="relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors"
-      :class="['holdings','stocks','deposits','activity','settings'].includes(view) ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'">
+      :class="['holdings','stocks','assets','deposits','activity','settings'].includes(view) ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h6v6H4zM14 6h6v6h-6zM4 16h6v4H4zM14 16h6v4h-6z"/></svg>
       <span>More</span>
       <span x-show="unreadCount>0" class="absolute right-[30%] top-1 h-1.5 w-1.5 rounded-full bg-rose-500"></span>
@@ -1251,6 +1360,98 @@ export const appHtml = `<!doctype html>
           class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
         <input x-model="hd.note" placeholder="Note (optional)"
           class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" @click="modal=null" class="rounded-xl px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</button>
+          <button class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Fixed Asset -->
+  <div x-show="modal==='fixedAsset'" class="fixed inset-0 z-40 flex items-center justify-center p-4">
+    <div @click="modal=null" class="absolute inset-0 bg-slate-900/50"></div>
+    <div class="relative w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-xl">
+      <h3 class="mb-4 text-base font-semibold" x-text="fa.id ? 'Edit Fixed Asset' : 'New Fixed Asset'"></h3>
+      <form @submit.prevent="saveFixedAsset()" class="space-y-3">
+        <select x-model.number="fa.portfolio_id"
+          class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+          <option value="">Select portfolio…</option>
+          <template x-for="p in portfolios" :key="p.id"><option :value="p.id" x-text="p.name"></option></template>
+        </select>
+        <div class="grid grid-cols-4 gap-2">
+          <template x-for="k in Object.keys(KIND_LABELS)" :key="k">
+            <button type="button" @click="fa.kind=k"
+              class="rounded-xl border px-2 py-2 text-xs font-medium transition-colors"
+              :class="fa.kind===k ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'"
+              x-text="KIND_LABELS[k]"></button>
+          </template>
+        </div>
+        <input x-model="fa.label" required placeholder="Label (e.g. Rumah Bekasi)"
+          class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Currency</label>
+            <select x-model="fa.currency" :disabled="!!fa.id"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+              <option value="IDR">IDR</option>
+              <option value="USD">USD</option>
+              <option value="JPY">JPY</option>
+              <option value="SGD">SGD</option>
+            </select>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Purchase Date</label>
+            <input x-model="fa.purchase_date" type="date"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+          </div>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Purchase Price (cost basis)</label>
+          <input type="text" x-model="fa.purchaseDisplay" @blur="fa.purchaseDisplay = formatAmountInput(fa.purchaseDisplay)" placeholder="e.g. 850,000,000"
+            class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+        </div>
+        <div x-show="!fa.id">
+          <label class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Current Value (optional, defaults to purchase price)</label>
+          <input type="text" x-model="fa.valueDisplay" @blur="fa.valueDisplay = formatAmountInput(fa.valueDisplay)" placeholder="e.g. 1,100,000,000"
+            class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+        </div>
+        <input x-model="fa.note" placeholder="Note (optional, e.g. address / certificate no.)"
+          class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+        <p x-show="fa.id" class="text-[11px] text-slate-400 dark:text-slate-500">To change the current value, use <b>Update value</b> on the asset row — it keeps a history.</p>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" @click="modal=null" class="rounded-xl px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</button>
+          <button class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Fixed Asset Valuation -->
+  <div x-show="modal==='valuation'" class="fixed inset-0 z-40 flex items-center justify-center p-4">
+    <div @click="modal=null" class="absolute inset-0 bg-slate-900/50"></div>
+    <div class="relative w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-xl">
+      <h3 class="mb-1 text-base font-semibold">Update Value</h3>
+      <p class="mb-4 text-xs text-slate-500 dark:text-slate-400" x-text="fv.asset ? fv.asset.label+' · current '+fv.asset.currency+' '+fmtNum(fv.asset.value) : ''"></p>
+      <form @submit.prevent="saveValuation()" class="space-y-3">
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400" x-text="'New Value ('+(fv.asset?fv.asset.currency:'')+')'"></label>
+          <input type="text" x-model="fv.valueDisplay" @blur="fv.valueDisplay = formatAmountInput(fv.valueDisplay)" placeholder="e.g. 1,200,000,000"
+            class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Valued At</label>
+            <input x-model="fv.valued_at" type="date"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Source</label>
+            <input x-model="fv.source" list="valuation-sources" placeholder="e.g. NJOP, appraisal"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+            <datalist id="valuation-sources"><option value="NJOP"></option><option value="appraisal"></option><option value="market listing"></option><option value="own estimate"></option></datalist>
+          </div>
+        </div>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" @click="modal=null" class="rounded-xl px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</button>
           <button class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Save</button>
@@ -1448,6 +1649,7 @@ export const appHtml = `<!doctype html>
           { id:'accounts', label:'Accounts', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2m-3-7h6m-3-3v6\\'/></svg>' },
           { id:'holdings', label:'Manual Holdings', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1\\'/></svg>' },
           { id:'stocks', label:'IDX Stocks', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M3 17l6-6 4 4 8-8m0 0h-5m5 0v5\\'/></svg>' },
+          { id:'assets', label:'Fixed Assets', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6M9 10h.01M15 10h.01M9 14h.01M15 14h.01\\'/></svg>' },
           { id:'deposits', label:'Deposits', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4\\'/></svg>' },
           { id:'activity', label:'Activity', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9\\'/></svg>' },
           { id:'settings', label:'Settings', icon:'<svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-5 w-5\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z\\'/><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' d=\\'M15 12a3 3 0 11-6 0 3 3 0 016 0z\\'/></svg>' }
@@ -1457,6 +1659,11 @@ export const appHtml = `<!doctype html>
         returns: null,
         portfolios: [], accounts: [], holdings: [], deposits: [],
         stocksData: { positions: [], totals: { costUsd:0, marketUsd:0, plUsd:0, plPct:0, plIdr:0, marketIdr:0, costIdr:0, idrUsd:0 } }, stocksLoading: false,
+        // Aset tetap (properti/kendaraan/emas): nilai ditaksir manual, riwayat valuasi per aset.
+        fixedData: { assets: [], totals: { costUsd:0, valueUsd:0, plUsd:0, plPct:0, idrUsd:0 } }, fixedLoading: false, fixedExpanded: null,
+        KIND_LABELS: { property:'Property', vehicle:'Vehicle', gold:'Gold', other:'Other' },
+        fa: { id:null, portfolio_id:'', kind:'property', label:'', currency:'IDR', purchaseDisplay:'', purchase_date:'', valueDisplay:'', note:'' },
+        fv: { asset:null, valueDisplay:'', valued_at:'', source:'' },
         depositPage: 1, depositTotal: 0, depositLimit: 25,
         history: [], historyRange: 30, historyPortfolio: '', chart: null, pieChart: null,
         analysisPeriod: '1M', analysisHistory: [], analysisLoading: false, analysisChart: null, analysisPie: null, topLimit: 10,
@@ -1508,7 +1715,7 @@ export const appHtml = `<!doctype html>
           if (window.__bip) this.installPrompt = window.__bip;
           window.addEventListener('bip-ready', ()=>{ this.installPrompt = window.__bip; });
           window.addEventListener('appinstalled', ()=>{ this.installPrompt = null; this.installed = true; this.flash('App installed'); });
-          const VIEWS = ['dashboard','analysis','portfolios','accounts','holdings','stocks','deposits','activity','settings'];
+          const VIEWS = ['dashboard','analysis','portfolios','accounts','holdings','stocks','assets','deposits','activity','settings'];
           const hash = window.location.hash.slice(1);
           if (VIEWS.includes(hash)) this.view = hash;
           window.addEventListener('hashchange', () => {
@@ -1518,6 +1725,7 @@ export const appHtml = `<!doctype html>
               if (h === 'dashboard') this.$nextTick(()=>{ this.renderChart(); this.renderPieChart(); });
               if (h === 'analysis') this.loadAnalysis();
               if (h === 'stocks') this.loadStocks();
+              if (h === 'assets') this.loadFixedAssets();
             }
           });
           const me = await this.gql('Me');
@@ -1529,6 +1737,7 @@ export const appHtml = `<!doctype html>
             await this.loadHistory();
             if (this.view==='analysis') this.loadAnalysis();
             if (this.view==='stocks') this.loadStocks();
+            if (this.view==='assets') this.loadFixedAssets();
           } finally {
             this.loading = false;
           }
@@ -1570,6 +1779,7 @@ export const appHtml = `<!doctype html>
           Accounts: 'query Accounts { accounts }',
           Holdings: 'query Holdings($portfolioId:Int){ holdings(portfolioId:$portfolioId) }',
           Stocks: 'query Stocks { stocks }',
+          FixedAssets: 'query FixedAssets { fixedAssets }',
           Deposits: 'query Deposits($page:Int,$limit:Int){ deposits(page:$page,limit:$limit) }',
           SystemEvents: 'query SystemEvents { systemEvents }',
           SystemQueue: 'query SystemQueue { systemQueue }',
@@ -1589,6 +1799,11 @@ export const appHtml = `<!doctype html>
           UpdateHolding: 'mutation UpdateHolding($id:Int!,$input:JSON!){ updateHolding(id:$id,input:$input) }',
           DeleteHolding: 'mutation DeleteHolding($id:Int!){ deleteHolding(id:$id) }',
           ImportHoldings: 'mutation ImportHoldings($input:JSON!){ importHoldings(input:$input) }',
+          CreateFixedAsset: 'mutation CreateFixedAsset($input:JSON!){ createFixedAsset(input:$input) }',
+          UpdateFixedAsset: 'mutation UpdateFixedAsset($id:Int!,$input:JSON!){ updateFixedAsset(id:$id,input:$input) }',
+          DeleteFixedAsset: 'mutation DeleteFixedAsset($id:Int!){ deleteFixedAsset(id:$id) }',
+          AddFixedAssetValuation: 'mutation AddFixedAssetValuation($id:Int!,$input:JSON!){ addFixedAssetValuation(id:$id,input:$input) }',
+          DeleteFixedAssetValuation: 'mutation DeleteFixedAssetValuation($id:Int!){ deleteFixedAssetValuation(id:$id) }',
           CreateAccount: 'mutation CreateAccount($input:JSON!){ createAccount(input:$input) }',
           UpdateAccount: 'mutation UpdateAccount($id:Int!,$input:JSON!){ updateAccount(id:$id,input:$input) }',
           DeleteAccount: 'mutation DeleteAccount($id:Int!){ deleteAccount(id:$id) }',
@@ -1626,6 +1841,7 @@ export const appHtml = `<!doctype html>
           if (id==='dashboard') this.$nextTick(()=>{ this.renderChart(); this.renderPieChart(); });
           if (id==='analysis') this.loadAnalysis();
           if (id==='stocks') this.loadStocks();
+          if (id==='assets') this.loadFixedAssets();
         },
         navLabel() { const n=this.nav.find(x=>x.id===this.view); return n?n.label:''; },
         portfolioName(id) { const p=this.portfolios.find(x=>x.id===id); return p?p.name:'—'; },
@@ -1723,7 +1939,7 @@ export const appHtml = `<!doctype html>
         },
         // Harga saham IDX inheren dalam IDR — selalu tampil Rp (tak ikut toggle USD/IDR).
         fmtRp(v) { if (this.hideAmounts) return 'Rp ••••'; return 'Rp ' + (Number(v)||0).toLocaleString('en-US',{maximumFractionDigits:2}); },
-        formatAmountInput(v) { const n=parseFloat((v||'').replace(/,/g,'')); return n ? n.toLocaleString('en-US',{maximumFractionDigits:8}) : ''; },
+        formatAmountInput(v) { const raw=String(v??'').replace(/,/g,'').trim(); const n=Number(raw); return raw && isFinite(n) ? n.toLocaleString('en-US',{maximumFractionDigits:8}) : raw; },
         accountsTotalUsd() { return (this.accounts||[]).reduce((s,a)=>s+(Number(a.value_usd)||0),0); },
         accountsCount(st) { return (this.accounts||[]).filter(a=>(a.status||'pending')===st).length; },
         statusClass(st) { return st==='ok' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : st==='error' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'; },
@@ -1934,7 +2150,7 @@ export const appHtml = `<!doctype html>
           const m={};
           for (const p of (this.overview.portfolios||[])) for (const a of (p.assets||[])) {
             if (!(a.usd>0)) continue;
-            if (!m[a.asset]) m[a.asset]={ asset:a.asset, usd:0, amount:0 };
+            if (!m[a.asset]) m[a.asset]={ asset:a.asset, usd:0, amount:0, origin:a.origin };
             m[a.asset].usd+=a.usd; m[a.asset].amount+=(Number(a.amount)||0);
           }
           return Object.values(m).sort((x,y)=>y.usd-x.usd);
@@ -1956,15 +2172,15 @@ export const appHtml = `<!doctype html>
           return out;
         },
         composition() {
-          const m={ cex:0, onchain:0, manual:0, stock:0 };
+          const m={ cex:0, onchain:0, manual:0, stock:0, asset:0 };
           for (const p of (this.overview.portfolios||[])) for (const a of (p.assets||[])) { if (a.usd>0 && m[a.origin]!==undefined) m[a.origin]+=a.usd; }
-          return { cex:m.cex, onchain:m.onchain, manual:m.manual, stock:m.stock, total:m.cex+m.onchain+m.manual+m.stock };
+          return { cex:m.cex, onchain:m.onchain, manual:m.manual, stock:m.stock, asset:m.asset, total:m.cex+m.onchain+m.manual+m.stock+m.asset };
         },
         compPct(v) { const c=this.composition(); return c.total>0? (Number(v)||0)/c.total*100 : 0; },
         isStableAsset(sym) { return this.STABLES_SET.indexOf(sym)>=0 || this.FIATS_SET.indexOf(sym)>=0; },
         stableStats() {
           const a=this.aggAssets(); let stable=0,total=0;
-          for (const x of a){ total+=x.usd; if (this.isStableAsset(x.asset)) stable+=x.usd; }
+          for (const x of a){ if (x.origin==='asset') continue; total+=x.usd; if (this.isStableAsset(x.asset)) stable+=x.usd; }
           return { stable:stable, risky: total-stable, total:total, stablePct: total>0? stable/total*100:0 };
         },
         movers() {
@@ -2111,6 +2327,51 @@ export const appHtml = `<!doctype html>
         },
         async deletePortfolio(id) { if(!(await this.askConfirm({ title:'Delete portfolio?', message:'This portfolio and all its contents will be removed.', confirmText:'Delete' }))) return; const r=await this.gql('DeletePortfolio', { id: Number(id) }); if(r&&r.ok){ await this.loadPortfolios(); await this.loadOverview(); } },
 
+        // ---- fixed assets ----
+        kindLabel(k) { return this.KIND_LABELS[k] || k; },
+        parseAmountInput(v) { const raw=String(v??'').replace(/,/g,'').trim(); const n=Number(raw); return raw && isFinite(n) ? n : null; },
+        async loadFixedAssets() {
+          this.fixedLoading = true;
+          try { const r=await this.gql('FixedAssets'); if(r&&r.ok) this.fixedData=r.data; }
+          finally { this.fixedLoading = false; }
+        },
+        openFixedAssetModal(a) {
+          const disp = (n)=> n!==null&&n!==undefined&&isFinite(Number(n)) ? Number(n).toLocaleString('en-US',{maximumFractionDigits:8}) : '';
+          this.fa = a
+            ? { id:a.id, portfolio_id:a.portfolio_id, kind:a.kind, label:a.label, currency:a.currency, purchaseDisplay:disp(a.purchase_price), purchase_date:this.toDateInput(a.purchase_date), valueDisplay:'', note:a.note||'' }
+            : { id:null, portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', kind:'property', label:'', currency:'IDR', purchaseDisplay:'', purchase_date:this.toDateInput(null), valueDisplay:'', note:'' };
+          this.modal='fixedAsset';
+        },
+        async saveFixedAsset() {
+          const purchase = this.parseAmountInput(this.fa.purchaseDisplay);
+          if (purchase===null || purchase<0) { this.flash('Purchase price is required', 'error'); return; }
+          const body = { portfolio_id:this.fa.portfolio_id, kind:this.fa.kind, label:this.fa.label, currency:this.fa.currency, purchase_price:purchase, purchase_date:this.fa.purchase_date ? new Date(this.fa.purchase_date+'T00:00:00').getTime() : null, note:this.fa.note||null };
+          if (!this.fa.id) { const v=this.parseAmountInput(this.fa.valueDisplay); if(String(this.fa.valueDisplay).trim() && (v===null || v<0)) { this.flash('Current value must be zero or more','error'); return; } body.initial_value = v; }
+          const r = this.fa.id ? await this.gql('UpdateFixedAsset', { id:Number(this.fa.id), input:body }) : await this.gql('CreateFixedAsset', { input:body });
+          if (r&&r.ok) { this.modal=null; await Promise.all([this.loadFixedAssets(), this.loadOverview(), this.loadReturns()]); this.flash(this.fa.id?'Asset updated':'Asset added','success'); }
+          else if (r) this.flash(r.error, 'error');
+        },
+        async deleteFixedAsset(id) {
+          if (!(await this.askConfirm({ title:'Delete asset?', message:'The asset and its valuation history will be removed.', confirmText:'Delete' }))) return;
+          const r=await this.gql('DeleteFixedAsset', { id:Number(id) });
+          if (r&&r.ok) { if(this.fixedExpanded===id) this.fixedExpanded=null; await Promise.all([this.loadFixedAssets(), this.loadOverview(), this.loadReturns()]); }
+          else if (r) this.flash(r.error, 'error');
+        },
+        openValuationModal(a) { this.fv = { asset:a, valueDisplay:'', valued_at:this.toDateInput(null), source:'' }; this.modal='valuation'; },
+        async saveValuation() {
+          const v = this.parseAmountInput(this.fv.valueDisplay);
+          if (v===null || v<0) { this.flash('Value is required', 'error'); return; }
+          const body = { value:v, valued_at:this.fv.valued_at && this.fv.valued_at!==this.toDateInput(null) ? new Date(this.fv.valued_at+'T00:00:00').getTime() : Date.now(), source:this.fv.source||null };
+          const r = await this.gql('AddFixedAssetValuation', { id:Number(this.fv.asset.id), input:body });
+          if (r&&r.ok) { this.modal=null; await Promise.all([this.loadFixedAssets(), this.loadOverview(), this.loadReturns()]); this.flash('Value updated','success'); }
+          else if (r) this.flash(r.error, 'error');
+        },
+        async deleteValuation(id) {
+          if (!(await this.askConfirm({ title:'Delete valuation?', message:'This entry will be removed from the history.', confirmText:'Delete' }))) return;
+          const r=await this.gql('DeleteFixedAssetValuation', { id:Number(id) });
+          if (r&&r.ok) { await Promise.all([this.loadFixedAssets(), this.loadOverview(), this.loadReturns()]); }
+          else if (r) this.flash(r.error, 'error');
+        },
         openHoldingModal(h) { const amt=h?Math.abs(Number(h.amount)||0):null; this.hd = h ? { id:h.id, portfolio_id:h.portfolio_id, label:h.label, currency:h.currency||'USD', amountDisplay:amt?amt.toLocaleString('en-US',{maximumFractionDigits:8}):'', direction:(Number(h.amount)<0?'out':'in'), note:h.note||'', added_at:this.toDateInput(h.added_at||h.created_at) } : { id:null, portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', label:'', currency:'USD', amountDisplay:'', direction:'in', note:'', added_at:this.toDateInput(null) }; this.modal='holding'; },
         async saveHolding() {
           const mag = Math.abs(parseFloat((this.hd.amountDisplay||'').replace(/,/g,''))||0);

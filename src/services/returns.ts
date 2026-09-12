@@ -14,6 +14,11 @@ interface ManualRow {
   amount: number;
   created_at: number;
 }
+interface FixedRow {
+  currency: string;
+  purchase_price: number;
+  purchase_date: number;
+}
 
 export interface CostBasisResult {
   costBasis: number; // total modal masuk (USD) dinilai pada tanggal masuk
@@ -30,6 +35,7 @@ export interface CostBasisResult {
  * Cost basis = Σ (jumlah × harga aset pada TANGGAL MASUK), digabung dari:
  *   - deposit CEX/on-chain (tabel `deposits`, kecuali status 'pending')
  *   - holding manual (tabel `manual_holdings`, termasuk amount negatif = arah keluar)
+ *   - aset tetap (tabel `fixed_assets`): harga beli pada tanggal beli — BUKAN nilai taksiran kini
  *
  * Penilaian harga per tanggal:
  *   - stablecoin → 1 USD
@@ -44,17 +50,19 @@ export interface CostBasisResult {
  *   - Deposit yang lebih tua dari jangkauan kline (~1000 hari) dinilai pada close terawal.
  */
 export async function computeCostBasis(env: Env): Promise<CostBasisResult> {
-  const [deposits, manuals] = await Promise.all([
+  const [deposits, manuals, fixed] = await Promise.all([
     queryAll<DepositRow>(
       env,
       `SELECT asset, amount, ts FROM deposits WHERE status != 'pending' AND amount > 0`,
     ),
     queryAll<ManualRow>(env, `SELECT currency, amount, created_at FROM manual_holdings`),
+    queryAll<FixedRow>(env, `SELECT currency, purchase_price, purchase_date FROM fixed_assets`),
   ]);
 
   const items = [
     ...deposits.map((d) => ({ asset: d.asset.toUpperCase(), amount: d.amount, ts: d.ts })),
     ...manuals.map((m) => ({ asset: m.currency.toUpperCase(), amount: m.amount, ts: m.created_at })),
+    ...fixed.map((f) => ({ asset: f.currency.toUpperCase(), amount: f.purchase_price, ts: f.purchase_date })),
   ];
   const totalItems = items.length;
   if (totalItems === 0) {

@@ -47,6 +47,8 @@ export const typeDefs = /* GraphQL */ `
     holdings(portfolioId: Int): JSON
     "GET /stocks"
     stocks: JSON
+    "Aset tetap (properti/kendaraan/emas) + valuasi terbaru & riwayatnya, dinilai dalam USD"
+    fixedAssets(portfolioId: Int): JSON
     "GET /dashboard/overview"
     overview: JSON
     "GET /dashboard/history"
@@ -105,6 +107,15 @@ export const typeDefs = /* GraphQL */ `
     deleteHolding(id: Int!): JSON
     "POST /holdings/import"
     importHoldings(input: JSON!): JSON
+
+    "Tambah aset tetap: { portfolio_id, kind, label, currency, purchase_price, purchase_date, initial_value?, note? }"
+    createFixedAsset(input: JSON!): JSON
+    "Ubah metadata aset tetap (nilai kini diubah lewat addFixedAssetValuation)"
+    updateFixedAsset(id: Int!, input: JSON!): JSON
+    deleteFixedAsset(id: Int!): JSON
+    "Catat taksiran nilai baru: { value, valued_at?, source? }"
+    addFixedAssetValuation(id: Int!, input: JSON!): JSON
+    deleteFixedAssetValuation(id: Int!): JSON
 
     "POST /dashboard/sync"
     syncAll: JSON

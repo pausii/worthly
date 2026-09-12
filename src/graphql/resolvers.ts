@@ -1,5 +1,5 @@
 import { GraphQLError } from 'graphql';
-import type { AccountType, Env, StockConfig } from '../types';
+import { FIXED_ASSET_KINDS, type AccountType, type Env, type FixedAssetKind, type StockConfig } from '../types';
 import { now, queryAll, queryOne, run } from '../lib/db';
 import { hashPassword, verifyPassword, encryptSecret } from '../lib/crypto';
 import { createSession, destroySession } from '../lib/session';
@@ -8,6 +8,7 @@ import { isCooling } from '../lib/cooldown';
 import { syncOne, startDepositBackfill, runDepositBackfill, syncAll } from '../services/sync';
 import { getStoredOverview, refreshOverview } from '../services/overview';
 import { computeCostBasis } from '../services/returns';
+import { FIXED_ASSETS_LATEST_SQL } from '../services/valuation';
 import {
   classifyAsset,
   getCryptoCandles,
@@ -99,6 +100,45 @@ function publicView(row: AccountRow) {
 
 // =================== holdings (helpers) ===================
 const ALLOWED_CURRENCIES = new Set(['USD', 'IDR', 'JPY', 'SGD']);
+
+// =================== fixed assets (helpers) ===================
+interface FixedAssetLatestRow {
+  id: number;
+  portfolio_id: number;
+  kind: string;
+  label: string;
+  currency: string;
+  purchase_price: number;
+  purchase_date: number;
+  note: string | null;
+  created_at: number;
+  updated_at: number;
+  value: number;
+  valued_at: number;
+  source: string | null;
+}
+interface ValuationRow {
+  id: number;
+  asset_id: number;
+  value: number;
+  valued_at: number;
+  source: string | null;
+  created_at: number;
+}
+
+/** Parse tanggal dari input (epoch ms atau string tanggal). Null bila tidak valid. */
+function parseTs(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  if (isFinite(n) && n > 0) return n;
+  const t = Date.parse(String(v));
+  return isFinite(t) ? t : null;
+}
+
+function parseKind(v: unknown): FixedAssetKind | null {
+  const k = String(v ?? '').trim().toLowerCase();
+  return (FIXED_ASSET_KINDS as readonly string[]).includes(k) ? (k as FixedAssetKind) : null;
+}
 
 function parseCsv(text: string): string[][] {
   const s = text.replace(/^﻿/, '');
@@ -253,6 +293,67 @@ export const resolvers = {
         : queryAll(ctx.env, 'SELECT * FROM manual_holdings ORDER BY added_at DESC, created_at DESC');
     },
 
+    // ---- fixed assets ----
+    async fixedAssets(_p: unknown, { portfolioId }: { portfolioId?: number }, ctx: GraphQLContext) {
+      const env = ctx.env;
+      const sql = FIXED_ASSETS_LATEST_SQL + (portfolioId ? ' WHERE f.portfolio_id = ?' : '') + ' ORDER BY f.label';
+      const assets = portfolioId
+        ? await queryAll<FixedAssetLatestRow>(env, sql, Number(portfolioId))
+        : await queryAll<FixedAssetLatestRow>(env, sql);
+      if (!assets.length) {
+        return { assets: [], totals: { costUsd: 0, valueUsd: 0, plUsd: 0, plPct: 0, idrUsd: 0 } };
+      }
+
+      const ids = assets.map((a) => a.id);
+      const [valuations, rates] = await Promise.all([
+        queryAll<ValuationRow>(
+          env,
+          `SELECT id, asset_id, value, valued_at, source, created_at FROM fixed_asset_valuations
+           WHERE asset_id IN (${ids.map(() => '?').join(',')}) ORDER BY valued_at DESC, id DESC`,
+          ...ids,
+        ),
+        getUsdRates(env, [...new Set([...assets.map((a) => a.currency.toUpperCase()), 'IDR'])]),
+      ]);
+      const byAsset = new Map<number, ValuationRow[]>();
+      for (const v of valuations) {
+        const list = byAsset.get(v.asset_id) ?? [];
+        list.push(v);
+        byAsset.set(v.asset_id, list);
+      }
+
+      let totCost = 0;
+      let totValue = 0;
+      const out = assets.map((a) => {
+        const rate = rates[a.currency.toUpperCase()] ?? 0;
+        const costUsd = a.purchase_price * rate;
+        const valueUsd = a.value * rate;
+        totCost += costUsd;
+        totValue += valueUsd;
+        const pl = a.value - a.purchase_price;
+        return {
+          ...a,
+          rate,
+          costUsd,
+          valueUsd,
+          plUsd: pl * rate,
+          plPct: a.purchase_price > 0 ? (pl / a.purchase_price) * 100 : 0,
+          valuations: byAsset.get(a.id) ?? [],
+        };
+      });
+      out.sort((x, y) => y.valueUsd - x.valueUsd);
+      const totPl = totValue - totCost;
+      return {
+        assets: out,
+        totals: {
+          costUsd: totCost,
+          valueUsd: totValue,
+          plUsd: totPl,
+          plPct: totCost > 0 ? (totPl / totCost) * 100 : 0,
+          idrUsd: rates['IDR'] ?? 0,
+        },
+      };
+    },
+
     // ---- stocks ----
     async stocks(_p: unknown, _a: unknown, ctx: GraphQLContext) {
       const env = ctx.env;
@@ -375,8 +476,14 @@ export const resolvers = {
 
       const amounts = new Map<string, number>();
       const usdValue = new Map<string, number>();
+      const fixed = await queryAll<FixedAssetLatestRow>(env, FIXED_ASSETS_LATEST_SQL);
+      const valuations = await queryAll<ValuationRow>(env,
+        'SELECT * FROM fixed_asset_valuations ORDER BY valued_at, id');
       for (const p of overview.portfolios) {
         for (const a of p.assets) {
+          if (a.origin === 'asset') {
+            continue;
+          }
           const amt = Number(a.amount);
           if (!isFinite(amt) || amt === 0) continue;
           const sym = a.asset.toUpperCase();
@@ -392,20 +499,35 @@ export const resolvers = {
         if (classifyAsset(sym) !== 'crypto') constAssets.push(sym);
         else if ((usdValue.get(sym) || 0) >= MIN_CRYPTO_USD) cryptoAssets.push(sym);
       }
-      const constRates = constAssets.length ? await getUsdRates(env, constAssets) : {};
+      const constRates = await getUsdRates(env, [...constAssets, ...fixed.map((f) => f.currency)]);
 
       const series = await Promise.all(
         cryptoAssets.map(async (sym) => ({ sym, m: new Map((await getDailyCloses(env, sym + 'USDT', days)).map((p) => [p.t, p.c])) })),
       );
 
       const daySet = new Set<number>();
+      // Include daily points even when the portfolio contains only fixed assets.
+      const dayMs = 86400000;
+      const today = Math.floor(now() / dayMs) * dayMs;
+      if (fixed.length) for (let i = 0; i < days; i++) daySet.add(today - i * dayMs);
       for (const s of series) for (const t of s.m.keys()) daySet.add(t);
       const timeline = [...daySet].sort((a, b) => a - b);
 
-      const constUsd = constAssets.reduce((s, a) => s + (amounts.get(a) || 0) * (constRates[a] || 0), 0);
+      const constUsd =
+        constAssets.reduce((s, a) => s + (amounts.get(a) || 0) * (constRates[a] || 0), 0);
+      const fixedValues = new Map<number, number>();
+      let valuationIndex = 0;
       const last: Record<string, number> = {};
       const rows = timeline.map((t) => {
         let total = constUsd;
+        const cutoff = Math.min(t + dayMs - 1, now());
+        while (valuationIndex < valuations.length && valuations[valuationIndex].valued_at <= cutoff) {
+          const v = valuations[valuationIndex++];
+          fixedValues.set(v.asset_id, v.value);
+        }
+        for (const f of fixed) if (f.purchase_date <= cutoff) {
+          total += (fixedValues.get(f.id) ?? f.purchase_price) * (constRates[f.currency] ?? 0);
+        }
         for (const s of series) {
           const close = s.m.get(t);
           if (close !== undefined) last[s.sym] = close;
@@ -500,15 +622,17 @@ export const resolvers = {
       const overview = (await getStoredOverview(env)) || (await refreshOverview(env));
       const currentValue = overview?.grandTotalUsd ?? 0;
 
-      const sig = await queryOne<{ dc: number; dts: number; mc: number; mts: number }>(
+      const sig = await queryOne<{ dc: number; dts: number; mc: number; mts: number; fc: number; fts: number }>(
         env,
         `SELECT
            (SELECT COUNT(*) FROM deposits WHERE status != 'pending') AS dc,
            (SELECT COALESCE(MAX(ts), 0) FROM deposits) AS dts,
            (SELECT COUNT(*) FROM manual_holdings) AS mc,
-           (SELECT COALESCE(MAX(updated_at), 0) FROM manual_holdings) AS mts`,
+           (SELECT COALESCE(MAX(updated_at), 0) FROM manual_holdings) AS mts,
+           (SELECT COUNT(*) FROM fixed_assets) AS fc,
+           (SELECT COALESCE(MAX(updated_at), 0) FROM fixed_assets) AS fts`,
       );
-      const sigStr = `${sig?.dc ?? 0}:${sig?.dts ?? 0}:${sig?.mc ?? 0}:${sig?.mts ?? 0}`;
+      const sigStr = `${sig?.dc ?? 0}:${sig?.dts ?? 0}:${sig?.mc ?? 0}:${sig?.mts ?? 0}:${sig?.fc ?? 0}:${sig?.fts ?? 0}`;
 
       let basis = null as Awaited<ReturnType<typeof computeCostBasis>> | null;
       const cachedRaw = await env.KV.get(RETURNS_KV_KEY);
@@ -710,6 +834,18 @@ export const resolvers = {
           rows.map((r) => [r.portfolio, r.label, r.asset_class, r.currency, r.amount, r.note, iso(r.added_at)]),
         );
         return { filename: 'holdings.csv', content: '﻿' + body };
+      }
+      if (type === 'assets') {
+        const rows = await queryAll<FixedAssetLatestRow & { portfolio: string }>(
+          env,
+          FIXED_ASSETS_LATEST_SQL.replace('FROM fixed_assets f', ', p.name AS portfolio FROM fixed_assets f JOIN portfolios p ON p.id = f.portfolio_id') +
+            ' ORDER BY p.name, f.label',
+        );
+        const body = toCsv(
+          ['portfolio', 'kind', 'label', 'currency', 'purchase_price', 'purchase_date', 'current_value', 'valued_at', 'source', 'note'],
+          rows.map((r) => [r.portfolio, r.kind, r.label, r.currency, r.purchase_price, iso(r.purchase_date), r.value, iso(r.valued_at), r.source, r.note]),
+        );
+        return { filename: 'assets.csv', content: '\ufeff' + body };
       }
       if (type === 'snapshots') {
         const rows = await queryAll<{ portfolio: string; total_usd: number; captured_at: number }>(
@@ -1143,6 +1279,127 @@ export const resolvers = {
     },
 
     // ---- dashboard ----
+    // ---- fixed assets ----
+    async createFixedAsset(_p: unknown, { input }: { input: any }, ctx: GraphQLContext) {
+      const env = ctx.env;
+      const body = input ?? {};
+      const portfolioId = Number(body.portfolio_id);
+      const kind = parseKind(body.kind);
+      const label = String(body.label ?? '').trim();
+      const currency = String(body.currency ?? '').trim().toUpperCase();
+      const purchasePrice = Number(body.purchase_price);
+      const purchaseDate = parseTs(body.purchase_date) ?? now();
+      const initialValue = body.initial_value === undefined || body.initial_value === null || body.initial_value === ''
+        ? purchasePrice
+        : Number(body.initial_value);
+
+      if (!portfolioId) fail('Portfolio is required');
+      if (!kind) fail('Invalid asset kind');
+      if (!label) fail('Label is required');
+      if (!ALLOWED_CURRENCIES.has(currency)) fail('Invalid currency');
+      if (!isFinite(purchasePrice) || purchasePrice < 0) fail('Purchase price must be zero or more');
+      if (!isFinite(initialValue) || initialValue < 0) fail('Current value must be zero or more');
+
+      const pf = await queryOne(env, 'SELECT id FROM portfolios WHERE id = ?', portfolioId);
+      if (!pf) fail('Portfolio not found');
+
+      const ts = now();
+      const results = await env.DB.batch([
+        env.DB.prepare(
+        `INSERT INTO fixed_assets (portfolio_id, kind, label, currency, purchase_price, purchase_date, note, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+        portfolioId, kind, label, currency, purchasePrice, purchaseDate, body.note ?? null, ts, ts,
+        ),
+        env.DB.prepare(`INSERT INTO fixed_asset_valuations (asset_id, value, valued_at, source, created_at)
+          VALUES (last_insert_rowid(), ?, ?, ?, ?)`).bind(initialValue, ts, 'initial', ts),
+      ]);
+      const id = results[0].meta.last_row_id;
+      await refreshOverview(env).catch(() => undefined);
+      return { id };
+    },
+    async updateFixedAsset(_p: unknown, { id, input }: { id: number; input: any }, ctx: GraphQLContext) {
+      const env = ctx.env;
+      const body = input ?? {};
+      const existing = await queryOne<{ currency: string; note: string | null }>(env, 'SELECT currency, note FROM fixed_assets WHERE id = ?', id);
+      if (!existing) fail('Asset not found');
+
+      const kind = body.kind === undefined ? null : parseKind(body.kind);
+      if (body.kind !== undefined && !kind) fail('Invalid asset kind');
+      const currency = body.currency ? String(body.currency).trim().toUpperCase() : null;
+      if (currency && !ALLOWED_CURRENCIES.has(currency)) fail('Invalid currency');
+      if (body.currency !== undefined && currency !== existing!.currency) fail('Currency cannot be changed after creation');
+      if (body.label !== undefined && !String(body.label ?? '').trim()) fail('Label is required');
+      const purchasePrice = body.purchase_price === undefined || body.purchase_price === null || body.purchase_price === ''
+        ? null
+        : Number(body.purchase_price);
+      if (purchasePrice !== null && (!isFinite(purchasePrice) || purchasePrice < 0)) fail('Purchase price must be zero or more');
+      const purchaseDate = parseTs(body.purchase_date);
+      const portfolioId = body.portfolio_id ? Number(body.portfolio_id) : null;
+      if (portfolioId) {
+        const pf = await queryOne(env, 'SELECT id FROM portfolios WHERE id = ?', portfolioId);
+        if (!pf) fail('Portfolio not found');
+      }
+
+      await run(
+        env,
+        `UPDATE fixed_assets
+         SET portfolio_id = COALESCE(?, portfolio_id),
+             kind = COALESCE(?, kind),
+             label = COALESCE(?, label),
+             currency = COALESCE(?, currency),
+             purchase_price = COALESCE(?, purchase_price),
+             purchase_date = COALESCE(?, purchase_date),
+             note = ?,
+             updated_at = ?
+         WHERE id = ?`,
+        portfolioId, kind, String(body.label ?? '').trim() || null, currency, purchasePrice, purchaseDate,
+        body.note === undefined ? existing!.note : body.note, now(), id,
+      );
+      await refreshOverview(env).catch(() => undefined);
+      return { updated: true };
+    },
+    async deleteFixedAsset(_p: unknown, { id }: { id: number }, ctx: GraphQLContext) {
+      const env = ctx.env;
+      // Hapus valuasi eksplisit (jaga-jaga bila foreign_keys tidak aktif; ON DELETE CASCADE tetap ada).
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM fixed_asset_valuations WHERE asset_id = ?').bind(id),
+        env.DB.prepare('DELETE FROM fixed_assets WHERE id = ?').bind(id),
+      ]);
+      await refreshOverview(env).catch(() => undefined);
+      return { deleted: true };
+    },
+    async addFixedAssetValuation(_p: unknown, { id, input }: { id: number; input: any }, ctx: GraphQLContext) {
+      const env = ctx.env;
+      const body = input ?? {};
+      const existing = await queryOne(env, 'SELECT id FROM fixed_assets WHERE id = ?', id);
+      if (!existing) fail('Asset not found');
+      const value = Number(body.value);
+      if (!isFinite(value) || value < 0) fail('Value must be zero or more');
+      const valuedAt = parseTs(body.valued_at) ?? now();
+      const source = String(body.source ?? '').trim() || null;
+
+      const ts = now();
+      const res = await run(
+        env,
+        `INSERT INTO fixed_asset_valuations (asset_id, value, valued_at, source, created_at) VALUES (?, ?, ?, ?, ?)`,
+        id, value, valuedAt, source, ts,
+      );
+      await run(env, 'UPDATE fixed_assets SET updated_at = ? WHERE id = ?', ts, id);
+      await refreshOverview(env).catch(() => undefined);
+      return { id: res.meta.last_row_id };
+    },
+    async deleteFixedAssetValuation(_p: unknown, { id }: { id: number }, ctx: GraphQLContext) {
+      const env = ctx.env;
+      const row = await queryOne<{ asset_id: number }>(env, 'SELECT asset_id FROM fixed_asset_valuations WHERE id = ?', id);
+      if (!row) fail('Valuation not found');
+      const cnt = await queryOne<{ c: number }>(env, 'SELECT COUNT(*) AS c FROM fixed_asset_valuations WHERE asset_id = ?', row!.asset_id);
+      if ((cnt?.c ?? 0) <= 1) fail('Cannot delete the only valuation — add a new one first');
+      await run(env, 'DELETE FROM fixed_asset_valuations WHERE id = ?', id);
+      await run(env, 'UPDATE fixed_assets SET updated_at = ? WHERE id = ?', now(), row!.asset_id);
+      await refreshOverview(env).catch(() => undefined);
+      return { deleted: true };
+    },
+
     async syncAll(_p: unknown, _a: unknown, ctx: GraphQLContext) {
       return syncAll(ctx.env);
     },
