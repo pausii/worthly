@@ -2,6 +2,9 @@
 
 Personal crypto / CEX portfolio tracker yang berjalan di **Cloudflare Workers**.
 
+![Worthly Preview](.github/assets/preview.png)
+
+
 - **Backend:** Hono + Cloudflare D1 (database) + KV (session, rate limit, cache harga)
 - **Frontend:** Alpine.js + Tailwind CSS + ApexCharts, **self-hosted** (di-build lokal ke `public/`, disajikan via Workers Assets — bukan CDN), responsif + PWA
 - **CEX:** Binance & Bybit (saldo SPOT / FUTURES / EARN / FUNDING + riwayat deposit) via API resmi
