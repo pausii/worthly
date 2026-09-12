@@ -1,4 +1,22 @@
 // Browser renderer, bundled as WorthlyShare by build-frontend.mjs.
+export function shareAssetList(data: any, options: any) {
+  const rows = (data.assets || []).filter((a: any) => Number.isFinite(a.usd) &&
+    (options.minDollar !== false ? a.usd >= 1 : (a.usd !== 0 || Number(a.amount) !== 0)));
+  const order = options.order || 'value-desc';
+  rows.sort((a: any, b: any) => {
+    const name = String(a.asset).localeCompare(String(b.asset));
+    if (order === 'name-asc') return name;
+    if (order === 'name-desc') return -name;
+    return (order === 'value-asc' ? a.usd - b.usd : b.usd - a.usd) || name;
+  });
+  // Keep type readable instead of squeezing the whole portfolio into one card.
+  const perPage = options.size === 'story' ? 20 : options.size === 'landscape' ? 6 : 8;
+  const pages = Math.max(1, Math.ceil(rows.length / perPage));
+  const page = Math.min(Math.max(Math.floor(Number(options.page) || 1), 1), pages);
+  const positiveTotal = (data.assets || []).reduce((sum: number, a: any) => sum + (Number.isFinite(a.usd) && a.usd > 0 ? a.usd : 0), 0);
+  return { rows, pages, page, perPage, positiveTotal, visible: rows.slice((page - 1) * perPage, page * perPage) };
+}
+
 export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: any) {
   const sizes: Record<string, number[]> = { square: [1080, 1080], story: [1080, 1920], landscape: [1600, 900] };
   const [w, h] = sizes[options.size] || sizes.square;
@@ -32,7 +50,7 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
   };
   text('W / WORTHLY', pad, 105, 24, muted);
   text(date(data.asOf), w - pad, 105, 23, muted, 'right');
-  const titles: Record<string, string> = { overview: 'The bigger picture.', allocation: 'How it is allocated.', performance: 'A view of the journey.' };
+  const titles: Record<string, string> = { overview: 'The bigger picture.', allocation: 'How it is allocated.', performance: 'A view of the journey.', assets: 'Everything I hold.' };
   text(titles[options.template] || titles.overview, pad, 194, 51);
   const rows = data.assets.filter((a: any) => Number.isFinite(a.usd) && a.usd > 0);
   const total = rows.reduce((s: number, a: any) => s + a.usd, 0);
@@ -40,7 +58,42 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
   if (rows.length > 5) top.push({ label: 'Others', usd: rows.slice(5).reduce((s: number, a: any) => s + a.usd, 0) });
   const wide = w > h;
   const story = h > w;
-  if (options.template === 'performance') {
+  if (options.template === 'assets') {
+    const list = shareAssetList(data, options);
+    const percent = options.percentages !== false;
+    const qty = !!options.quantities;
+    const value = !!options.amounts;
+    text(list.rows.length + ' holdings · ' + (options.minDollar !== false ? 'Value ≥ US$1' : 'All nonzero holdings'), pad, 255, 26, muted);
+    text('PAGE ' + list.page + ' / ' + list.pages, w - pad, 300, 21, muted, 'right');
+    const columnCount = Number(qty) + Number(value) + Number(percent);
+    const nameWidth = columnCount ? inner * 0.35 : inner;
+    const cellWidth = columnCount ? (inner - nameWidth) / columnCount : 0;
+    const columns: { label: string; field: string }[] = [];
+    if (qty) columns.push({ label: 'AMOUNT', field: 'amount' });
+    if (value) columns.push({ label: 'VALUE', field: 'value' });
+    if (percent) columns.push({ label: 'SHARE', field: 'percent' });
+    text('ASSET', pad, 350, 20, muted);
+    columns.forEach((c, i) => text(c.label, pad + nameWidth + cellWidth * (i + 1), 350, 20, muted, 'right', cellWidth - 18));
+    if (!list.rows.length) text('No assets match this filter.', pad, 450, 30, muted);
+    list.visible.forEach((a: any, i: number) => {
+      const y = 405 + i * 70;
+      const index = (list.page - 1) * list.perPage + i;
+      ctx.fillStyle = colors[index % colors.length]; ctx.fillRect(pad, y - 22, 4, 29);
+      text(options.names ? a.asset : 'Asset ' + (index + 1), pad + 20, y, 26, ink, 'left', nameWidth - 36);
+      columns.forEach((c, ci) => {
+        let content = '—';
+        if (c.field === 'amount' && Number.isFinite(a.amount)) {
+          content = a.amount.toLocaleString('en-US', { maximumSignificantDigits: 8 });
+          if (a.origin === 'asset' && a.currency) content += ' ' + a.currency;
+        }
+        if (c.field === 'value') content = money(a.usd);
+        if (c.field === 'percent' && a.usd >= 0 && list.positiveTotal > 0) content = (a.usd / list.positiveTotal * 100).toFixed(2) + '%';
+        text(content, pad + nameWidth + cellWidth * (ci + 1), y, 24, ink, 'right', cellWidth - 18);
+      });
+      ctx.strokeStyle = light ? '#cbd5e1' : '#303b59'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pad, y + 25); ctx.lineTo(w - pad, y + 25); ctx.stroke();
+    });
+  } else if (options.template === 'performance') {
     const points = data.history.filter((p: any) => Number.isFinite(p.total_usd) && Number.isFinite(p.captured_at)).sort((a: any, b: any) => a.captured_at - b.captured_at);
     const simulated = data.mode === 'holdings';
     text(simulated ? 'SIMULATED HOLDINGS · ' + data.period : 'RECORDED VALUE · ' + data.period, pad, 250, 24, muted);
@@ -89,7 +142,7 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
       text((a.usd / total * 100).toFixed(1) + '%', lx + lw, yy, 26, ink, 'right');
     });
   }
-  text(options.template === 'performance' ? (data.mode === 'holdings' ? 'Simulation, not actual past balances.' : 'Snapshots, not investment returns.') : 'Allocation uses positive holdings; totals include liabilities.', pad, h - 88, 21, muted);
+  text(options.template === 'assets' ? (options.percentages !== false ? 'Share = % of all positive holdings, before the filter.' : 'Holdings at the date shown above.') : options.template === 'performance' ? (data.mode === 'holdings' ? 'Simulation, not actual past balances.' : 'Snapshots, not investment returns.') : 'Allocation uses positive holdings; totals include liabilities.', pad, h - 88, 21, muted);
   text('MY PORTFOLIO / MY PERSPECTIVE', pad, h - 52, 18, muted);
   text('worthly', w - pad, h - 52, 20, muted, 'right');
 }

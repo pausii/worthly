@@ -131,6 +131,15 @@ Performance mengikuti periode dan zoom chart saat kartu dibuat, dengan label sna
 Gunakan **Refresh data** setelah mengganti filter Analysis. Preview dan ekspor dibuat di browser,
 tanpa mengunggah gambar atau membagikannya secara otomatis.
 
+Template **All Assets** menampilkan seluruh holding sebagai daftar berhalaman. Filter **≥ US$1**
+aktif secara default (termasuk nilai tepat $1), dihitung setelah unit aset sejenis digabung lintas
+wallet/exchange. Properti dan aset tetap tetap terpisah. Matikan filter untuk menyertakan dust,
+holding tanpa harga, dan nilai negatif; holding kosong tidak disertakan. Pilih kolom jumlah unit,
+nilai uang, dan persentase secara terpisah, serta urutan nilai terbesar/terkecil atau nama A–Z/Z–A.
+Persentase dihitung terhadap seluruh holding bernilai positif sebelum filter; nilai negatif
+ditampilkan dengan persentase “—”. Unduh setiap halaman PNG untuk membagikan seluruh daftar.
+Tes regresi filter, urutan, paginasi, dan privasi: `npm run test:share-assets`.
+
 ## Catatan keamanan
 
 - Gunakan **API key read-only** untuk CEX. App ini tidak pernah melakukan trade/withdraw.

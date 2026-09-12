@@ -9,6 +9,7 @@
     "deploy": "npm run typecheck && node scripts/build-frontend.mjs && npm run db:migrate:remote && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test:fixed-assets": "node scripts/test-fixed-assets.mjs",
+    "test:share-assets": "node scripts/test-share-assets.mjs",
     "db:create": "wrangler d1 create wallet_db",
     "kv:create": "wrangler kv namespace create KV",
     "db:migrate:local": "wrangler d1 migrations apply wallet_db --local",

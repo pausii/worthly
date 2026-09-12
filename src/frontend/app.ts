@@ -658,20 +658,31 @@ export const appHtml = `<!doctype html>
           <div class="grid gap-6 lg:grid-cols-2">
             <div class="space-y-5" @change="renderSharePreview()">
               <fieldset><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">01 / Layout</legend>
-                <div class="grid gap-2 sm:grid-cols-3"><template x-for="t in [{id:'overview',name:'Overview',desc:'Value + allocation'},{id:'allocation',name:'Allocation Only',desc:'A private perspective'},{id:'performance',name:'Performance',desc:'Your value journey'}]" :key="t.id"><button @click="shareOptions.template=t.id; renderSharePreview()" :aria-pressed="shareOptions.template===t.id" class="rounded-xl border p-3 text-left text-sm" :class="shareOptions.template===t.id ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200' : 'border-slate-200 dark:border-slate-600'"><span class="block font-semibold" x-text="t.name"></span><span class="mt-1 block text-xs opacity-70" x-text="t.desc"></span></button></template></div>
+                <div class="grid gap-2 sm:grid-cols-2"><template x-for="t in [{id:'overview',name:'Overview',desc:'Value + allocation'},{id:'allocation',name:'Allocation Only',desc:'A private perspective'},{id:'performance',name:'Performance',desc:'Your value journey'},{id:'assets',name:'All Assets',desc:'Every holding, your way'}]" :key="t.id"><button @click="shareOptions.template=t.id; shareOptions.page=1; renderSharePreview()" :aria-pressed="shareOptions.template===t.id" class="rounded-xl border p-3 text-left text-sm" :class="shareOptions.template===t.id ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200' : 'border-slate-200 dark:border-slate-600'"><span class="block font-semibold" x-text="t.name"></span><span class="mt-1 block text-xs opacity-70" x-text="t.desc"></span></button></template></div>
               </fieldset>
               <div class="grid grid-cols-2 gap-3">
                 <label class="text-sm">Theme<select x-model="shareOptions.theme" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="dark">Midnight</option><option value="light">Daylight</option></select></label>
                 <label class="text-sm">Format<select x-model="shareOptions.size" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="square">Square · 1080 × 1080</option><option value="story">Story · 1080 × 1920</option><option value="landscape">Landscape · 1600 × 900</option></select></label>
               </div>
               <fieldset class="space-y-3"><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">02 / Privacy</legend>
-                <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.amounts" :disabled="shareOptions.template==='allocation'"> Show amounts <span class="text-xs text-slate-500">(except Allocation Only)</span></label>
+                <div x-show="shareOptions.template==='assets'" class="space-y-3">
+                  <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.minDollar" @change="shareOptions.page=1"> Only assets worth ≥ US$1</label>
+                  <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.quantities"> Show amount (units)</label>
+                  <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.percentages"> Show percentage</label>
+                  <label class="block text-sm">Order<select x-model="shareOptions.order" @change="shareOptions.page=1" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="value-desc">Value: highest first</option><option value="value-asc">Value: lowest first</option><option value="name-asc">Name: A–Z</option><option value="name-desc">Name: Z–A</option></select></label>
+                  <p class="text-xs text-slate-500 dark:text-slate-400">Filter uses USD regardless of display currency. Percentages use all positive holdings before filtering. Fixed asset amounts are estimated values in their original currency.</p>
+                </div>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.amounts" :disabled="shareOptions.template==='allocation'"> Show monetary value <span class="text-xs text-slate-500">(except Allocation Only)</span></label>
                 <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.names"> Show asset names</label>
-                <p class="text-xs text-slate-500 dark:text-slate-400">Names and amounts start hidden. Percentages and chart shape remain visible.</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Names, units and monetary values start hidden. Percentages and chart shape can still reveal portfolio information.</p>
               </fieldset>
               <p class="text-xs text-slate-500 dark:text-slate-400">Uses a copy of the currently loaded data and selected period. Performance includes the current chart zoom. Refresh the card after changing Analysis filters.</p>
               <div class="flex flex-wrap gap-2"><button @click="downloadShareCard()" :disabled="shareBusy || shareRefreshing || !!shareError" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" x-text="shareBusy?'Preparing…':'Download PNG'"></button><button @click="refreshShareData()" :disabled="analysisLoading || shareRefreshing" class="rounded-xl border border-slate-300 px-4 py-2 text-sm dark:border-slate-600 disabled:opacity-50" x-text="shareRefreshing ? 'Refreshing…' : 'Refresh data'"></button></div>
               <p x-show="shareError" x-text="shareError" role="alert" class="text-sm text-rose-600 dark:text-rose-400"></p>
+              <div x-show="shareOptions.template==='assets'" class="space-y-2">
+                <div class="flex items-center justify-between gap-2 text-sm"><button @click="shareOptions.page=sharePage-1; renderSharePreview()" :disabled="sharePage<=1" class="rounded-lg border px-3 py-2 disabled:opacity-40">Previous page</button><span x-text="shareCount+' assets · '+sharePage+' / '+sharePages"></span><button @click="shareOptions.page=sharePage+1; renderSharePreview()" :disabled="sharePage>=sharePages" class="rounded-lg border px-3 py-2 disabled:opacity-40">Next page</button></div>
+                <p class="text-xs text-slate-500 dark:text-slate-400">PNG downloads the displayed page. Download each page to share the full list.</p>
+              </div>
             </div>
             <div class="flex items-start justify-center rounded-xl bg-slate-100 p-3 dark:bg-slate-950"><canvas x-ref="shareCanvas" role="img" aria-label="Preview of the portfolio share card" class="h-auto max-h-[650px] w-auto max-w-full rounded-lg shadow-xl"></canvas></div>
           </div>
@@ -1661,14 +1672,16 @@ export const appHtml = `<!doctype html>
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
         shareOpen: false, shareBusy: false, shareRefreshing: false, shareError: '', shareData: null,
-        shareOptions: {template:'allocation',theme:'dark',size:'square',amounts:false,names:false},
+        shareOptions: {template:'allocation',theme:'dark',size:'square',amounts:false,names:false,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1},
+        sharePage: 1, sharePages: 1, shareCount: 0,
         openShareStudio() {
           if(this.analysisLoading) return;
           const assets = new Map();
-          for(const p of this.overview.portfolios||[]) for(const a of p.assets||[]) {
-            const key=JSON.stringify([a.origin,a.asset]);
-            const current=assets.get(key)||{asset:a.asset,usd:0};
-            current.usd+=Number(a.usd)||0; assets.set(key,current);
+          for(const p of this.overview.portfolios||[]) for(const [index,a] of (p.assets||[]).entries()) {
+            // Combine fungible units across exchanges/wallets. Fixed assets remain individual entries.
+            const key=a.origin==='asset'?JSON.stringify(['fixed',p.id,index]):JSON.stringify(['symbol',a.asset]);
+            const current=assets.get(key)||{asset:a.asset,origin:a.origin,currency:a.currency,usd:0,amount:0};
+            current.usd+=Number(a.usd)||0; current.amount+=Number(a.amount)||0; assets.set(key,current);
           }
           const range=this.chartRange;
           const history=(this.analysisHistory||[]).filter(p=>!range || ((range.min==null||p.captured_at>=range.min)&&(range.max==null||p.captured_at<=range.max)));
@@ -1677,7 +1690,11 @@ export const appHtml = `<!doctype html>
         },
         renderSharePreview() {
           if(!this.shareData || !this.$refs.shareCanvas) return;
-          try { WorthlyShare.renderShareCard(this.$refs.shareCanvas,this.shareData,this.shareOptions); this.shareError=''; }
+          try {
+            const list=WorthlyShare.shareAssetList(this.shareData,this.shareOptions);
+            this.sharePage=list.page; this.sharePages=list.pages; this.shareCount=list.rows.length; this.shareOptions.page=list.page;
+            WorthlyShare.renderShareCard(this.$refs.shareCanvas,this.shareData,this.shareOptions); this.shareError='';
+          }
           catch(e) { console.error('[Share Studio] Render failed',e); this.shareError='Could not render the card. Reload the page and try again.'; }
         },
         async refreshShareData() {
@@ -1704,7 +1721,7 @@ export const appHtml = `<!doctype html>
             const blob=await new Promise(resolve=>this.$refs.shareCanvas.toBlob(resolve,'image/png'));
             if(!blob) throw new Error('Export failed');
             const url=URL.createObjectURL(blob), a=document.createElement('a');
-            a.href=url; a.download='worthly-'+this.shareOptions.template+'-'+this.shareOptions.size+'.png';
+            a.href=url; a.download='worthly-'+this.shareOptions.template+'-'+this.shareOptions.size+(this.shareOptions.template==='assets'?'-page-'+this.sharePage:'')+'.png';
             document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000);
           } catch(e) { this.shareError='Could not download the PNG. Please try again.'; }
           finally { this.shareBusy=false; }
