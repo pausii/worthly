@@ -63,3 +63,4 @@ SYNC_BATCH_SIZE = "2"
 #                                            tanpa ini dipakai endpoint publik yang sering kena 429.
 # wrangler secret put BINANCE_PROXY_URL   -> HTTP CONNECT proxy bypass geo-block Binance
 #                                            format: http://user:pass@host:port (opsional)
+# wrangler secret put GRAPHIQL_PASSWORD   -> opsional, password proteksi untuk membuka konsol /graphql

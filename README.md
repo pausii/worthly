@@ -71,6 +71,7 @@ npx wrangler secret put RPC_SOL_URL         # disarankan, mis. Helius (api.mainn
 # Opsional lain:
 npx wrangler secret put COINGECKO_API_KEY  # opsional, sumber harga tambahan
 npx wrangler secret put BINANCE_PROXY_URL  # opsional, bypass geo-block Binance (http://user:pass@host:port)
+npx wrangler secret put GRAPHIQL_PASSWORD  # opsional, password proteksi untuk membuka konsol /graphql
 ```
 
 Untuk dev lokal, salin `.dev.vars.example` → `.dev.vars` dan isi `MASTER_KEY`.
@@ -155,3 +156,9 @@ Tes regresi filter, urutan, paginasi, dan privasi: `npm run test:share-assets`.
 
 Detail signing/endpoint Binance & Bybit dapat berubah. Modul di `src/services/cex` sudah mengikuti
 dokumentasi resmi terakhir; bila ada perubahan response, sesuaikan parser di file terkait.
+
+## Lisensi
+
+Proyek ini dilisensikan di bawah [Lisensi MIT](LICENSE).
+
+Hak Cipta (c) 2026 AHMAD PAUSI.

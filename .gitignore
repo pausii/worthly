@@ -10,6 +10,3 @@ public/
 .idea/
 .vscode/
 .claude/
-
-# Setting lokal/personal Claude Code (jangan di-commit)
-.claude/settings.local.json
