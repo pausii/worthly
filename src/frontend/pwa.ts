@@ -26,7 +26,7 @@ export const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192
 export const manifestJson = JSON.stringify({
   name: 'Worthly',
   short_name: 'Worthly',
-  description: 'Personal crypto & portfolio tracker',
+  description: 'Personal multi-asset portfolio & net worth tracker',
   start_url: '/',
   scope: '/',
   display: 'standalone',

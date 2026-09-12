@@ -1,9 +1,8 @@
 # Worthly
 
-Personal crypto / CEX portfolio tracker yang berjalan di **Cloudflare Workers**.
+All-in-one personal net worth & multi-asset portfolio tracker (Crypto CEX, On-chain, Saham IDX, & Aset Tetap) yang berjalan *serverless* di **Cloudflare Workers**.
 
 ![Worthly Preview](.github/assets/preview.png)
-
 
 - **Backend:** Hono + Cloudflare D1 (database) + KV (session, rate limit, cache harga)
 - **Frontend:** Alpine.js + Tailwind CSS + ApexCharts, **self-hosted** (di-build lokal ke `public/`, disajikan via Workers Assets — bukan CDN), responsif + PWA
@@ -23,7 +22,7 @@ Cron (10 mnt) ─┐
               ├─► syncAll() ─► tiap account (per batch): ambil saldo + deposit ─► D1
 HTTP request ─┘                 └─► snapshot nilai portofolio (interval) ─► chart
 
-Frontend (Alpine, self-hosted) ─► /api/* (Hono, butuh sesi) ─► D1 / KV
+Frontend (Alpine, self-hosted) ─► /graphql (Hono + GraphQL Yoga, butuh sesi) ─► D1 / KV
 Harga: ticker publik Binance (crypto) + Frankfurter/ECB (fiat) ─► konversi ke USD
 ```
 
@@ -35,7 +34,7 @@ Harga: ticker publik Binance (crypto) + Frankfurter/ECB (fiat) ─► konversi k
 | `src/services/prices` | konversi harga ke USD + cache (crypto Binance, fiat Frankfurter, saham Yahoo) |
 | `src/services/sync.ts` | orkestrator sinkronisasi + snapshot |
 | `src/services/valuation.ts`, `overview.ts`, `returns.ts` | valuasi portofolio, ringkasan, perhitungan return |
-| `src/routes` | endpoint API (auth, portfolios, accounts, holdings, dashboard, export, system) |
+| `src/graphql` | skema GraphQL, resolver, auth plugin, konteks, GraphiQL gate |
 | `src/frontend` | halaman login + app shell + PWA (HTML string) |
 | `scripts/build-frontend.mjs` | build aset self-host → `public/` (Tailwind, Alpine, ApexCharts) |
 | `migrations` | skema D1 |
@@ -124,25 +123,6 @@ Buka aplikasi → akan diminta **setup user pertama** (username + password ≥ 1
   dicatat pada waktu input; sebelum itu harga beli berlaku sejak tanggal beli. Chart simulasi
   memakai riwayat taksiran aset tetap (nol sebelum pembelian), dengan kurs fiat terkini sebagai
   aproksimasi. Chart snapshot tetap menunjukkan saldo yang benar-benar tercatat saat itu.
-
-## Share Studio
-
-Di **Analysis**, klik **Create share card** untuk membuat PNG dari data yang sedang dimuat.
-Pilih **Overview**, **Allocation Only**, atau **Performance**, tema Midnight/Daylight, dan format
-Square (1080×1080), Story (1080×1920), atau Landscape (1600×900). Nama aset dan nominal
-disembunyikan secara default; Allocation Only selalu menampilkan persentase tanpa nominal.
-Performance mengikuti periode dan zoom chart saat kartu dibuat, dengan label snapshot atau simulasi.
-Gunakan **Refresh data** setelah mengganti filter Analysis. Preview dan ekspor dibuat di browser,
-tanpa mengunggah gambar atau membagikannya secara otomatis.
-
-Template **All Assets** menampilkan seluruh holding sebagai daftar berhalaman. Filter **≥ US$1**
-aktif secara default (termasuk nilai tepat $1), dihitung setelah unit aset sejenis digabung lintas
-wallet/exchange. Properti dan aset tetap tetap terpisah. Matikan filter untuk menyertakan dust,
-holding tanpa harga, dan nilai negatif; holding kosong tidak disertakan. Pilih kolom jumlah unit,
-nilai uang, dan persentase secara terpisah, serta urutan nilai terbesar/terkecil atau nama A–Z/Z–A.
-Persentase dihitung terhadap seluruh holding bernilai positif sebelum filter; nilai negatif
-ditampilkan dengan persentase “—”. Unduh setiap halaman PNG untuk membagikan seluruh daftar.
-Tes regresi filter, urutan, paginasi, dan privasi: `npm run test:share-assets`.
 
 ## Catatan keamanan
 
