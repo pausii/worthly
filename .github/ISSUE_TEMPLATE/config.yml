@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Laporan celah keamanan
+    url: https://github.com/pausii/worthly/security/advisories/new
+    about: Jangan buka issue publik untuk masalah keamanan. Gunakan laporan privat ini.
