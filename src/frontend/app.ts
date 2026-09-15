@@ -1385,6 +1385,7 @@ export const appHtml = `<!doctype html>
               <option value="IDR">IDR</option>
               <option value="JPY">JPY</option>
               <option value="SGD">SGD</option>
+              <option value="CHF">CHF</option>
             </select>
           </div>
           <div>
@@ -1437,6 +1438,7 @@ export const appHtml = `<!doctype html>
               <option value="USD">USD</option>
               <option value="JPY">JPY</option>
               <option value="SGD">SGD</option>
+              <option value="CHF">CHF</option>
             </select>
           </div>
           <div>

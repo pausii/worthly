@@ -99,7 +99,7 @@ function publicView(row: AccountRow) {
 }
 
 // =================== holdings (helpers) ===================
-const ALLOWED_CURRENCIES = new Set(['USD', 'IDR', 'JPY', 'SGD']);
+const ALLOWED_CURRENCIES = new Set(['USD', 'IDR', 'JPY', 'SGD', 'CHF']);
 
 // =================== fixed assets (helpers) ===================
 interface FixedAssetLatestRow {
