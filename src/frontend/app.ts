@@ -122,6 +122,25 @@ export const appHtml = `<!doctype html>
     <main class="flex-1 overflow-y-auto p-4 pb-24 lg:p-6 lg:pb-6">
       <p x-show="toast" x-transition x-text="toast" :class="toastClass()" class="mb-4 rounded-xl px-4 py-2 text-sm font-medium"></p>
 
+      <!-- Banner: sebagian data gagal dimuat dari server (jangan tampak seperti data hilang) -->
+      <div x-show="failedList().length>0" x-transition role="alert"
+        class="mb-4 rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 px-4 py-3 text-sm text-rose-800 dark:text-rose-200">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="font-semibold">Some data could not be loaded from the server</p>
+            <p class="mt-0.5 text-xs text-rose-700/80 dark:text-rose-300/80">Nothing was deleted — the lists below may simply be incomplete until the server answers again.</p>
+            <ul class="mt-2 space-y-0.5 text-xs">
+              <template x-for="f in failedList()" :key="f.op">
+                <li><span class="font-medium capitalize" x-text="f.label"></span><span class="text-rose-700/70 dark:text-rose-300/70" x-text="': '+f.error"></span></li>
+              </template>
+            </ul>
+          </div>
+          <button @click="reloadAll()" :disabled="reloading"
+            class="shrink-0 rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+            x-text="reloading ? 'Retrying…' : 'Retry'"></button>
+        </div>
+      </div>
+
 
       <!-- DASHBOARD SKELETON (first load) -->
       <section x-show="loading && view==='dashboard'" class="space-y-6" aria-hidden="true">
@@ -308,7 +327,7 @@ export const appHtml = `<!doctype html>
               </div>
             </div>
             <div class="relative h-56"><div x-ref="chartWrap" class="w-full h-full"></div></div>
-            <p x-show="history.length===0" class="mt-2 text-center text-xs text-slate-400 dark:text-slate-500">No snapshots yet. Data is generated automatically based on the interval.</p>
+            <p x-show="history.length===0 && !failed.History" class="mt-2 text-center text-xs text-slate-400 dark:text-slate-500">No snapshots yet. Data is generated automatically based on the interval.</p>
           </div>
 
           <!-- Asset Allocation pie -->
@@ -363,7 +382,7 @@ export const appHtml = `<!doctype html>
               </div>
             </div>
           </template>
-          <p x-show="overview.portfolios.length===0" class="text-sm text-slate-400 dark:text-slate-500">No portfolios yet. Create one in the Portfolios menu.</p>
+          <p x-show="overview.portfolios.length===0 && !failed.Overview" class="text-sm text-slate-400 dark:text-slate-500">No portfolios yet. Create one in the Portfolios menu.</p>
         </div>
       </section>
 
@@ -710,7 +729,8 @@ export const appHtml = `<!doctype html>
                   </td>
                 </tr>
               </template>
-              <tr x-show="portfolios.length===0"><td colspan="3" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No portfolios yet.</td></tr>
+<tr x-show="failed.Portfolios"><td colspan="3" class="px-4 py-6 text-center text-rose-600 dark:text-rose-400">Could not load portfolios — <span x-text="failed.Portfolios"></span></td></tr>
+              <tr x-show="portfolios.length===0 && !failed.Portfolios"><td colspan="3" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No portfolios yet.</td></tr>
             </tbody>
           </table>
         </div>
@@ -807,7 +827,10 @@ export const appHtml = `<!doctype html>
           </template>
 
           <!-- Empty state -->
-          <div x-show="accounts.length===0" class="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-10 text-center md:col-span-2">
+          <div x-show="failed.Accounts" class="rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 p-6 text-center text-sm text-rose-700 dark:text-rose-300 md:col-span-2">
+            Could not load accounts — <span x-text="failed.Accounts"></span>. Your accounts are still stored on the server.
+          </div>
+          <div x-show="accounts.length===0 && !failed.Accounts" class="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-10 text-center md:col-span-2">
             <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700">
               <svg class="h-6 w-6 text-slate-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
             </div>
@@ -852,7 +875,8 @@ export const appHtml = `<!doctype html>
                   </td>
                 </tr>
               </template>
-              <tr x-show="holdings.length===0"><td colspan="6" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No manual holdings yet.</td></tr>
+<tr x-show="failed.Holdings"><td colspan="6" class="px-4 py-6 text-center text-rose-600 dark:text-rose-400">Could not load manual holdings — <span x-text="failed.Holdings"></span></td></tr>
+              <tr x-show="holdings.length===0 && !failed.Holdings"><td colspan="6" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No manual holdings yet.</td></tr>
             </tbody>
           </table>
         </div>
@@ -919,7 +943,8 @@ export const appHtml = `<!doctype html>
                   <td class="px-4 py-3 text-right text-xs font-medium" :class="pctClass(s.changePct)" x-text="fmtPct(s.changePct,false)"></td>
                 </tr>
               </template>
-              <tr x-show="!stocksLoading && stocksData.positions.length===0"><td colspan="9" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No stocks yet. Add them via <b>Accounts → IDX Stocks</b>.</td></tr>
+<tr x-show="failed.Stocks"><td colspan="9" class="px-4 py-6 text-center text-rose-600 dark:text-rose-400">Could not load stocks — <span x-text="failed.Stocks"></span></td></tr>
+              <tr x-show="!stocksLoading && stocksData.positions.length===0 && !failed.Stocks"><td colspan="9" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No stocks yet. Add them via <b>Accounts → IDX Stocks</b>.</td></tr>
               <tr x-show="stocksLoading"><td colspan="9" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">Loading…</td></tr>
             </tbody>
           </table>
@@ -1006,7 +1031,8 @@ export const appHtml = `<!doctype html>
                   </td>
                 </tr>
               </template>
-              <tr x-show="!fixedLoading && fixedData.assets.length===0"><td colspan="7" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No fixed assets yet. Add a property, vehicle, or gold holding.</td></tr>
+<tr x-show="failed.FixedAssets"><td colspan="7" class="px-4 py-6 text-center text-rose-600 dark:text-rose-400">Could not load fixed assets — <span x-text="failed.FixedAssets"></span></td></tr>
+              <tr x-show="!fixedLoading && fixedData.assets.length===0 && !failed.FixedAssets"><td colspan="7" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No fixed assets yet. Add a property, vehicle, or gold holding.</td></tr>
               <tr x-show="fixedLoading"><td colspan="7" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">Loading…</td></tr>
             </tbody>
           </table>
@@ -1061,7 +1087,8 @@ export const appHtml = `<!doctype html>
                   <td class="px-4 py-3"><span class="rounded-full px-2 py-0.5 text-[11px]" :class="d.status==='success'||d.status==='credited' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400':'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'" x-text="d.status"></span></td>
                 </tr>
               </template>
-              <tr x-show="deposits.length===0"><td colspan="6" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No deposit data yet.</td></tr>
+<tr x-show="failed.Deposits"><td colspan="6" class="px-4 py-6 text-center text-rose-600 dark:text-rose-400">Could not load deposits — <span x-text="failed.Deposits"></span></td></tr>
+              <tr x-show="deposits.length===0 && !failed.Deposits"><td colspan="6" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No deposit data yet.</td></tr>
             </tbody>
           </table>
           <!-- Pagination -->
@@ -1139,7 +1166,8 @@ export const appHtml = `<!doctype html>
                 </div>
               </div>
             </template>
-            <div x-show="systemEvents.length===0" class="px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+            <div x-show="failed.SystemEvents" class="px-4 py-8 text-center text-sm text-rose-600 dark:text-rose-400">Could not load events — <span x-text="failed.SystemEvents"></span></div>
+            <div x-show="systemEvents.length===0 && !failed.SystemEvents" class="px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
               No events yet. Events will appear when sync fails or an error occurs.
             </div>
           </div>
@@ -1729,6 +1757,7 @@ export const appHtml = `<!doctype html>
           finally { this.shareBusy=false; }
         },
         syncing: false, toast: '', toastType: 'info', modal: null, updateReady: false, appVersion: '',
+        failed: {}, reloading: false, // query yang gagal (op -> pesan) — lihat gql()
         loading: true, lastSync: 0, now: Date.now(),
         confirmState: { open: false, title: '', message: '', confirmText: 'Confirm', danger: true, _resolve: null },
         installPrompt: null, installed: false, isIOS: false,
@@ -1911,16 +1940,32 @@ export const appHtml = `<!doctype html>
         // data = nilai root-field tunggal operasi (mirror payload data REST).
         async gql(op, variables) {
           const query = this.Q[op];
-          const res = await fetch('/graphql?q='+op, {
-            method: 'POST',
-            headers: this.csrf
-              ? { 'Content-Type':'application/json', 'X-CSRF-Token':this.csrf }
-              : { 'Content-Type':'application/json' },
-            body: JSON.stringify({ operationName: op, query, variables: variables||{} }),
-          });
+          // Query yang gagal dicatat di 'failed' (banner + empty-state jujur). Mutasi tidak dicatat:
+          // call-site-nya sudah menampilkan flash error sendiri.
+          const isQuery = String(query||'').trim().startsWith('query');
+          const result = await this.gqlRaw(op, query, variables);
+          if (result && isQuery) {
+            if (result.ok) { if (this.failed[op]) delete this.failed[op]; }
+            else this.failed[op] = result.error || 'Unknown error';
+          }
+          return result;
+        },
+        async gqlRaw(op, query, variables) {
+          let res;
+          try {
+            res = await fetch('/graphql?q='+op, {
+              method: 'POST',
+              headers: this.csrf
+                ? { 'Content-Type':'application/json', 'X-CSRF-Token':this.csrf }
+                : { 'Content-Type':'application/json' },
+              body: JSON.stringify({ operationName: op, query, variables: variables||{} }),
+            });
+          } catch (e) {
+            return { ok:false, error:'Network error — could not reach the server' };
+          }
           if (res.status === 401) { location.href='/login'; return null; }
           const json = await res.json().catch(()=>null);
-          if (!json) return { ok:false, error:'Invalid response' };
+          if (!json) return { ok:false, error: res.ok ? 'Invalid response' : 'Server error (HTTP '+res.status+')' };
           if (json.errors && json.errors.length) {
             const e0 = json.errors[0];
             if (e0.extensions && e0.extensions.code==='UNAUTHORIZED') { location.href='/login'; return null; }
@@ -1929,6 +1974,26 @@ export const appHtml = `<!doctype html>
           const data = json.data || {};
           const keys = Object.keys(data);
           return { ok:true, data: keys.length===1 ? data[keys[0]] : data };
+        },
+        // Label ramah untuk nama operasi yang gagal (dipakai banner).
+        failedLabel(op) {
+          const m = { Overview:'portfolio overview', Portfolios:'portfolios', Accounts:'accounts', Holdings:'manual holdings', Stocks:'IDX stocks', FixedAssets:'fixed assets', Deposits:'deposits', SystemEvents:'activity', SystemQueue:'sync queue', History:'value history', AssetHistory:'asset history', AssetChart:'asset chart', Returns:'returns', Insight:'AI insight', ExportCsv:'CSV export', Me:'session' };
+          return m[op] || op;
+        },
+        failedList() { return Object.keys(this.failed).map(op=>({ op, label:this.failedLabel(op), error:this.failed[op] })); },
+        // Muat ulang semua data inti + data tab yang sedang dibuka (tombol Retry di banner).
+        async reloadAll() {
+          if (this.reloading) return;
+          this.reloading = true;
+          try {
+            await this.loadPortfolios();
+            await Promise.all([this.loadOverview(), this.loadAccounts(), this.loadHoldings(), this.loadDeposits(), this.loadSystemEvents(), this.loadReturns()]);
+            await this.loadHistory();
+            if (this.view==='analysis') await this.loadAnalysis();
+            if (this.view==='stocks') await this.loadStocks();
+            if (this.view==='assets') await this.loadFixedAssets();
+            if (!Object.keys(this.failed).length) this.flash('Data reloaded', 'success');
+          } finally { this.reloading = false; }
         },
 
         go(id) {
