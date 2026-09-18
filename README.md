@@ -16,6 +16,7 @@ All-in-one personal net worth & multi-asset portfolio tracker (Crypto CEX, On-ch
 - **Share card:** render kartu ringkasan portofolio sebagai gambar (template Overview, Allocation, Performance, dan All Assets dengan filter, pilihan kolom, dan pengurutan)
 - **AI Insight:** ringkasan portofolio via Cloudflare Workers AI (opsional)
 - **Sinkronisasi otomatis:** Cron Trigger tiap 10 menit (round-robin per batch account)
+- **Tahan gangguan sesaat:** dompet yang gagal diambil atau mendadak kosong (padahal sebelumnya bersaldo) mempertahankan saldo lama; hasil kosong baru diterima bila terulang 3 sync berturut-turut, dan tercatat di *Activity*
 - **Keamanan:** login single-user (PBKDF2-HMAC-SHA256 100k iterasi + pepper), sesi httpOnly+Secure+SameSite=Strict,
   rate-limit login, proteksi CSRF, security headers + CSP ketat (nonce per-request), kredensial CEX/RPC **dienkripsi AES-GCM** di D1.
 

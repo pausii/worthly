@@ -55,40 +55,98 @@ async function setCursor(env: Env, accountId: number, key: string, value: string
 }
 
 /**
-  * Tulis ulang saldo terkini untuk satu account (hapus yang sudah tidak ada).
-  *
-  * `syncedWallets` membatasi penghapusan hanya ke dompet yang datanya baru saja berhasil
-  * diambil. Dompet yang gagal diambil dibiarkan apa adanya — saldo lamanya dipertahankan
-  * supaya kegagalan sebagian tidak terbaca sebagai "saldo jadi nol" dan merusak snapshot.
-  * Tanpa argumen ini seluruh saldo account diganti (sumber tunggal: on-chain / saham).
-  */
-async function upsertBalances(
+ * Berapa kali berturut-turut sebuah dompet boleh mengembalikan hasil KOSONG (padahal
+ * sebelumnya ada saldo) sebelum hasil kosong itu dipercaya. Selama belum tercapai, saldo lama
+ * dipertahankan. Menahan "false empty": respons 200 OK tapi isinya kosong (gangguan sesaat
+ * di sisi exchange/relay) yang tidak terbaca sebagai error, sehingga tidak membuat snapshot
+ * anjlok lalu pulih sendiri di sync berikutnya.
+ */
+const EMPTY_CONFIRM_SYNCS = 3;
+
+/**
+ * Tulis ulang saldo terkini untuk satu account (hapus yang sudah tidak ada).
+ *
+ * `syncedWallets` membatasi penghapusan hanya ke dompet yang datanya baru saja berhasil
+ * diambil. Dompet yang gagal diambil dibiarkan apa adanya — saldo lamanya dipertahankan
+ * supaya kegagalan sebagian tidak terbaca sebagai "saldo jadi nol" dan merusak snapshot.
+ * Tanpa argumen ini seluruh saldo account diganti (sumber tunggal: on-chain / saham).
+ *
+ * Pengaman tambahan: dompet yang hasil barunya KOSONG padahal sebelumnya punya saldo tidak
+ * langsung dikosongkan — lihat EMPTY_CONFIRM_SYNCS.
+ */
+export async function upsertBalances(
   env: Env,
-  accountId: number,
+  acc: Pick<AccountRow, 'id' | 'type' | 'label'>,
   balances: NormalizedBalance[],
   syncedWallets?: WalletType[],
 ): Promise<void> {
   const ts = now();
-  if (syncedWallets) {
-    if (!syncedWallets.length) return; // tak ada yang valid — jangan sentuh data lama
-    const placeholders = syncedWallets.map(() => '?').join(',');
-    await run(
-      env,
-      `DELETE FROM balances WHERE account_id = ? AND wallet_type IN (${placeholders})`,
-      accountId,
-      ...syncedWallets,
-    );
-  } else {
-    await run(env, 'DELETE FROM balances WHERE account_id = ?', accountId);
+  if (syncedWallets && !syncedWallets.length) return; // tak ada yang valid — jangan sentuh data lama
+
+  // Dompet yang saat ini menyimpan saldo bernilai (>0). Dipakai untuk mendeteksi "hasil kosong
+  // padahal sebelumnya ada".
+  const storedRows = await queryAll<{ wallet_type: string; n: number }>(
+    env,
+    'SELECT wallet_type, COUNT(*) AS n FROM balances WHERE account_id = ? AND total > 0 GROUP BY wallet_type',
+    acc.id,
+  );
+  const storedCount = new Map(storedRows.map((r) => [r.wallet_type as WalletType, r.n]));
+
+  // Dompet yang akan ditimpa: yang disebut `syncedWallets`, atau (sumber tunggal) semua dompet
+  // yang ada di hasil baru maupun yang tersimpan.
+  const candidates: WalletType[] = syncedWallets
+    ? [...syncedWallets]
+    : [...new Set<WalletType>([...balances.map((b) => b.walletType), ...storedCount.keys()])];
+
+  const accepted: WalletType[] = [];
+  for (const wallet of candidates) {
+    const fresh = balances.filter((b) => b.walletType === wallet && b.total > 0).length;
+    const had = storedCount.get(wallet) ?? 0;
+    const streakKey = `empty_streak:${wallet}`;
+    if (fresh === 0 && had > 0) {
+      const streak = (parseInt((await getCursor(env, acc.id, streakKey)) ?? '0', 10) || 0) + 1;
+      if (streak < EMPTY_CONFIRM_SYNCS) {
+        await setCursor(env, acc.id, streakKey, String(streak));
+        await addEvent(env, {
+          level: 'warning',
+          source: acc.type,
+          account_id: acc.id,
+          message: `Dompet ${wallet} ${acc.label} kembali kosong — saldo lama dipertahankan`,
+          detail:
+            `Sebelumnya ${had} aset bersaldo, hasil sync kali ini 0 (percobaan ${streak}/${EMPTY_CONFIRM_SYNCS}). ` +
+            `Dianggap gangguan sesaat; hasil kosong baru diterima bila terulang ${EMPTY_CONFIRM_SYNCS}x berturut-turut.`,
+        });
+        continue; // jangan hapus saldo lama dompet ini
+      }
+      await addEvent(env, {
+        level: 'info',
+        source: acc.type,
+        account_id: acc.id,
+        message: `Dompet ${wallet} ${acc.label} dikosongkan`,
+        detail: `Hasil kosong terulang ${streak}x berturut-turut — dianggap benar-benar kosong.`,
+      });
+    }
+    await run(env, 'DELETE FROM sync_state WHERE account_id = ? AND key = ?', acc.id, streakKey);
+    accepted.push(wallet);
   }
+  if (!accepted.length) return;
+
+  const placeholders = accepted.map(() => '?').join(',');
+  await run(
+    env,
+    `DELETE FROM balances WHERE account_id = ? AND wallet_type IN (${placeholders})`,
+    acc.id,
+    ...accepted,
+  );
   for (const b of balances) {
+    if (!accepted.includes(b.walletType)) continue;
     await run(
       env,
       `INSERT INTO balances (account_id, wallet_type, asset, free, locked, total, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(account_id, wallet_type, asset)
        DO UPDATE SET free = excluded.free, locked = excluded.locked, total = excluded.total, updated_at = excluded.updated_at`,
-      accountId,
+      acc.id,
       b.walletType,
       b.asset.toUpperCase(),
       b.free,
@@ -239,7 +297,7 @@ async function syncCexAccount(env: Env, acc: AccountRow): Promise<void> {
         );
     balances = binance.dropEarnDuplicates(balances, earnAssets);
   }
-  await upsertBalances(env, acc.id, balances, fetched.synced);
+  await upsertBalances(env, acc, balances, fetched.synced);
 
   const retained = fetched.failures.filter((f) => storedWallets.has(f.wallet));
   if (retained.length) {
@@ -287,7 +345,7 @@ async function syncBitcoinAccount(env: Env, acc: AccountRow, config: OnchainConf
   }
 
   const balances = await getBitcoinBalances(config.address, base, apiCode);
-  await upsertBalances(env, acc.id, balances);
+  await upsertBalances(env, acc, balances);
 
   // Riwayat BTC masuk (incremental via cursor). Gagal di sini TIDAK menggagalkan sync saldo.
   try {
@@ -325,7 +383,7 @@ async function syncStockAccount(env: Env, acc: AccountRow): Promise<void> {
     const shares = lots * 100;
     balances.push({ walletType: 'stock', asset: `${ticker}.JK`, free: shares, locked: 0, total: shares });
   }
-  await upsertBalances(env, acc.id, balances);
+  await upsertBalances(env, acc, balances);
 }
 
 async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
@@ -376,7 +434,7 @@ async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
     }
   }
 
-  await upsertBalances(env, acc.id, balances);
+  await upsertBalances(env, acc, balances);
 }
 
 /** Sinkronkan satu account dan update status. */

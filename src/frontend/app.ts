@@ -674,7 +674,7 @@ export const appHtml = `<!doctype html>
                 </div>
                 <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.amounts" :disabled="shareOptions.template==='allocation'"> Show monetary value <span class="text-xs text-slate-500">(except Allocation Only)</span></label>
                 <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.names"> Show asset names</label>
-                <p class="text-xs text-slate-500 dark:text-slate-400">Names, units and monetary values start hidden. Percentages and chart shape can still reveal portfolio information.</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Units and monetary values start hidden. Untick "Show asset names" to replace names with Asset 1, Asset 2, … Percentages and chart shape can still reveal portfolio information.</p>
               </fieldset>
               <p class="text-xs text-slate-500 dark:text-slate-400">Uses a copy of the currently loaded data and selected period. Performance includes the current chart zoom. Refresh the card after changing Analysis filters.</p>
               <div class="flex flex-wrap gap-2"><button @click="downloadShareCard()" :disabled="shareBusy || shareRefreshing || !!shareError" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" x-text="shareBusy?'Preparing…':'Download PNG'"></button><button @click="refreshShareData()" :disabled="analysisLoading || shareRefreshing" class="rounded-xl border border-slate-300 px-4 py-2 text-sm dark:border-slate-600 disabled:opacity-50" x-text="shareRefreshing ? 'Refreshing…' : 'Refresh data'"></button></div>
@@ -1674,7 +1674,7 @@ export const appHtml = `<!doctype html>
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
         shareOpen: false, shareBusy: false, shareRefreshing: false, shareError: '', shareData: null,
-        shareOptions: {template:'allocation',theme:'dark',size:'square',amounts:false,names:false,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1},
+        shareOptions: {template:'allocation',theme:'dark',size:'square',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1},
         sharePage: 1, sharePages: 1, shareCount: 0,
         openShareStudio() {
           if(this.analysisLoading) return;
