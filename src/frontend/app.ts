@@ -675,11 +675,16 @@ export const appHtml = `<!doctype html>
         <section x-show="shareOpen" aria-label="Share Studio" class="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-800">
           <div class="mb-5 flex items-center justify-between"><div><h3 class="font-semibold">Make it yours</h3><p class="text-xs text-slate-500 dark:text-slate-400">Preview and PNG match. Only the downloaded image is shared.</p></div><button @click="shareOpen=false" class="rounded-lg px-3 py-2 text-sm" aria-label="Close Share Studio">Close</button></div>
           <div class="grid gap-6 lg:grid-cols-2">
-            <div class="space-y-5" @change="renderSharePreview()">
+            <div class="space-y-5" @change="renderSharePreview()" @input="renderSharePreview()">
               <fieldset><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">01 / Layout</legend>
-                <div class="grid gap-2 sm:grid-cols-2"><template x-for="t in [{id:'overview',name:'Overview',desc:'Value + allocation'},{id:'allocation',name:'Allocation Only',desc:'A private perspective'},{id:'performance',name:'Performance',desc:'Your value journey'},{id:'assets',name:'All Assets',desc:'Every holding, your way'}]" :key="t.id"><button @click="shareOptions.template=t.id; shareOptions.page=1; renderSharePreview()" :aria-pressed="shareOptions.template===t.id" class="rounded-xl border p-3 text-left text-sm" :class="shareOptions.template===t.id ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200' : 'border-slate-200 dark:border-slate-600'"><span class="block font-semibold" x-text="t.name"></span><span class="mt-1 block text-xs opacity-70" x-text="t.desc"></span></button></template></div>
+                <div class="grid gap-2 sm:grid-cols-2"><template x-for="t in WorthlyShare.SHARE_TEMPLATES" :key="t.id"><button type="button" @click="shareOptions.template=t.id; shareOptions.page=1; renderSharePreview()" :aria-pressed="shareOptions.template===t.id" class="rounded-xl border p-3 text-left text-sm" :class="shareOptions.template===t.id ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200' : 'border-slate-200 dark:border-slate-600'"><span class="block font-semibold" x-text="t.name"></span><span class="mt-1 block text-xs opacity-70" x-text="t.desc"></span></button></template></div>
+                <div class="mt-3 grid grid-cols-2 gap-3">
+                  <label class="text-sm">Portfolio<select x-model="shareOptions.portfolioId" @change="openShareStudio()" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="">All portfolios</option><template x-for="p in portfolios" :key="p.id"><option :value="String(p.id)" x-text="p.name"></option></template></select></label>
+                  <label x-show="shareOptions.template==='spotlight'" class="text-sm">Spotlight asset<select x-model="shareOptions.spotlight" @change="selectSpotlight(shareOptions.spotlight)" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="">Pick an asset…</option><template x-for="a in (shareData ? shareData.assets.filter(x=>x.usd>0) : [])" :key="a.asset"><option :value="a.asset" x-text="a.asset"></option></template></select></label>
+                </div>
+                <p x-show="shareSpotlightLoading" class="mt-1 text-xs text-slate-500">Loading price history…</p>
               </fieldset>
-              <fieldset><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Background</legend>
+              <fieldset><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">02 / Background</legend>
                 <div class="grid grid-cols-5 gap-2">
                   <template x-for="b in WorthlyShare.SHARE_BACKGROUNDS" :key="b.id">
                     <button type="button" @click="shareOptions.background=b.id; renderSharePreview()" :aria-pressed="shareOptions.background===b.id" :title="b.name"
@@ -691,29 +696,61 @@ export const appHtml = `<!doctype html>
                   </template>
                 </div>
               </fieldset>
-              <div class="grid grid-cols-2 gap-3">
-                <label class="text-sm">Theme<select x-model="shareOptions.theme" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="dark">Midnight</option><option value="light">Daylight</option></select></label>
-                <label class="text-sm">Format<select x-model="shareOptions.size" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="square">Square · 1080 × 1080</option><option value="story">Story · 1080 × 1920</option><option value="landscape">Landscape · 1600 × 900</option></select></label>
-              </div>
-              <fieldset class="space-y-3"><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">02 / Privacy</legend>
-                <div x-show="shareOptions.template==='assets'" class="space-y-3">
-                  <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.minDollar" @change="shareOptions.page=1"> Only assets worth ≥ US$1</label>
-                  <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.quantities"> Show amount (units)</label>
-                  <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.percentages"> Show percentage</label>
-                  <label class="block text-sm">Order<select x-model="shareOptions.order" @change="shareOptions.page=1" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="value-desc">Value: highest first</option><option value="value-asc">Value: lowest first</option><option value="name-asc">Name: A–Z</option><option value="name-desc">Name: Z–A</option></select></label>
-                  <p class="text-xs text-slate-500 dark:text-slate-400">Filter uses USD regardless of display currency. Percentages use all positive holdings before filtering. Fixed asset amounts are estimated values in their original currency.</p>
+              <fieldset><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">03 / Style</legend>
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <label class="text-sm">Theme<select x-model="shareOptions.theme" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="dark">Midnight</option><option value="light">Daylight</option></select></label>
+                  <label class="text-sm">Format<select x-model="shareOptions.size" @change="shareOptions.page=1" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><template x-for="k in Object.keys(WorthlyShare.SHARE_SIZES)" :key="k"><option :value="k" x-text="WorthlyShare.SHARE_SIZES[k].name"></option></template></select></label>
+                  <label class="text-sm">Accent<select x-model="shareOptions.accent" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><template x-for="k in Object.keys(WorthlyShare.SHARE_ACCENTS)" :key="k"><option :value="k" x-text="WorthlyShare.SHARE_ACCENTS[k].name"></option></template></select></label>
+                  <label class="text-sm">Font<select x-model="shareOptions.font" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><template x-for="k in Object.keys(WorthlyShare.SHARE_FONTS)" :key="k"><option :value="k" x-text="WorthlyShare.SHARE_FONTS[k].name"></option></template></select></label>
+                  <label class="text-sm">Frame<select x-model="shareOptions.frame" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><template x-for="f in WorthlyShare.SHARE_FRAMES" :key="f.id"><option :value="f.id" x-text="f.name"></option></template></select></label>
+                  <label class="text-sm">Avatar / logo<input type="file" accept="image/*" @change="onShareAvatar($event)" class="mt-2 block w-full text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-2 file:py-1.5 file:text-xs dark:file:bg-slate-700"><button x-show="shareAvatar" type="button" @click="shareAvatar=null; renderSharePreview()" class="mt-1 text-xs text-rose-600 hover:underline">Remove avatar</button></label>
                 </div>
-                <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.amounts" :disabled="shareOptions.template==='allocation'"> Show monetary value <span class="text-xs text-slate-500">(except Allocation Only)</span></label>
-                <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.names"> Show asset names</label>
-                <p class="text-xs text-slate-500 dark:text-slate-400">Units and monetary values start hidden. Untick "Show asset names" to replace names with Asset 1, Asset 2, … Percentages and chart shape can still reveal portfolio information.</p>
+                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label class="text-sm">Title<input x-model="shareOptions.title" maxlength="48" :placeholder="shareDefaultTitle()" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"></label>
+                  <label class="text-sm">Handle<input x-model="shareOptions.handle" maxlength="32" placeholder="W / WORTHLY" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"></label>
+                  <label class="text-sm sm:col-span-2">Caption<input x-model="shareOptions.caption" maxlength="90" placeholder="Optional line above the footer" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"></label>
+                </div>
+                <label class="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.watermark"> Show footer watermark</label>
               </fieldset>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Uses a copy of the currently loaded data and selected period. Performance includes the current chart zoom. Refresh the card after changing Analysis filters.</p>
-              <div class="flex flex-wrap gap-2"><button @click="downloadShareCard()" :disabled="shareBusy || shareRefreshing || !!shareError" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" x-text="shareBusy?'Preparing…':'Download PNG'"></button><button @click="refreshShareData()" :disabled="analysisLoading || shareRefreshing" class="rounded-xl border border-slate-300 px-4 py-2 text-sm dark:border-slate-600 disabled:opacity-50" x-text="shareRefreshing ? 'Refreshing…' : 'Refresh data'"></button></div>
-              <p x-show="shareError" x-text="shareError" role="alert" class="text-sm text-rose-600 dark:text-rose-400"></p>
-              <div x-show="shareOptions.template==='assets'" class="space-y-2">
-                <div class="flex items-center justify-between gap-2 text-sm"><button @click="shareOptions.page=sharePage-1; renderSharePreview()" :disabled="sharePage<=1" class="rounded-lg border px-3 py-2 disabled:opacity-40">Previous page</button><span x-text="shareCount+' assets · '+sharePage+' / '+sharePages"></span><button @click="shareOptions.page=sharePage+1; renderSharePreview()" :disabled="sharePage>=sharePages" class="rounded-lg border px-3 py-2 disabled:opacity-40">Next page</button></div>
-                <p class="text-xs text-slate-500 dark:text-slate-400">PNG downloads the displayed page. Download each page to share the full list.</p>
-              </div>
+              <fieldset class="space-y-3"><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">04 / Privacy</legend>
+                <div class="grid grid-cols-2 gap-3">
+                  <label class="text-sm">Monetary values<select x-model="shareOptions.amountMode" :disabled="shareOptions.template==='allocation'" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700"><template x-for="m in WorthlyShare.SHARE_AMOUNT_MODES" :key="m.id"><option :value="m.id" x-text="m.name"></option></template></select></label>
+                  <label class="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" x-model="shareOptions.names"> Show asset names</label>
+                </div>
+                <label x-show="['performance','thennow'].includes(shareOptions.template)" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.relative"> Relative mode (start = 100, no currency)</label>
+                <div x-show="shareOptions.template==='assets' || shareOptions.template==='spotlight'" class="space-y-3">
+                  <label x-show="shareOptions.template==='assets'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.minDollar" @change="shareOptions.page=1"> Only assets worth ≥ US$1</label>
+                  <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.quantities"> Show amount (units)</label>
+                  <label x-show="shareOptions.template==='assets'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.percentages"> Show percentage</label>
+                  <label x-show="shareOptions.template==='assets'" class="block text-sm">Order<select x-model="shareOptions.order" @change="shareOptions.page=1" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="value-desc">Value: highest first</option><option value="value-asc">Value: lowest first</option><option value="name-asc">Name: A–Z</option><option value="name-desc">Name: Z–A</option></select></label>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Values start hidden. "Blurred" and "Rounded (≈ $35k)" are middle grounds. Untick "Show asset names" to replace names with Asset 1, Asset 2, … Percentages and chart shape can still reveal portfolio information.</p>
+              </fieldset>
+              <fieldset class="space-y-3"><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">05 / Export</legend>
+                <div class="flex flex-wrap gap-2">
+                  <button type="button" @click="downloadShareCard()" :disabled="shareBusy || shareRefreshing || !!shareError" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" x-text="shareBusy?'Preparing…':'Download PNG'"></button>
+                  <button type="button" x-show="shareCanCopy" @click="copyShareCard()" :disabled="shareBusy || !!shareError" class="rounded-xl border border-slate-300 px-4 py-2 text-sm dark:border-slate-600 disabled:opacity-50">Copy image</button>
+                  <button type="button" x-show="shareCanShare" @click="shareShareCard()" :disabled="shareBusy || !!shareError" class="rounded-xl border border-slate-300 px-4 py-2 text-sm dark:border-slate-600 disabled:opacity-50">Share…</button>
+                  <button type="button" @click="refreshShareData()" :disabled="analysisLoading || shareRefreshing" class="rounded-xl border border-slate-300 px-4 py-2 text-sm dark:border-slate-600 disabled:opacity-50" x-text="shareRefreshing ? 'Refreshing…' : 'Refresh data'"></button>
+                </div>
+                <p x-show="shareError" x-text="shareError" role="alert" class="text-sm text-rose-600 dark:text-rose-400"></p>
+                <div x-show="shareOptions.template==='assets'" class="space-y-2">
+                  <div class="flex items-center justify-between gap-2 text-sm"><button type="button" @click="shareOptions.page=sharePage-1; renderSharePreview()" :disabled="sharePage<=1" class="rounded-lg border px-3 py-2 disabled:opacity-40">Previous page</button><span x-text="shareCount+' assets · '+sharePage+' / '+sharePages"></span><button type="button" @click="shareOptions.page=sharePage+1; renderSharePreview()" :disabled="sharePage>=sharePages" class="rounded-lg border px-3 py-2 disabled:opacity-40">Next page</button></div>
+                  <div x-show="sharePages>1" class="flex flex-wrap gap-2"><button type="button" @click="downloadAllPages('zip')" :disabled="shareBusy" class="rounded-lg border px-3 py-2 text-xs disabled:opacity-40">All pages as ZIP</button><button type="button" @click="downloadAllPages('long')" :disabled="shareBusy" class="rounded-lg border px-3 py-2 text-xs disabled:opacity-40">All pages as one tall PNG</button></div>
+                </div>
+                <div class="rounded-xl border border-slate-200 p-3 dark:border-slate-600">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Carousel</p>
+                  <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Pick layouts to export together as one ZIP of slides, all with the current style.</p>
+                  <div class="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-3"><template x-for="t in WorthlyShare.SHARE_TEMPLATES" :key="'c'+t.id"><label class="flex items-center gap-2 text-xs"><input type="checkbox" :value="t.id" x-model="shareCarousel"> <span x-text="t.name"></span></label></template></div>
+                  <button type="button" @click="downloadCarousel()" :disabled="shareBusy || shareCarousel.length===0" class="mt-2 rounded-lg border px-3 py-2 text-xs disabled:opacity-40" x-text="'Download carousel ('+shareCarousel.length+' slides)'"></button>
+                </div>
+                <div class="rounded-xl border border-slate-200 p-3 dark:border-slate-600">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Presets</p>
+                  <div class="mt-2 flex gap-2"><input x-model="sharePresetName" maxlength="24" placeholder="Preset name" class="w-full rounded-lg border border-slate-300 bg-white p-2 text-sm dark:border-slate-600 dark:bg-slate-700"><button type="button" @click="saveSharePreset()" :disabled="!sharePresetName.trim()" class="rounded-lg bg-slate-800 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40 dark:bg-slate-600">Save</button></div>
+                  <div class="mt-2 flex flex-wrap gap-2"><template x-for="(pr,i) in sharePresets" :key="pr.name"><span class="inline-flex items-center gap-1 rounded-full border border-slate-300 pl-3 text-xs dark:border-slate-600"><button type="button" @click="applySharePreset(pr)" class="py-1 font-medium hover:underline" x-text="pr.name"></button><button type="button" @click="deleteSharePreset(i)" class="px-2 py-1 text-rose-600" aria-label="Delete preset">×</button></span></template><span x-show="!sharePresets.length" class="text-xs text-slate-500">No presets saved yet.</span></div>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Uses a copy of the currently loaded data and selected period. Performance includes the current chart zoom. Refresh the card after changing Analysis filters.</p>
+              </fieldset>
             </div>
             <div class="flex items-start justify-center rounded-xl bg-slate-100 p-3 dark:bg-slate-950"><canvas x-ref="shareCanvas" role="img" aria-label="Preview of the portfolio share card" class="h-auto max-h-[650px] w-auto max-w-full rounded-lg shadow-xl"></canvas></div>
           </div>
@@ -1714,12 +1751,20 @@ export const appHtml = `<!doctype html>
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
         shareOpen: false, shareBusy: false, shareRefreshing: false, shareError: '', shareData: null,
-        shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1},
+        shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amountMode:'hidden',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1,relative:false,title:'',caption:'',handle:'',watermark:true,accent:'indigo',font:'sans',frame:'none',portfolioId:'',spotlight:''},
         sharePage: 1, sharePages: 1, shareCount: 0,
+        shareAvatar: null, shareSpotlightLoading: false, shareCarousel: ['overview','performance','assets'],
+        sharePresets: (()=>{ try { return JSON.parse(localStorage.getItem('sharePresets')||'[]'); } catch(e) { return []; } })(), sharePresetName: '',
+        shareCanCopy: !!(navigator.clipboard && window.ClipboardItem), shareCanShare: !!(navigator.share && navigator.canShare),
+        shareDefaultTitle() { const m={overview:'The bigger picture.',allocation:'How it is allocated.',performance:'A view of the journey.',assets:'Everything I hold.',movers:'What moved today.',returns:'The long game.',thennow:'Then and now.',composition:'Where it lives.',spotlight:'One to watch.',milestone:'A milestone.'}; return m[this.shareOptions.template]||''; },
+        // Opsi render = shareOptions + hal yang tak bisa disimpan (gambar avatar) + kompatibilitas flag lama.
+        shareRenderOptions(extra) { return Object.assign({}, this.shareOptions, { avatar:this.shareAvatar, amounts:this.shareOptions.amountMode!=='hidden' }, extra||{}); },
         openShareStudio() {
           if(this.analysisLoading) return;
+          const pid = this.shareOptions.portfolioId ? Number(this.shareOptions.portfolioId) : null;
+          const pfs = (this.overview.portfolios||[]).filter(p=>!pid || p.id===pid);
           const assets = new Map();
-          for(const p of this.overview.portfolios||[]) for(const [index,a] of (p.assets||[]).entries()) {
+          for(const p of pfs) for(const [index,a] of (p.assets||[]).entries()) {
             // Combine fungible units across exchanges/wallets. Fixed assets remain individual entries.
             const key=a.origin==='asset'?JSON.stringify(['fixed',p.id,index]):JSON.stringify(['symbol',a.asset]);
             const current=assets.get(key)||{asset:a.asset,origin:a.origin,currency:a.currency,usd:0,amount:0};
@@ -1727,15 +1772,46 @@ export const appHtml = `<!doctype html>
           }
           const range=this.chartRange;
           const history=(this.analysisHistory||[]).filter(p=>!range || ((range.min==null||p.captured_at>=range.min)&&(range.max==null||p.captured_at<=range.max)));
-          this.shareData=JSON.parse(JSON.stringify({assets:[...assets.values()].sort((a,b)=>b.usd-a.usd),total:this.overview.grandTotalUsd||0,history,mode:this.valueMode,period:this.analysisPeriod,currency:this.displayCurrency,idrRate:this.idrRate,asOf:this.overview.computedAt||Date.now()}));
+          const total = pid ? pfs.reduce((s,p)=>s+(Number(p.totalUsd)||0),0) : (this.overview.grandTotalUsd||0);
+          const prev = this.shareData && this.shareData.spotlight;
+          this.shareData=JSON.parse(JSON.stringify({assets:[...assets.values()].sort((a,b)=>b.usd-a.usd),total,history,mode:this.valueMode,period:this.analysisPeriod,currency:this.displayCurrency,idrRate:this.idrRate,asOf:this.overview.computedAt||Date.now(),assetChange:this.overview.assetChange||{},returns:pid?null:this.returns,portfolioName:pid?this.portfolioName(pid):'',spotlight:prev||null}));
           this.shareOpen=true; this.$nextTick(()=>this.renderSharePreview());
+          // Riwayat per-portofolio hanya tersedia untuk mode snapshot — ambil terpisah lalu render ulang.
+          if (pid && this.valueMode!=='holdings') this.loadShareHistory(pid);
+          if (this.shareOptions.spotlight && !(prev && prev.asset===this.shareOptions.spotlight)) this.selectSpotlight(this.shareOptions.spotlight);
+        },
+        async loadShareHistory(pid) {
+          const r = await this.gql('History', { portfolioId: pid, days: String(this.periodDays()) });
+          if (r && r.ok && this.shareData && Number(this.shareOptions.portfolioId)===pid) { this.shareData.history = r.data||[]; this.renderSharePreview(); }
+        },
+        async selectSpotlight(sym) {
+          if (!this.shareData) return;
+          if (!sym) { this.shareData.spotlight=null; this.renderSharePreview(); return; }
+          const a = this.shareData.assets.find(x=>x.asset===sym);
+          if (!a) return;
+          if (a.origin==='asset') { this.shareData.spotlight={asset:sym,candles:[],period:'1M'}; this.renderSharePreview(); return; }
+          this.shareSpotlightLoading=true;
+          try {
+            const r = await this.gql('AssetChart', { symbol: a.origin==='stock' ? sym+'.JK' : sym, period: '1M' });
+            if (r && r.ok && this.shareData) this.shareData.spotlight={asset:sym,candles:(r.data&&r.data.candles)||[],period:'1M'};
+            else if (this.shareData) this.shareData.spotlight={asset:sym,candles:[],period:'1M'};
+          } finally { this.shareSpotlightLoading=false; this.renderSharePreview(); }
+        },
+        onShareAvatar(ev) {
+          const f = ev.target.files && ev.target.files[0]; if (!f) return;
+          if (f.size > 4*1024*1024) { this.flash('Avatar must be under 4 MB', 'error'); return; }
+          const img = new Image();
+          img.onload = ()=>{ this.shareAvatar=img; this.renderSharePreview(); };
+          img.onerror = ()=>{ this.flash('Could not read that image', 'error'); };
+          img.src = URL.createObjectURL(f);
         },
         renderSharePreview() {
           if(!this.shareData || !this.$refs.shareCanvas) return;
           try {
-            const list=WorthlyShare.shareAssetList(this.shareData,this.shareOptions);
+            const opts=this.shareRenderOptions();
+            const list=WorthlyShare.shareAssetList(this.shareData,opts);
             this.sharePage=list.page; this.sharePages=list.pages; this.shareCount=list.rows.length; this.shareOptions.page=list.page;
-            WorthlyShare.renderShareCard(this.$refs.shareCanvas,this.shareData,this.shareOptions); this.shareError='';
+            WorthlyShare.renderShareCard(this.$refs.shareCanvas,this.shareData,this.shareRenderOptions()); this.shareError='';
           }
           catch(e) { console.error('[Share Studio] Render failed',e); this.shareError='Could not render the card. Reload the page and try again.'; }
         },
@@ -1750,24 +1826,79 @@ export const appHtml = `<!doctype html>
             this.overview=overview.data; this.idrRate=overview.data.idrRate||0;
             this.analysisHistory=mode==='holdings'?(history.data?.points||[]):history.data;
             this.assetPeaks=mode==='holdings'?(history.data?.peaks||[]):[];
+            await this.loadReturns();
             this.openShareStudio();
           } catch(e) { console.error('[Share Studio] Refresh failed',e); this.shareError='Could not refresh data. Please try again.'; }
           finally { this.shareRefreshing=false; }
         },
+        // ---- ekspor ----
+        shareRenderOffscreen(extra) { const c=document.createElement('canvas'); WorthlyShare.renderShareCard(c,this.shareData,this.shareRenderOptions(extra)); return c; },
+        shareBlob(canvas) { return new Promise(resolve=>canvas.toBlob(resolve,'image/png')); },
+        shareFileName(extra) { const o=Object.assign({},this.shareOptions,extra||{}); return 'worthly-'+o.template+'-'+o.size+(o.template==='assets'?'-page-'+(o.page||1):'')+'.png'; },
+        shareSave(blob, name) { const url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); },
         async downloadShareCard() {
           if(this.shareBusy) return;
           this.shareBusy=true;
           try {
             this.renderSharePreview();
             if(this.shareError) return;
-            const blob=await new Promise(resolve=>this.$refs.shareCanvas.toBlob(resolve,'image/png'));
+            const blob=await this.shareBlob(this.$refs.shareCanvas);
             if(!blob) throw new Error('Export failed');
-            const url=URL.createObjectURL(blob), a=document.createElement('a');
-            a.href=url; a.download='worthly-'+this.shareOptions.template+'-'+this.shareOptions.size+(this.shareOptions.template==='assets'?'-page-'+this.sharePage:'')+'.png';
-            document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000);
+            this.shareSave(blob, this.shareFileName());
           } catch(e) { this.shareError='Could not download the PNG. Please try again.'; }
           finally { this.shareBusy=false; }
         },
+        async copyShareCard() {
+          if(this.shareBusy) return; this.shareBusy=true;
+          try { this.renderSharePreview(); const blob=await this.shareBlob(this.$refs.shareCanvas); await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]); this.flash('Image copied to clipboard','success'); }
+          catch(e) { this.flash('Copy failed — your browser may not allow image clipboard here','error'); }
+          finally { this.shareBusy=false; }
+        },
+        async shareShareCard() {
+          if(this.shareBusy) return; this.shareBusy=true;
+          try {
+            this.renderSharePreview(); const blob=await this.shareBlob(this.$refs.shareCanvas);
+            const file=new File([blob], this.shareFileName(), {type:'image/png'});
+            if(!navigator.canShare({files:[file]})) throw new Error('unsupported');
+            await navigator.share({files:[file], title:'My portfolio'});
+          } catch(e) { if(!(e && e.name==='AbortError')) this.flash('Sharing is not available on this device','error'); }
+          finally { this.shareBusy=false; }
+        },
+        async downloadAllPages(kind) {
+          if(this.shareBusy || !this.shareData) return; this.shareBusy=true;
+          try {
+            const pages=this.sharePages; const canvases=[];
+            for(let p=1;p<=pages;p++) canvases.push(this.shareRenderOffscreen({page:p}));
+            if(kind==='long') { const tall=WorthlyShare.stitchVertical(canvases, 24, this.shareOptions.theme==='light'?'#e2e8f0':'#0b1020'); const blob=await this.shareBlob(tall); this.shareSave(blob,'worthly-assets-all-pages-'+this.shareOptions.size+'.png'); }
+            else { const files=[]; for(let i=0;i<canvases.length;i++){ const blob=await this.shareBlob(canvases[i]); files.push({name:'worthly-assets-page-'+(i+1)+'.png', data:new Uint8Array(await blob.arrayBuffer())}); } this.shareSave(WorthlyShare.makeZip(files),'worthly-assets-'+this.shareOptions.size+'.zip'); }
+            this.flash(pages+' page(s) exported','success');
+          } catch(e) { console.error('[Share Studio] All pages failed',e); this.shareError='Could not export all pages. Please try again.'; }
+          finally { this.shareBusy=false; }
+        },
+        async downloadCarousel() {
+          if(this.shareBusy || !this.shareData || !this.shareCarousel.length) return; this.shareBusy=true;
+          try {
+            const order=WorthlyShare.SHARE_TEMPLATES.map(t=>t.id).filter(id=>this.shareCarousel.includes(id));
+            const files=[]; let n=0;
+            for(const id of order) {
+              const pages = id==='assets' ? this.sharePages : 1;
+              for(let p=1;p<=pages;p++){ n++; const blob=await this.shareBlob(this.shareRenderOffscreen({template:id,page:p})); files.push({name:String(n).padStart(2,'0')+'-'+id+(pages>1?'-p'+p:'')+'.png', data:new Uint8Array(await blob.arrayBuffer())}); }
+            }
+            this.shareSave(WorthlyShare.makeZip(files),'worthly-carousel-'+this.shareOptions.size+'.zip');
+            this.flash(n+' slide(s) exported','success');
+          } catch(e) { console.error('[Share Studio] Carousel failed',e); this.shareError='Could not export the carousel. Please try again.'; }
+          finally { this.shareBusy=false; }
+        },
+        // ---- preset (localStorage) ----
+        saveSharePreset() {
+          const name=this.sharePresetName.trim(); if(!name) return;
+          const o=Object.assign({},this.shareOptions); delete o.page; delete o.spotlight; delete o.portfolioId;
+          this.sharePresets=this.sharePresets.filter(p=>p.name!==name).concat([{name, options:o}]).slice(-12);
+          try { localStorage.setItem('sharePresets', JSON.stringify(this.sharePresets)); } catch(e) {}
+          this.sharePresetName=''; this.flash('Preset "'+name+'" saved','success');
+        },
+        applySharePreset(pr) { Object.assign(this.shareOptions, pr.options||{}, {page:1}); this.renderSharePreview(); },
+        deleteSharePreset(i) { this.sharePresets.splice(i,1); try { localStorage.setItem('sharePresets', JSON.stringify(this.sharePresets)); } catch(e) {} },
         syncing: false, toast: '', toastType: 'info', modal: null, updateReady: false, appVersion: '',
         failed: {}, reloading: false, // query yang gagal (op -> pesan) — lihat gql()
         loading: true, lastSync: 0, now: Date.now(),

@@ -9,6 +9,7 @@ All-in-one personal net worth & multi-asset portfolio tracker (Crypto CEX, On-ch
 - **CEX:** Binance & Bybit (saldo SPOT / FUTURES / EARN / FUNDING + riwayat deposit) via API resmi
 - **On-chain:** Ethereum & BSC (native + token) via Alchemy, TRON via TronGrid, Solana (SOL + SPL seperti USDT) via JSON-RPC, Bitcoin
 - **Saham IDX:** posisi saham Bursa Efek Indonesia (harga via Yahoo Finance) + untung/rugi (cost basis)
+- **Share Studio:** kartu PNG untuk dibagikan — 10 layout (overview, alokasi, performa, semua aset, movers 24h, all-time return, then vs now, komposisi sumber, spotlight aset, milestone), 10 background, aksen, font, bingkai, avatar, judul/handle kustom, mode privasi (sembunyi, blur, bulat, relatif), format square/4:5/story/landscape/16:9, copy, Web Share, ZIP semua halaman, carousel, dan preset
 - **Aset tetap:** properti / kendaraan / emas fisik — harga beli sebagai cost basis, nilai kini ditaksir manual dengan riwayat valuasi
 - **Holding manual & pengeluaran:** kas fiat (USD/IDR/JPY/SGD/CHF) dan pencatatan pengeluaran, otomatis dikonversi ke USD
 - **Tampilan USD/IDR:** tombol toggle mata uang tampilan di header (pilihan disimpan di browser)
