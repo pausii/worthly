@@ -679,6 +679,18 @@ export const appHtml = `<!doctype html>
               <fieldset><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">01 / Layout</legend>
                 <div class="grid gap-2 sm:grid-cols-2"><template x-for="t in [{id:'overview',name:'Overview',desc:'Value + allocation'},{id:'allocation',name:'Allocation Only',desc:'A private perspective'},{id:'performance',name:'Performance',desc:'Your value journey'},{id:'assets',name:'All Assets',desc:'Every holding, your way'}]" :key="t.id"><button @click="shareOptions.template=t.id; shareOptions.page=1; renderSharePreview()" :aria-pressed="shareOptions.template===t.id" class="rounded-xl border p-3 text-left text-sm" :class="shareOptions.template===t.id ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200' : 'border-slate-200 dark:border-slate-600'"><span class="block font-semibold" x-text="t.name"></span><span class="mt-1 block text-xs opacity-70" x-text="t.desc"></span></button></template></div>
               </fieldset>
+              <fieldset><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Background</legend>
+                <div class="grid grid-cols-5 gap-2">
+                  <template x-for="b in WorthlyShare.SHARE_BACKGROUNDS" :key="b.id">
+                    <button type="button" @click="shareOptions.background=b.id; renderSharePreview()" :aria-pressed="shareOptions.background===b.id" :title="b.name"
+                      class="group flex flex-col items-center gap-1 rounded-xl border p-1.5 text-[11px]"
+                      :class="shareOptions.background===b.id ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200' : 'border-slate-200 text-slate-500 dark:border-slate-600 dark:text-slate-400'">
+                      <span class="h-10 w-full rounded-lg ring-1 ring-black/10 dark:ring-white/10" :style="'background:'+(shareOptions.theme==='light' ? b.swatch.light : b.swatch.dark)"></span>
+                      <span x-text="b.name"></span>
+                    </button>
+                  </template>
+                </div>
+              </fieldset>
               <div class="grid grid-cols-2 gap-3">
                 <label class="text-sm">Theme<select x-model="shareOptions.theme" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="dark">Midnight</option><option value="light">Daylight</option></select></label>
                 <label class="text-sm">Format<select x-model="shareOptions.size" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="square">Square · 1080 × 1080</option><option value="story">Story · 1080 × 1920</option><option value="landscape">Landscape · 1600 × 900</option></select></label>
@@ -1702,7 +1714,7 @@ export const appHtml = `<!doctype html>
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
         shareOpen: false, shareBusy: false, shareRefreshing: false, shareError: '', shareData: null,
-        shareOptions: {template:'allocation',theme:'dark',size:'square',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1},
+        shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1},
         sharePage: 1, sharePages: 1, shareCount: 0,
         openShareStudio() {
           if(this.analysisLoading) return;

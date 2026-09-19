@@ -17,6 +17,101 @@ export function shareAssetList(data: any, options: any) {
   return { rows, pages, page, perPage, positiveTotal, visible: rows.slice((page - 1) * perPage, page * perPage) };
 }
 
+
+// ---------------------------------------------------------------------------
+// Background presets — digambar prosedural di canvas (tanpa aset eksternal, aman CSP).
+// Tiap preset punya varian dark/light mengikuti pilihan Theme. `swatch` = CSS untuk
+// pratinjau kecil di Share Studio.
+// ---------------------------------------------------------------------------
+type Ctx = CanvasRenderingContext2D;
+interface Background {
+  id: string;
+  name: string;
+  swatch: { dark: string; light: string };
+  paint: (ctx: Ctx, w: number, h: number, light: boolean) => void;
+}
+
+function linear(ctx: Ctx, w: number, h: number, stops: string[], angle: 'diag' | 'down' = 'diag') {
+  const g = angle === 'diag' ? ctx.createLinearGradient(0, 0, w, h) : ctx.createLinearGradient(0, 0, 0, h);
+  stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+}
+/** Blob radial lembut (mesh gradient). fx/fy = posisi relatif 0..1, r = radius relatif ke sisi terpanjang. */
+function blob(ctx: Ctx, w: number, h: number, fx: number, fy: number, r: number, color: string) {
+  const R = Math.max(w, h) * r;
+  const g = ctx.createRadialGradient(w * fx, h * fy, 0, w * fx, h * fy, R);
+  g.addColorStop(0, color); g.addColorStop(1, color.slice(0, 7) + '00');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+}
+function grid(ctx: Ctx, w: number, h: number, step: number, color: string) {
+  ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.beginPath();
+  for (let x = step; x < w; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+  for (let y = step; y < h; y += step) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+  ctx.stroke();
+}
+function dots(ctx: Ctx, w: number, h: number, step: number, radius: number, color: string) {
+  ctx.fillStyle = color;
+  for (let x = step / 2; x < w; x += step) for (let y = step / 2; y < h; y += step) { ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill(); }
+}
+function waves(ctx: Ctx, w: number, h: number, colors: string[]) {
+  colors.forEach((c, i) => {
+    const base = h * (0.62 + i * 0.1), amp = h * 0.04, freq = (Math.PI * 2 * (1.2 + i * 0.4)) / w, phase = i * 1.7;
+    ctx.beginPath(); ctx.moveTo(0, h);
+    for (let x = 0; x <= w; x += 8) ctx.lineTo(x, base + Math.sin(x * freq + phase) * amp);
+    ctx.lineTo(w, h); ctx.closePath(); ctx.fillStyle = c; ctx.fill();
+  });
+}
+/** Butiran halus: tile noise 128px dijadikan pattern (murah, tidak per-piksel penuh). */
+function grain(ctx: Ctx, w: number, h: number, alpha: number, light: boolean) {
+  const tile = document.createElement('canvas'); tile.width = tile.height = 128;
+  const tc = tile.getContext('2d'); if (!tc) return;
+  const img = tc.createImageData(128, 128); const v = light ? 15 : 255;
+  let seed = 7;
+  for (let i = 0; i < img.data.length; i += 4) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff; // LCG deterministik agar preview == PNG
+    const a = (seed >> 8) % 256;
+    img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = v; img.data[i + 3] = a;
+  }
+  tc.putImageData(img, 0, 0);
+  const pat = ctx.createPattern(tile, 'repeat'); if (!pat) return;
+  ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = pat; ctx.fillRect(0, 0, w, h); ctx.restore();
+}
+const faint = (light: boolean, a: number) => (light ? 'rgba(15,23,42,' : 'rgba(255,255,255,') + a + ')';
+
+export const SHARE_BACKGROUNDS: Background[] = [
+  { id: 'classic', name: 'Classic', swatch: { dark: 'linear-gradient(135deg,#101a31,#1c1640)', light: 'linear-gradient(135deg,#f8fafc,#e0e7ff)' },
+    paint: (c, w, h, l) => linear(c, w, h, l ? ['#f8fafc', '#e0e7ff'] : ['#101a31', '#1c1640']) },
+  { id: 'aurora', name: 'Aurora', swatch: { dark: 'radial-gradient(at 20% 20%,#4f46e5 0,transparent 55%),radial-gradient(at 80% 30%,#0d9488 0,transparent 50%),radial-gradient(at 60% 90%,#db2777 0,transparent 50%),#0b1020', light: 'radial-gradient(at 20% 20%,#c7d2fe 0,transparent 55%),radial-gradient(at 80% 30%,#99f6e4 0,transparent 50%),radial-gradient(at 60% 90%,#fbcfe8 0,transparent 50%),#f8fafc' },
+    paint: (c, w, h, l) => { linear(c, w, h, l ? ['#f8fafc', '#f1f5f9'] : ['#0b1020', '#0f172a']);
+      blob(c, w, h, 0.2, 0.2, 0.55, l ? '#c7d2feee' : '#4f46e5aa'); blob(c, w, h, 0.85, 0.3, 0.5, l ? '#99f6e4dd' : '#0d948888'); blob(c, w, h, 0.6, 0.9, 0.5, l ? '#fbcfe8dd' : '#db277777'); } },
+  { id: 'sunset', name: 'Sunset', swatch: { dark: 'linear-gradient(160deg,#2a0f2e,#5b1a3a 55%,#9a3412)', light: 'linear-gradient(160deg,#fff7ed,#fce7f3 60%,#fde68a)' },
+    paint: (c, w, h, l) => { linear(c, w, h, l ? ['#fff7ed', '#fce7f3', '#fde68a'] : ['#2a0f2e', '#5b1a3a', '#9a3412'], 'down');
+      blob(c, w, h, 0.5, 1.1, 0.5, l ? '#fdba74cc' : '#f9731666'); } },
+  { id: 'ocean', name: 'Ocean', swatch: { dark: 'linear-gradient(135deg,#0c1a3a,#0e4a6b,#0d9488)', light: 'linear-gradient(135deg,#eff6ff,#cffafe,#ccfbf1)' },
+    paint: (c, w, h, l) => { linear(c, w, h, l ? ['#eff6ff', '#cffafe', '#ccfbf1'] : ['#0c1a3a', '#0e4a6b', '#0d9488']);
+      blob(c, w, h, 0.15, 0.85, 0.45, l ? '#bae6fdcc' : '#38bdf855'); } },
+  { id: 'emerald', name: 'Emerald', swatch: { dark: 'linear-gradient(135deg,#052e16,#064e3b,#14532d)', light: 'linear-gradient(135deg,#f0fdf4,#d1fae5,#ecfccb)' },
+    paint: (c, w, h, l) => { linear(c, w, h, l ? ['#f0fdf4', '#d1fae5', '#ecfccb'] : ['#052e16', '#064e3b', '#14532d']);
+      blob(c, w, h, 0.8, 0.15, 0.5, l ? '#a7f3d0cc' : '#34d39944'); } },
+  { id: 'mono', name: 'Mono', swatch: { dark: '#0b0f19', light: '#ffffff' },
+    paint: (c, w, h, l) => { c.fillStyle = l ? '#ffffff' : '#0b0f19'; c.fillRect(0, 0, w, h); } },
+  { id: 'grid', name: 'Grid', swatch: { dark: 'linear-gradient(rgba(255,255,255,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.08) 1px,transparent 1px),#0f172a', light: 'linear-gradient(rgba(15,23,42,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(15,23,42,.08) 1px,transparent 1px),#f8fafc' },
+    paint: (c, w, h, l) => { linear(c, w, h, l ? ['#f8fafc', '#eef2ff'] : ['#0f172a', '#111a33']); grid(c, w, h, 60, faint(l, 0.07));
+      blob(c, w, h, 0.5, 0.5, 0.7, l ? '#ffffff88' : '#0f172a99'); } },
+  { id: 'dots', name: 'Dots', swatch: { dark: 'radial-gradient(rgba(255,255,255,.18) 1px,transparent 1.5px) 0 0/10px 10px,#111827', light: 'radial-gradient(rgba(15,23,42,.18) 1px,transparent 1.5px) 0 0/10px 10px,#f8fafc' },
+    paint: (c, w, h, l) => { linear(c, w, h, l ? ['#f8fafc', '#f1f5f9'] : ['#111827', '#0f172a']); dots(c, w, h, 36, 2, faint(l, 0.12)); } },
+  { id: 'waves', name: 'Waves', swatch: { dark: 'linear-gradient(#0f172a 55%,#312e81 70%,#4338ca 85%,#6366f1)', light: 'linear-gradient(#f8fafc 55%,#e0e7ff 70%,#c7d2fe 85%,#a5b4fc)' },
+    paint: (c, w, h, l) => { linear(c, w, h, l ? ['#f8fafc', '#f1f5f9'] : ['#0f172a', '#0b1020'], 'down');
+      waves(c, w, h, l ? ['#e0e7ff', '#c7d2fe', '#a5b4fc'] : ['#312e81', '#4338ca', '#6366f1']); } },
+  { id: 'grain', name: 'Grain', swatch: { dark: 'linear-gradient(135deg,#1e1b4b,#0f172a)', light: 'linear-gradient(135deg,#eef2ff,#f8fafc)' },
+    paint: (c, w, h, l) => { linear(c, w, h, l ? ['#eef2ff', '#f8fafc'] : ['#1e1b4b', '#0f172a']); blob(c, w, h, 0.3, 0.25, 0.6, l ? '#c7d2fe99' : '#6366f166'); grain(c, w, h, l ? 0.16 : 0.2, l); } },
+];
+
+export function paintBackground(ctx: Ctx, w: number, h: number, light: boolean, id?: string) {
+  const bg = SHARE_BACKGROUNDS.find((b) => b.id === id) || SHARE_BACKGROUNDS[0];
+  bg.paint(ctx, w, h, light);
+}
+
 export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: any) {
   const sizes: Record<string, number[]> = { square: [1080, 1080], story: [1080, 1920], landscape: [1600, 900] };
   const [w, h] = sizes[options.size] || sizes.square;
@@ -28,10 +123,7 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
   const muted = light ? '#5e6e86' : '#a3b3d0';
   const colors = ['#818cf8', '#2dd4bf', '#38bdf8', '#fbbf24', '#f472b6', '#94a3b8'];
   const pad = 76, inner = w - pad * 2;
-  const gradient = ctx.createLinearGradient(0, 0, w, h);
-  gradient.addColorStop(0, light ? '#f8fafc' : '#101a31');
-  gradient.addColorStop(1, light ? '#e0e7ff' : '#1c1640');
-  ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h);
+  paintBackground(ctx, w, h, light, options.background);
   ctx.strokeStyle = light ? '#cbd5e1' : '#303b59';
   ctx.lineWidth = 1;
   ctx.strokeRect(28, 28, w - 56, h - 56);
