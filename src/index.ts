@@ -54,6 +54,43 @@ app.get('/sw.js', (c) => {
   return c.body(swJs);
 });
 
+// --- Ikon aset (proxy same-origin) ---
+// Ikon dari CDN pihak ketiga tidak bisa digambar ke canvas lalu diekspor (canvas "tainted").
+// Rute ini mengambil ikon lewat Worker, menyimpannya di KV 7 hari, dan menyajikannya same-origin.
+// Hanya untuk sesi login (bukan proxy terbuka) dan hanya simbol alfanumerik pendek.
+const ICON_UPSTREAM: Record<string, (sym: string) => string> = {
+  token: (sym) => 'https://assets.coincap.io/assets/icons/' + sym.toLowerCase() + '@2x.png',
+  stock: (sym) => 'https://assets.stockbit.com/logos/companies/' + sym.toUpperCase() + '.png',
+};
+app.get('/icon/:kind/:symbol', async (c) => {
+  if (!(await sessionOf(c))) return c.text('unauthorized', 401);
+  const kind = c.req.param('kind');
+  const symbol = (c.req.param('symbol') || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 16);
+  const build = ICON_UPSTREAM[kind];
+  if (!build || !symbol) return c.text('not found', 404);
+  const key = `icon:${kind}:${symbol.toUpperCase()}`;
+  const cached = await c.env.KV.get(key, 'arrayBuffer');
+  if (cached) {
+    if (cached.byteLength === 0) return c.text('not found', 404); // miss yang di-cache (negatif)
+    c.header('Content-Type', 'image/png');
+    c.header('Cache-Control', 'private, max-age=86400');
+    return c.body(cached);
+  }
+  let body: ArrayBuffer | null = null;
+  try {
+    const res = await fetch(build(symbol), { headers: { Accept: 'image/*' }, cf: { cacheTtl: 86400 } } as RequestInit);
+    if (res.ok && (res.headers.get('content-type') || '').startsWith('image/')) body = await res.arrayBuffer();
+  } catch {
+    body = null;
+  }
+  // Cache positif 7 hari; cache negatif 1 hari (jangan hantam upstream untuk simbol tanpa ikon).
+  await c.env.KV.put(key, body ?? new ArrayBuffer(0), { expirationTtl: body ? 7 * 86400 : 86400 }).catch(() => undefined);
+  if (!body) return c.text('not found', 404);
+  c.header('Content-Type', 'image/png');
+  c.header('Cache-Control', 'private, max-age=86400');
+  return c.body(body);
+});
+
 // --- GraphQL API ---
 // Seluruh REST lama (/api/*) digantikan oleh satu endpoint GraphQL.
 // Auth (requireAuth) & CSRF (requireCsrf) kini ditegakkan di authPlugin (lihat graphql/authPlugin.ts).

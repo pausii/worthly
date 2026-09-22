@@ -717,6 +717,7 @@ export const appHtml = `<!doctype html>
                   <label class="text-sm">Monetary values<select x-model="shareOptions.amountMode" :disabled="shareOptions.template==='allocation'" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700"><template x-for="m in WorthlyShare.SHARE_AMOUNT_MODES" :key="m.id"><option :value="m.id" x-text="m.name"></option></template></select></label>
                   <label class="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" x-model="shareOptions.names"> Show asset names</label>
                 </div>
+                <label class="flex items-center gap-2 text-sm" :class="!shareOptions.names ? 'opacity-50' : ''"><input type="checkbox" x-model="shareOptions.logos" :disabled="!shareOptions.names" @change="loadShareIcons()"> Show asset logos next to names <span class="text-xs text-slate-500">(needs names)</span></label>
                 <label x-show="['performance','thennow'].includes(shareOptions.template)" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.relative"> Relative mode (start = 100, no currency)</label>
                 <div x-show="shareOptions.template==='assets' || shareOptions.template==='spotlight'" class="space-y-3">
                   <label x-show="shareOptions.template==='assets'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.minDollar" @change="shareOptions.page=1"> Only assets worth ≥ US$1</label>
@@ -1751,14 +1752,28 @@ export const appHtml = `<!doctype html>
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
         shareOpen: false, shareBusy: false, shareRefreshing: false, shareError: '', shareData: null,
-        shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amountMode:'hidden',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1,relative:false,title:'',caption:'',handle:'',watermark:true,accent:'indigo',font:'sans',frame:'none',portfolioId:'',spotlight:''},
+        shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amountMode:'hidden',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1,relative:false,title:'',caption:'',handle:'',watermark:true,accent:'indigo',font:'sans',frame:'none',portfolioId:'',spotlight:'',logos:false},
         sharePage: 1, sharePages: 1, shareCount: 0,
         shareAvatar: null, shareSpotlightLoading: false, shareCarousel: ['overview','performance','assets'],
+        shareIcons: {}, // simbol -> Image (same-origin via /icon/...), null = tidak ada ikon (pakai inisial)
         sharePresets: (()=>{ try { return JSON.parse(localStorage.getItem('sharePresets')||'[]'); } catch(e) { return []; } })(), sharePresetName: '',
         shareCanCopy: !!(navigator.clipboard && window.ClipboardItem), shareCanShare: !!(navigator.share && navigator.canShare),
         shareDefaultTitle() { const m={overview:'The bigger picture.',allocation:'How it is allocated.',performance:'A view of the journey.',assets:'Everything I hold.',movers:'What moved today.',returns:'The long game.',thennow:'Then and now.',composition:'Where it lives.',spotlight:'One to watch.',milestone:'A milestone.'}; return m[this.shareOptions.template]||''; },
         // Opsi render = shareOptions + hal yang tak bisa disimpan (gambar avatar) + kompatibilitas flag lama.
-        shareRenderOptions(extra) { return Object.assign({}, this.shareOptions, { avatar:this.shareAvatar, amounts:this.shareOptions.amountMode!=='hidden' }, extra||{}); },
+        shareRenderOptions(extra) { return Object.assign({}, this.shareOptions, { avatar:this.shareAvatar, icons:this.shareIcons, amounts:this.shareOptions.amountMode!=='hidden' }, extra||{}); },
+        // Muat ikon aset lewat proxy Worker (same-origin -> canvas tetap bisa diekspor). Render ulang tiap ikon tiba.
+        loadShareIcons() {
+          if (!this.shareOptions.logos || !this.shareData) return;
+          for (const a of this.shareData.assets) {
+            const sym = a.asset; if (!(a.usd > 0) || this.shareIcons[sym] !== undefined) continue;
+            if (a.origin === 'asset') { this.shareIcons[sym] = null; continue; }
+            const url = a.origin === 'stock' ? '/icon/stock/' + encodeURIComponent(sym) : '/icon/token/' + encodeURIComponent(sym);
+            const img = new Image();
+            this.shareIcons[sym] = null; // tandai sedang dimuat; tetap null kalau gagal
+            img.onload = () => { this.shareIcons[sym] = img; this.renderSharePreview(); };
+            img.src = url;
+          }
+        },
         openShareStudio() {
           if(this.analysisLoading) return;
           const pid = this.shareOptions.portfolioId ? Number(this.shareOptions.portfolioId) : null;
@@ -1776,6 +1791,7 @@ export const appHtml = `<!doctype html>
           const prev = this.shareData && this.shareData.spotlight;
           this.shareData=JSON.parse(JSON.stringify({assets:[...assets.values()].sort((a,b)=>b.usd-a.usd),total,history,mode:this.valueMode,period:this.analysisPeriod,currency:this.displayCurrency,idrRate:this.idrRate,asOf:this.overview.computedAt||Date.now(),assetChange:this.overview.assetChange||{},returns:pid?null:this.returns,portfolioName:pid?this.portfolioName(pid):'',spotlight:prev||null}));
           this.shareOpen=true; this.$nextTick(()=>this.renderSharePreview());
+          this.loadShareIcons();
           // Riwayat per-portofolio hanya tersedia untuk mode snapshot — ambil terpisah lalu render ulang.
           if (pid && this.valueMode!=='holdings') this.loadShareHistory(pid);
           if (this.shareOptions.spotlight && !(prev && prev.asset===this.shareOptions.spotlight)) this.selectSpotlight(this.shareOptions.spotlight);

@@ -330,6 +330,27 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
   const top = rows.slice(0, 5).map((a: any, i: number) => ({ ...a, label: options.names ? a.asset : 'Asset ' + (i + 1) }));
   if (rows.length > 5) top.push({ label: 'Others', usd: rows.slice(5).reduce((s: number, a: any) => s + a.usd, 0) });
   const nameOf = (asset: string, i: number) => (options.names ? asset : 'Asset ' + (i + 1));
+  // Logo aset di kiri nama: gambar dari options.icons (simbol -> HTMLImageElement, same-origin) atau
+  // fallback lingkaran gradien berinisial. Hanya bila nama ditampilkan — logo membocorkan identitas aset.
+  const showLogos = !!options.logos && !!options.names;
+  const icons: Record<string, any> = options.icons || {};
+  const hue = (sym: string) => { let h = 0; for (const ch of (sym || '?').toUpperCase()) h = (h * 31 + ch.charCodeAt(0)) & 0xffff; return h % 360; };
+  const initial = (sym: string) => { const u = (sym || '?').toUpperCase(); return u.length === 3 ? u.slice(0, 2) : u.charAt(0); };
+  function logo(sym: string, cx: number, cy: number, r: number) {
+    const img = icons[sym];
+    ctx!.save();
+    ctx!.beginPath(); ctx!.arc(cx, cy, r, 0, Math.PI * 2); ctx!.closePath(); ctx!.clip();
+    if (img && img.width) ctx!.drawImage(img, cx - r, cy - r, r * 2, r * 2);
+    else {
+      const h1 = hue(sym), h2 = (h1 + 45) % 360;
+      const g = ctx!.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+      g.addColorStop(0, 'hsl(' + h1 + ',65%,58%)'); g.addColorStop(1, 'hsl(' + h2 + ',65%,42%)');
+      ctx!.fillStyle = g; ctx!.fillRect(cx - r, cy - r, r * 2, r * 2);
+      ctx!.font = '600 ' + Math.round(r * 0.95) + 'px ' + family; ctx!.fillStyle = '#ffffff'; ctx!.textAlign = 'center'; ctx!.textBaseline = 'middle';
+      ctx!.fillText(initial(sym), cx, cy + 1); ctx!.textBaseline = 'alphabetic';
+    }
+    ctx!.restore();
+  }
   const hline = (y: number) => { ctx.strokeStyle = lineColor; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(w - pad, y); ctx.stroke(); };
   let note = '';
 
@@ -353,8 +374,8 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
     list.visible.forEach((a: any, i: number) => {
       const y = 405 + i * 70;
       const index = (list.page - 1) * list.perPage + i;
-      ctx.fillStyle = colors[index % colors.length]; ctx.fillRect(pad, y - 22, 4, 29);
-      text(nameOf(a.asset, index), pad + 20, y, 26, ink, 'left', nameWidth - 36);
+      if (showLogos) { logo(a.asset, pad + 18, y - 9, 18); text(nameOf(a.asset, index), pad + 48, y, 26, ink, 'left', nameWidth - 64); }
+      else { ctx.fillStyle = colors[index % colors.length]; ctx.fillRect(pad, y - 22, 4, 29); text(nameOf(a.asset, index), pad + 20, y, 26, ink, 'left', nameWidth - 36); }
       columns.forEach((c, ci) => {
         let content = '—'; let blur = false;
         if (c.field === 'amount' && Number.isFinite(a.amount)) {
@@ -426,7 +447,8 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
       if (!list.length) text('—', x, y0 + 60, 30, muted);
       list.forEach((m, i) => {
         const y = y0 + 70 + i * (story ? 110 : 84);
-        text(nameOf(m.asset, rows.findIndex((r: any) => r.asset === m.asset)), x, y, 30, ink, 'left', colW - 170);
+        if (showLogos) { logo(m.asset, x + 20, y - 10, 20); text(nameOf(m.asset, rows.findIndex((r: any) => r.asset === m.asset)), x + 52, y, 30, ink, 'left', colW - 222); }
+        else text(nameOf(m.asset, rows.findIndex((r: any) => r.asset === m.asset)), x, y, 30, ink, 'left', colW - 170);
         text(signed(m.pct), x + colW, y, 34, color, 'right');
         if (showMoney) text(money(m.usd), x, y + 30, 20, muted, 'left', colW, blurMoney);
         hline(y + 48);
@@ -471,7 +493,8 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
     else {
       const i = rows.findIndex((r: any) => r.asset === sp.asset);
       const chg = data.assetChange && data.assetChange[a.asset];
-      text(nameOf(a.asset, i), pad, story ? 330 : 300, 72, ink, 'left', inner);
+      if (showLogos) { logo(a.asset, pad + 34, (story ? 330 : 300) - 26, 34); text(nameOf(a.asset, i), pad + 84, story ? 330 : 300, 72, ink, 'left', inner - 84 - inner / 3); }
+      else text(nameOf(a.asset, i), pad, story ? 330 : 300, 72, ink, 'left', inner);
       text((a.usd / total * 100).toFixed(1) + '% of portfolio' + (showMoney ? ' · ' + money(a.usd) : ''), pad, story ? 380 : 345, 26, muted, 'left', inner, false);
       if (options.quantities && Number.isFinite(a.amount)) text(a.amount.toLocaleString('en-US', { maximumSignificantDigits: 8 }) + (a.origin === 'asset' && a.currency ? ' ' + a.currency : ' units'), pad, story ? 420 : 385, 24, muted);
       if (chg !== undefined && chg !== null) text(signed(Number(chg)) + ' today', w - pad, story ? 330 : 300, 40, Number(chg) >= 0 ? up : down, 'right', inner / 2);
@@ -526,8 +549,8 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
     if (!total) text('No positive holdings to display', lx, ly, 26, muted);
     top.forEach((a: any, i: number) => {
       const yy = ly + i * (story ? 75 : 42);
-      ctx.fillStyle = colors[i % colors.length]; ctx.beginPath(); ctx.arc(lx + 7, yy - 8, 7, 0, Math.PI * 2); ctx.fill();
-      text(a.label, lx + 30, yy, 26, ink, 'left', lw - 155);
+      if (showLogos && a.asset) { logo(a.asset, lx + 12, yy - 9, 13); text(a.label, lx + 34, yy, 26, ink, 'left', lw - 160); }
+      else { ctx.fillStyle = colors[i % colors.length]; ctx.beginPath(); ctx.arc(lx + 7, yy - 8, 7, 0, Math.PI * 2); ctx.fill(); text(a.label, lx + 30, yy, 26, ink, 'left', lw - 155); }
       text((a.usd / total * 100).toFixed(1) + '%', lx + lw, yy, 26, ink, 'right');
     });
     note = 'Allocation uses positive holdings; totals include liabilities.';
