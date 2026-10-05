@@ -48,7 +48,7 @@ export const appHtml = `<!doctype html>
           class="group relative flex w-full items-center gap-3 rounded-xl py-2.5 text-sm transition-colors"
           :class="(view===item.id ? 'bg-white/15 text-white shadow-sm' : 'text-indigo-100 hover:bg-white/10 hover:text-white') + (sidebarCollapsed ? ' justify-center px-0' : ' px-3')">
           <span x-html="item.icon" class="shrink-0"></span>
-          <span class="truncate flex-1" x-show="!sidebarCollapsed" x-text="item.label"></span>
+          <span class="truncate flex-1 text-left" x-show="!sidebarCollapsed" x-text="item.label"></span>
           <span x-show="item.id==='activity' && unreadCount>0" x-text="unreadCount > 99 ? '99+' : unreadCount"
             class="shrink-0 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none" :class="sidebarCollapsed ? 'absolute right-2 top-1' : ''"></span>
         </button>
