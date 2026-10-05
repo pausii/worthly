@@ -11,7 +11,9 @@ export function shareAssetList(data: any, options: any) {
     return (order === 'value-asc' ? a.usd - b.usd : b.usd - a.usd) || name;
   });
   // Keep type readable instead of squeezing the whole portfolio into one card.
-  const perPage = options.size === 'story' ? 20 : options.size === 'landscape' ? 6 : 8;
+  // Bar List: baris lebih tipis, muat lebih banyak per halaman.
+  const bars = options.template === 'bars';
+  const perPage = options.size === 'story' ? (bars ? 23 : 20) : (options.size === 'landscape' || options.size === 'wide') ? (bars ? 7 : 6) : (bars ? 10 : 8);
   const pages = Math.max(1, Math.ceil(rows.length / perPage));
   const page = Math.min(Math.max(Math.floor(Number(options.page) || 1), 1), pages);
   const positiveTotal = (data.assets || []).reduce((sum: number, a: any) => sum + (Number.isFinite(a.usd) && a.usd > 0 ? a.usd : 0), 0);
@@ -33,6 +35,7 @@ export const SHARE_TEMPLATES = [
   { id: 'spotlight', name: 'Asset Spotlight', desc: 'One asset, one story' },
   { id: 'milestone', name: 'Milestone', desc: 'Peak, threshold, streak' },
   { id: 'bubble', name: 'Bubble', desc: 'Every asset, sized by share' },
+  { id: 'bars', name: 'Bar List', desc: 'Every asset, small ones stay visible' },
 ];
 // Ukuran kanvas. `logical` = ukuran tata letak yang digambar; kanvas lain dipetakan ke sana
 // (portrait = square + pita atas/bawah, wide = landscape diperkecil) agar posisi tetap konsisten.
@@ -291,7 +294,7 @@ export function packCircles(weights: number[]): { x: number; y: number; r: numbe
 // ---------------------------------------------------------------------------
 const DEFAULT_TITLES: Record<string, string> = {
   overview: 'The bigger picture.', allocation: 'How it is allocated.', performance: 'A view of the journey.', assets: 'Everything I hold.',
-  movers: 'What moved today.', returns: 'The long game.', thennow: 'Then and now.', composition: 'Where it lives.', spotlight: 'One to watch.', milestone: 'A milestone.', bubble: 'Sized by share.',
+  movers: 'What moved today.', returns: 'The long game.', thennow: 'Then and now.', composition: 'Where it lives.', spotlight: 'One to watch.', milestone: 'A milestone.', bubble: 'Sized by share.', bars: 'All of it, in bars.',
 };
 
 export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: any) {
@@ -560,6 +563,33 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
       }
     }
     note = 'Price from exchange data; share = % of positive holdings.';
+  } else if (options.template === 'bars') {
+    const list = shareAssetList(data, { ...options, page: options.page });
+    text(list.rows.length + ' holdings · ' + (options.minDollar !== false ? 'Value ≥ US$1' : 'All nonzero holdings'), pad, 255, 26, muted);
+    text('PAGE ' + list.page + ' / ' + list.pages, w - pad, 300, 21, muted, 'right');
+    const pctW = 110, valW = showMoney ? 170 : 0, nameW = Math.round(inner * (wide ? 0.22 : 0.3));
+    const trackX = pad + nameW, trackW = inner - nameW - valW - pctW - 24;
+    text('ASSET', pad, 350, 20, muted);
+    if (showMoney) text('VALUE', w - pad - pctW - 12, 350, 20, muted, 'right');
+    text('SHARE', w - pad, 350, 20, muted, 'right');
+    const rowH = story ? 60 : 52;
+    // Skala akar: panjang = sqrt(share / share terbesar) × lebar track, minimum 6 px agar yang kecil tetap tampak.
+    const maxUsd = Math.max(...list.rows.map((a: any) => Math.max(0, a.usd)), 0);
+    if (!list.rows.length) text('No assets match this filter.', pad, 450, 30, muted);
+    list.visible.forEach((a: any, i: number) => {
+      const y = 405 + i * rowH;
+      const index = (list.page - 1) * list.perPage + i;
+      const col = colors[index % colors.length];
+      const share = list.positiveTotal > 0 && a.usd > 0 ? (a.usd / list.positiveTotal) * 100 : 0;
+      const len = maxUsd > 0 && a.usd > 0 ? Math.max(6, Math.sqrt(a.usd / maxUsd) * trackW) : 0;
+      if (showLogos) { logo(a.asset, pad + 16, y - 9, 16); text(nameOf(a.asset, index), pad + 42, y, 24, ink, 'left', nameW - 56); }
+      else text(nameOf(a.asset, index), pad, y, 24, ink, 'left', nameW - 16);
+      ctx.fillStyle = light ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.08)'; ctx.beginPath(); ctx.roundRect(trackX, y - 18, trackW, 20, 10); ctx.fill();
+      if (len > 0) { ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(trackX, y - 18, len, 20, 10); ctx.fill(); }
+      if (showMoney) text(money(a.usd), w - pad - pctW - 12, y, 22, muted, 'right', valW - 12, blurMoney);
+      text(share.toFixed(share >= 10 ? 1 : 2) + '%', w - pad, y, 24, ink, 'right', pctW);
+    });
+    note = 'Bars use a square-root scale so small holdings stay visible; percentages are exact.';
   } else if (options.template === 'bubble') {
     const list = shareAssetList(data, { ...options, order: 'value-desc', page: 1 });
     const items = list.rows.filter((a: any) => a.usd > 0);

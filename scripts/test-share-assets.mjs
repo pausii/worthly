@@ -63,7 +63,8 @@ assert.equal(ms.threshold, 2000); // highest round threshold <= current 2050
 assert.equal(ms.crossedAt, 2); // first point >= 2000
 assert.equal(ms.peak.total_usd, 2600);
 assert.equal(shareMilestone({ history: [] }), null);
-assert.equal(SHARE_TEMPLATES.length, 11);
+assert.equal(SHARE_TEMPLATES.length, 12);
+assert.equal(shareAssetList(many, { size: 'square', template: 'bars' }).perPage, 10); // bar list lebih padat dari tabel
 // Circle packing: tidak ada lingkaran yang saling tumpang tindih, terbesar di pusat.
 {
   const { packCircles } = await import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64'));
