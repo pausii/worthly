@@ -32,6 +32,7 @@ export const SHARE_TEMPLATES = [
   { id: 'composition', name: 'Source Composition', desc: 'CEX, on-chain, stocks…' },
   { id: 'spotlight', name: 'Asset Spotlight', desc: 'One asset, one story' },
   { id: 'milestone', name: 'Milestone', desc: 'Peak, threshold, streak' },
+  { id: 'bubble', name: 'Bubble', desc: 'Every asset, sized by share' },
 ];
 // Ukuran kanvas. `logical` = ukuran tata letak yang digambar; kanvas lain dipetakan ke sana
 // (portrait = square + pita atas/bawah, wide = landscape diperkecil) agar posisi tetap konsisten.
@@ -242,11 +243,55 @@ export function stitchVertical(canvases: HTMLCanvasElement[], gap = 24, bg = '#0
 }
 
 // ---------------------------------------------------------------------------
+// Circle packing: terbesar di pusat, berikutnya ditempatkan pada posisi yang menyinggung dua
+// lingkaran yang sudah ada (kandidat tangen) dan paling dekat ke pusat — menghasilkan gugus
+// bulat dan rapat. Koordinat relatif (pusat 0,0); pemanggil menskalakan agar muat di area.
+// ---------------------------------------------------------------------------
+export function packCircles(weights: number[]): { x: number; y: number; r: number }[] {
+  const order = weights.map((w, i) => [w, i] as [number, number]).filter(([w]) => w > 0).sort((a, b) => b[0] - a[0]);
+  const out: { x: number; y: number; r: number }[] = new Array(weights.length);
+  const placed: { x: number; y: number; r: number }[] = [];
+  const maxW = order.length ? order[0][0] : 1;
+  const GAP = 2.5;
+  const fits = (x: number, y: number, r: number) => placed.every((p) => Math.hypot(p.x - x, p.y - y) >= p.r + r + GAP - 1e-6);
+  for (const [w, i] of order) {
+    const r = Math.sqrt(w / maxW) * 100; // terbesar = radius 100 (unit relatif)
+    let best: { x: number; y: number } | null = null;
+    if (placed.length === 0) best = { x: 0, y: 0 };
+    else if (placed.length === 1) best = { x: placed[0].r + r + GAP, y: 0 };
+    else {
+      let bestD = Infinity;
+      for (let a = 0; a < placed.length; a++) for (let b = a + 1; b < placed.length; b++) {
+        const A = placed[a], B = placed[b];
+        const ra = A.r + r + GAP, rb = B.r + r + GAP;
+        const dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy);
+        if (d > ra + rb || d < Math.abs(ra - rb) || d === 0) continue;
+        // Dua titik potong lingkaran berjari-jari ra (pusat A) dan rb (pusat B).
+        const t = (ra * ra - rb * rb + d * d) / (2 * d);
+        const hh = Math.max(0, ra * ra - t * t), hgt = Math.sqrt(hh);
+        const mx = A.x + (dx * t) / d, my = A.y + (dy * t) / d;
+        for (const sgn of [1, -1]) {
+          const x = mx + (sgn * hgt * -dy) / d, y = my + (sgn * hgt * dx) / d;
+          const dist = Math.hypot(x, y);
+          if (dist < bestD && fits(x, y, r)) { bestD = dist; best = { x, y }; }
+        }
+      }
+      if (!best) { // fallback (seharusnya tak terjadi): geser keluar di sumbu x
+        let x = 0; while (!fits(x, 0, r)) x += 5; best = { x, y: 0 };
+      }
+    }
+    const c = { x: best.x, y: best.y, r };
+    placed.push(c); out[i] = c;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Renderer utama
 // ---------------------------------------------------------------------------
 const DEFAULT_TITLES: Record<string, string> = {
   overview: 'The bigger picture.', allocation: 'How it is allocated.', performance: 'A view of the journey.', assets: 'Everything I hold.',
-  movers: 'What moved today.', returns: 'The long game.', thennow: 'Then and now.', composition: 'Where it lives.', spotlight: 'One to watch.', milestone: 'A milestone.',
+  movers: 'What moved today.', returns: 'The long game.', thennow: 'Then and now.', composition: 'Where it lives.', spotlight: 'One to watch.', milestone: 'A milestone.', bubble: 'Sized by share.',
 };
 
 export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: any) {
@@ -515,6 +560,43 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
       }
     }
     note = 'Price from exchange data; share = % of positive holdings.';
+  } else if (options.template === 'bubble') {
+    const list = shareAssetList(data, { ...options, order: 'value-desc', page: 1 });
+    const items = list.rows.filter((a: any) => a.usd > 0);
+    const sum = items.reduce((s: number, a: any) => s + a.usd, 0);
+    text(items.length + ' assets · ' + (options.minDollar !== false ? 'Value ≥ US$1' : 'All positive holdings') + (showMoney ? ' · ' + money(sum) : ''), pad, 255, 26, muted, 'left', inner, blurMoney);
+    if (!items.length) text('No positive holdings to display', pad, h / 2, 30, muted);
+    else {
+      const packed = packCircles(items.map((a: any) => a.usd));
+      // Area gambar: di bawah subjudul sampai di atas footer; skalakan bounding box agar muat.
+      const ax = pad, ay = 300, aw = inner, ah = h - 300 - 185; // sisakan ruang baris 'Also:' + caption + footer
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const c of packed) { minX = Math.min(minX, c.x - c.r); maxX = Math.max(maxX, c.x + c.r); minY = Math.min(minY, c.y - c.r); maxY = Math.max(maxY, c.y + c.r); }
+      const scale = Math.min(aw / (maxX - minX), ah / (maxY - minY));
+      const ox = ax + aw / 2 - ((minX + maxX) / 2) * scale, oy = ay + ah / 2 - ((minY + maxY) / 2) * scale;
+      const unlabeledNames: string[] = [];
+      items.forEach((a: any, i: number) => {
+        const c = packed[i]; const cx = ox + c.x * scale, cy = oy + c.y * scale, r = c.r * scale;
+        const col = colors[i % colors.length];
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = col + (light ? '55' : '66'); ctx.fill();
+        ctx.lineWidth = Math.max(2, Math.min(5, r * 0.06)); ctx.strokeStyle = col; ctx.stroke();
+        const pct = sum > 0 ? (a.usd / sum) * 100 : 0;
+        const name = nameOf(a.asset, i);
+        if (r >= 42) {
+          const fs = Math.max(16, Math.min(40, r * 0.36));
+          let ly = cy;
+          if (showLogos) { const lr = Math.min(r * 0.3, 28); logo(a.asset, cx, cy - fs * 0.95, lr); ly = cy + lr * 0.55; }
+          text(name, cx, ly + fs * 0.35, fs, ink, 'center', r * 1.7);
+          text(pct.toFixed(pct >= 10 ? 0 : 1) + '%', cx, ly + fs * 0.35 + fs * 0.9, fs * 0.72, light ? '#334155' : '#dbe4ff', 'center', r * 1.7);
+        } else if (r >= 20) {
+          const fs = Math.max(12, Math.min(18, r * 0.5));
+          text(name, cx, cy + fs * 0.35, fs, ink, 'center', r * 1.8);
+        } else unlabeledNames.push(name);
+      });
+      if (unlabeledNames.length) text((options.names ? 'Also: ' + unlabeledNames.join(', ') : unlabeledNames.length + ' smaller assets too small to label'), pad, ay + ah + 32, 20, muted, 'left', inner);
+    }
+    note = 'Bubble area = share of positive holdings' + (options.minDollar !== false ? ' (assets ≥ US$1).' : '.');
   } else if (options.template === 'milestone') {
     const m = shareMilestone(data);
     if (!m) { text('No history yet', pad, h / 2, 40); text('Milestones appear once snapshots exist.', pad, h / 2 + 55, 25, muted); }

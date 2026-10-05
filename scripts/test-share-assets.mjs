@@ -63,7 +63,20 @@ assert.equal(ms.threshold, 2000); // highest round threshold <= current 2050
 assert.equal(ms.crossedAt, 2); // first point >= 2000
 assert.equal(ms.peak.total_usd, 2600);
 assert.equal(shareMilestone({ history: [] }), null);
-assert.equal(SHARE_TEMPLATES.length, 10);
+assert.equal(SHARE_TEMPLATES.length, 11);
+// Circle packing: tidak ada lingkaran yang saling tumpang tindih, terbesar di pusat.
+{
+  const { packCircles } = await import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+  const ws = [50, 20, 15, 7, 4, 2, 1, 1, 0.5, 0.2, 0, 0.1];
+  const pk = packCircles(ws);
+  assert.equal(pk[0].x, 0); assert.equal(pk[0].y, 0); assert.equal(pk[0].r, 100);
+  assert.equal(pk[10], undefined); // bobot 0 tidak ditempatkan
+  const cs = pk.filter(Boolean);
+  for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+    const d = Math.hypot(cs[i].x - cs[j].x, cs[i].y - cs[j].y);
+    assert.ok(d >= cs[i].r + cs[j].r - 1e-6, 'bubbles ' + i + ' and ' + j + ' overlap');
+  }
+}
 assert.deepEqual(Object.keys(SHARE_SIZES), ['square', 'portrait', 'story', 'landscape', 'wide']);
 const zipBlob = makeZip([{ name: 'a.txt', data: new TextEncoder().encode('hello zip') }, { name: 'dir/b.bin', data: new Uint8Array([0, 1, 2, 3, 255]) }]);
 const zip = new Uint8Array(await zipBlob.arrayBuffer());

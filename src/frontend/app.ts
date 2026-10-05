@@ -719,9 +719,9 @@ export const appHtml = `<!doctype html>
                 </div>
                 <label class="flex items-center gap-2 text-sm" :class="!shareOptions.names ? 'opacity-50' : ''"><input type="checkbox" x-model="shareOptions.logos" :disabled="!shareOptions.names" @change="loadShareIcons()"> Show asset logos next to names <span class="text-xs text-slate-500">(needs names)</span></label>
                 <label x-show="['performance','thennow'].includes(shareOptions.template)" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.relative"> Relative mode (start = 100, no currency)</label>
-                <div x-show="shareOptions.template==='assets' || shareOptions.template==='spotlight'" class="space-y-3">
-                  <label x-show="shareOptions.template==='assets'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.minDollar" @change="shareOptions.page=1"> Only assets worth ≥ US$1</label>
-                  <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.quantities"> Show amount (units)</label>
+                <div x-show="['assets','spotlight','bubble'].includes(shareOptions.template)" class="space-y-3">
+                  <label x-show="shareOptions.template==='assets' || shareOptions.template==='bubble'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.minDollar" @change="shareOptions.page=1"> Only assets worth ≥ US$1</label>
+                  <label x-show="shareOptions.template!=='bubble'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.quantities"> Show amount (units)</label>
                   <label x-show="shareOptions.template==='assets'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.percentages"> Show percentage</label>
                   <label x-show="shareOptions.template==='assets'" class="block text-sm">Order<select x-model="shareOptions.order" @change="shareOptions.page=1" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="value-desc">Value: highest first</option><option value="value-asc">Value: lowest first</option><option value="name-asc">Name: A–Z</option><option value="name-desc">Name: Z–A</option></select></label>
                 </div>
@@ -1758,7 +1758,7 @@ export const appHtml = `<!doctype html>
         shareIcons: {}, // simbol -> Image (same-origin via /icon/...), null = tidak ada ikon (pakai inisial)
         sharePresets: (()=>{ try { return JSON.parse(localStorage.getItem('sharePresets')||'[]'); } catch(e) { return []; } })(), sharePresetName: '',
         shareCanCopy: !!(navigator.clipboard && window.ClipboardItem), shareCanShare: !!(navigator.share && navigator.canShare),
-        shareDefaultTitle() { const m={overview:'The bigger picture.',allocation:'How it is allocated.',performance:'A view of the journey.',assets:'Everything I hold.',movers:'What moved today.',returns:'The long game.',thennow:'Then and now.',composition:'Where it lives.',spotlight:'One to watch.',milestone:'A milestone.'}; return m[this.shareOptions.template]||''; },
+        shareDefaultTitle() { const m={overview:'The bigger picture.',allocation:'How it is allocated.',performance:'A view of the journey.',assets:'Everything I hold.',movers:'What moved today.',returns:'The long game.',thennow:'Then and now.',composition:'Where it lives.',spotlight:'One to watch.',milestone:'A milestone.',bubble:'Sized by share.'}; return m[this.shareOptions.template]||''; },
         // Opsi render = shareOptions + hal yang tak bisa disimpan (gambar avatar) + kompatibilitas flag lama.
         shareRenderOptions(extra) { return Object.assign({}, this.shareOptions, { avatar:this.shareAvatar, icons:this.shareIcons, amounts:this.shareOptions.amountMode!=='hidden' }, extra||{}); },
         // Muat ikon aset lewat proxy Worker (same-origin -> canvas tetap bisa diekspor). Render ulang tiap ikon tiba.
