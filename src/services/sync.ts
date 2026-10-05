@@ -8,7 +8,7 @@ import type {
   StockConfig,
   WalletType,
 } from '../types';
-import { now, queryAll, queryOne, run } from '../lib/db';
+import { batch, now, queryAll, queryOne, run, type BatchStmt } from '../lib/db';
 import { decryptSecret } from '../lib/crypto';
 import * as binance from './cex/binance';
 import * as bybit from './cex/bybit';
@@ -62,6 +62,12 @@ async function setCursor(env: Env, accountId: number, key: string, value: string
  * anjlok lalu pulih sendiri di sync berikutnya.
  */
 const EMPTY_CONFIRM_SYNCS = 3;
+/**
+ * Penyusutan drastis juga dicurigai: dompet yang sebelumnya punya ≥ SHRINK_MIN_ROWS aset bersaldo
+ * lalu hasil barunya kurang dari separuhnya (mis. respons parsial / halaman terpotong) diperlakukan
+ * seperti hasil kosong — ditahan sampai terulang EMPTY_CONFIRM_SYNCS kali.
+ */
+const SHRINK_MIN_ROWS = 4;
 
 /**
  * Tulis ulang saldo terkini untuk satu account (hapus yang sudah tidak ada).
@@ -103,7 +109,8 @@ export async function upsertBalances(
     const fresh = balances.filter((b) => b.walletType === wallet && b.total > 0).length;
     const had = storedCount.get(wallet) ?? 0;
     const streakKey = `empty_streak:${wallet}`;
-    if (fresh === 0 && had > 0) {
+    const shrunk = fresh > 0 && had >= SHRINK_MIN_ROWS && fresh < had / 2;
+    if ((fresh === 0 && had > 0) || shrunk) {
       const streak = (parseInt((await getCursor(env, acc.id, streakKey)) ?? '0', 10) || 0) + 1;
       if (streak < EMPTY_CONFIRM_SYNCS) {
         await setCursor(env, acc.id, streakKey, String(streak));
@@ -111,10 +118,12 @@ export async function upsertBalances(
           level: 'warning',
           source: acc.type,
           account_id: acc.id,
-          message: `Dompet ${wallet} ${acc.label} kembali kosong — saldo lama dipertahankan`,
+          message: shrunk
+            ? `Dompet ${wallet} ${acc.label} menyusut drastis — saldo lama dipertahankan`
+            : `Dompet ${wallet} ${acc.label} kembali kosong — saldo lama dipertahankan`,
           detail:
-            `Sebelumnya ${had} aset bersaldo, hasil sync kali ini 0 (percobaan ${streak}/${EMPTY_CONFIRM_SYNCS}). ` +
-            `Dianggap gangguan sesaat; hasil kosong baru diterima bila terulang ${EMPTY_CONFIRM_SYNCS}x berturut-turut.`,
+            `Sebelumnya ${had} aset bersaldo, hasil sync kali ini ${fresh} (percobaan ${streak}/${EMPTY_CONFIRM_SYNCS}). ` +
+            `Dianggap gangguan sesaat; hasil baru diterima bila terulang ${EMPTY_CONFIRM_SYNCS}x berturut-turut.`,
         });
         continue; // jangan hapus saldo lama dompet ini
       }
@@ -122,8 +131,8 @@ export async function upsertBalances(
         level: 'info',
         source: acc.type,
         account_id: acc.id,
-        message: `Dompet ${wallet} ${acc.label} dikosongkan`,
-        detail: `Hasil kosong terulang ${streak}x berturut-turut — dianggap benar-benar kosong.`,
+        message: shrunk ? `Dompet ${wallet} ${acc.label} diperbarui (menyusut ke ${fresh} aset)` : `Dompet ${wallet} ${acc.label} dikosongkan`,
+        detail: `Hasil ${shrunk ? 'menyusut' : 'kosong'} terulang ${streak}x berturut-turut — dianggap benar.`,
       });
     }
     await run(env, 'DELETE FROM sync_state WHERE account_id = ? AND key = ?', acc.id, streakKey);
@@ -131,30 +140,24 @@ export async function upsertBalances(
   }
   if (!accepted.length) return;
 
+  // Hapus + sisipkan dalam SATU transaksi. Sebelumnya berurutan: bila invocation mati di
+  // tengah (batas CPU/subrequest), dompet tertinggal kosong/parsial sampai sync berikutnya
+  // dan snapshot ikut anjlok tanpa event apa pun (insiden 24 Sep, 28 Sep, 3 & 5 Okt 2026).
   const placeholders = accepted.map(() => '?').join(',');
-  await run(
-    env,
-    `DELETE FROM balances WHERE account_id = ? AND wallet_type IN (${placeholders})`,
-    acc.id,
-    ...accepted,
-  );
+  const stmts: BatchStmt[] = [
+    { sql: `DELETE FROM balances WHERE account_id = ? AND wallet_type IN (${placeholders})`, params: [acc.id, ...accepted] },
+  ];
   for (const b of balances) {
     if (!accepted.includes(b.walletType)) continue;
-    await run(
-      env,
-      `INSERT INTO balances (account_id, wallet_type, asset, free, locked, total, updated_at)
+    stmts.push({
+      sql: `INSERT INTO balances (account_id, wallet_type, asset, free, locked, total, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(account_id, wallet_type, asset)
        DO UPDATE SET free = excluded.free, locked = excluded.locked, total = excluded.total, updated_at = excluded.updated_at`,
-      acc.id,
-      b.walletType,
-      b.asset.toUpperCase(),
-      b.free,
-      b.locked,
-      b.total,
-      ts,
-    );
+      params: [acc.id, b.walletType, b.asset.toUpperCase(), b.free, b.locked, b.total, ts],
+    });
   }
+  await batch(env, stmts);
 }
 
 async function upsertDeposits(env: Env, accountId: number, deposits: NormalizedDeposit[]): Promise<void> {
@@ -489,16 +492,15 @@ async function maybeSnapshot(env: Env, valuation: ValuationResult): Promise<void
   const last = lastRow?.captured_at ?? 0;
   if (now() - last < intervalMin * 60 * 1000) return;
 
+  // Satu transaksi: semua portofolio pada tick yang sama atau tidak sama sekali.
   const ts = now();
-  for (const p of valuation.portfolios) {
-    await run(
-      env,
-      'INSERT INTO portfolio_snapshots (portfolio_id, total_usd, captured_at) VALUES (?, ?, ?)',
-      p.id,
-      p.totalUsd,
-      ts,
-    );
-  }
+  await batch(
+    env,
+    valuation.portfolios.map((p) => ({
+      sql: 'INSERT INTO portfolio_snapshots (portfolio_id, total_usd, captured_at) VALUES (?, ?, ?)',
+      params: [p.id, p.totalUsd, ts],
+    })),
+  );
 }
 
 /** Ambil/simpan kursor round-robin sync di tabel settings. */

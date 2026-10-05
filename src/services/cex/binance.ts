@@ -101,9 +101,12 @@ export async function getFuturesBalances(creds: CexCredentials, proxyUrl?: strin
 }
 
 /**
- * Simple Earn (Flexible + Locked). Sebagian API key tidak punya akses Earn, jadi kegagalan
- * satu kategori ditoleransi. Tapi kalau SEMUA kategori gagal, lempar error — kalau tidak,
- * pemadaman total akan terbaca sebagai "earn kosong" dan menghapus saldo earn yang tersimpan.
+ * Simple Earn (Flexible + Locked). Kegagalan SALAH SATU kategori membuat seluruh dompet earn
+ * dianggap gagal (lempar error) — kalau hanya satu yang dikembalikan, pemanggil akan mengira
+ * daftar parsial itu lengkap dan menghapus posisi kategori lain yang tersimpan. (Insiden
+ * 27 Sep 2026: flexible gagal sesaat, earn tersisa posisi locked saja, snapshot anjlok.)
+ * API key tanpa izin Earn gagal di kedua endpoint, jadi tetap terbaca sebagai "earn gagal"
+ * dan saldo lamanya (kalau ada) dipertahankan oleh pemanggil.
  */
 export async function getEarnBalances(creds: CexCredentials, proxyUrl?: string): Promise<NormalizedBalance[]> {
   const out: NormalizedBalance[] = [];
@@ -150,7 +153,7 @@ export async function getEarnBalances(creds: CexCredentials, proxyUrl?: string):
   } catch (e) {
     errors.push(e instanceof Error ? e.message : String(e));
   }
-  if (errors.length === 2) throw new Error(`Simple Earn gagal — ${errors.join(' | ')}`);
+  if (errors.length) throw new Error(`Simple Earn gagal (${errors.length}/2 kategori) — ${errors.join(' | ')}`);
   return out;
 }
 
