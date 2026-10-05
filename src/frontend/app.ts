@@ -34,30 +34,30 @@ export const appHtml = `<!doctype html>
 <div x-data="app()" x-cloak class="flex h-full">
 
   <!-- Sidebar (desktop only; mobile pakai bottom nav) -->
-  <aside class="hidden w-64 flex-col bg-gradient-to-b from-indigo-700 via-indigo-700 to-violet-900 text-indigo-50 lg:flex">
-    <div class="flex items-center gap-3 px-5 pt-5 pb-4">
+  <aside id="sidebar" class="hidden flex-col bg-gradient-to-b from-indigo-700 via-indigo-700 to-violet-900 text-indigo-50 transition-[width] duration-200 lg:flex" :class="sidebarCollapsed ? 'w-20' : 'w-64'">
+    <div class="flex items-center gap-3 pt-5 pb-4" :class="sidebarCollapsed ? 'justify-center px-2' : 'px-5'">
       <img src="/icon.svg" alt="Worthly" class="h-10 w-10 rounded-xl" />
-      <div class="min-w-0">
+      <div class="min-w-0" x-show="!sidebarCollapsed">
         <div class="truncate text-[15px] font-semibold tracking-wide">Worthly</div>
         <div class="truncate text-[11px] text-indigo-200/80">Portfolio Console</div>
       </div>
     </div>
     <nav class="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
       <template x-for="item in nav" :key="item.id">
-        <button @click="go(item.id)"
-          class="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors"
-          :class="view===item.id ? 'bg-white/15 text-white shadow-sm' : 'text-indigo-100 hover:bg-white/10 hover:text-white'">
+        <button @click="go(item.id)" :title="sidebarCollapsed ? item.label : null"
+          class="group relative flex w-full items-center gap-3 rounded-xl py-2.5 text-sm transition-colors"
+          :class="(view===item.id ? 'bg-white/15 text-white shadow-sm' : 'text-indigo-100 hover:bg-white/10 hover:text-white') + (sidebarCollapsed ? ' justify-center px-0' : ' px-3')">
           <span x-html="item.icon" class="shrink-0"></span>
-          <span class="truncate flex-1" x-text="item.label"></span>
+          <span class="truncate flex-1" x-show="!sidebarCollapsed" x-text="item.label"></span>
           <span x-show="item.id==='activity' && unreadCount>0" x-text="unreadCount > 99 ? '99+' : unreadCount"
-            class="shrink-0 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none"></span>
+            class="shrink-0 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none" :class="sidebarCollapsed ? 'absolute right-2 top-1' : ''"></span>
         </button>
       </template>
     </nav>
-    <div class="border-t border-white/10 px-4 py-4">
-      <div class="flex items-center gap-3">
-        <div class="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-sm font-semibold" x-text="(username||'U').slice(0,2).toUpperCase()"></div>
-        <div class="min-w-0 flex-1">
+    <div class="border-t border-white/10 py-4" :class="sidebarCollapsed ? 'px-2' : 'px-4'">
+      <div class="flex items-center gap-3" :class="sidebarCollapsed ? 'justify-center' : ''">
+        <div class="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-sm font-semibold" :title="sidebarCollapsed ? username+' — click to sign out' : null" @click="if(sidebarCollapsed) logout()" :class="sidebarCollapsed ? 'cursor-pointer hover:bg-white/25' : ''" x-text="(username||'U').slice(0,2).toUpperCase()"></div>
+        <div class="min-w-0 flex-1" x-show="!sidebarCollapsed">
           <div class="truncate text-sm font-medium text-white" x-text="username"></div>
           <button @click="logout()" class="text-[11px] text-indigo-200/80 hover:text-white transition-colors">Sign Out</button>
         </div>
@@ -69,6 +69,9 @@ export const appHtml = `<!doctype html>
   <div class="flex min-w-0 flex-1 flex-col">
     <!-- Topbar -->
     <header class="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 px-4 py-3 backdrop-blur lg:px-6">
+      <button @click="toggleSidebar()" class="hidden rounded-xl p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 lg:inline-flex" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" :aria-expanded="!sidebarCollapsed" aria-controls="sidebar">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
       <h1 class="text-base font-semibold capitalize" x-text="navLabel()"></h1>
       <div class="ml-auto flex items-center gap-2">
         <!-- Total value (desktop only) -->
@@ -1752,6 +1755,8 @@ export const appHtml = `<!doctype html>
     function app() {
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
+        sidebarCollapsed: localStorage.getItem('sidebarCollapsed')==='1', // desktop: sidebar ikon saja
+        toggleSidebar() { this.sidebarCollapsed=!this.sidebarCollapsed; try { localStorage.setItem('sidebarCollapsed', this.sidebarCollapsed?'1':'0'); } catch(e) {} },
         shareOpen: false, shareBusy: false, shareRefreshing: false, shareError: '', shareData: null,
         shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amountMode:'hidden',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1,relative:false,title:'',caption:'',handle:'',watermark:true,accent:'indigo',font:'sans',frame:'none',portfolioId:'',spotlight:'',logos:false,bubbleMin:false},
         sharePage: 1, sharePages: 1, shareCount: 0,
