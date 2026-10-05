@@ -12,8 +12,11 @@ export function shareAssetList(data: any, options: any) {
   });
   // Keep type readable instead of squeezing the whole portfolio into one card.
   // Bar List: baris lebih tipis, muat lebih banyak per halaman.
-  const bars = options.template === 'bars';
-  const perPage = options.size === 'story' ? (bars ? 23 : 20) : (options.size === 'landscape' || options.size === 'wide') ? (bars ? 7 : 6) : (bars ? 10 : 8);
+  const bars = options.template === 'bars', grid = options.template === 'grid';
+  const landscape = options.size === 'landscape' || options.size === 'wide';
+  const perPage = grid
+    ? (options.size === 'story' ? 40 : landscape ? 18 : 20)
+    : options.size === 'story' ? (bars ? 23 : 20) : landscape ? (bars ? 7 : 6) : (bars ? 10 : 8);
   const pages = Math.max(1, Math.ceil(rows.length / perPage));
   const page = Math.min(Math.max(Math.floor(Number(options.page) || 1), 1), pages);
   const positiveTotal = (data.assets || []).reduce((sum: number, a: any) => sum + (Number.isFinite(a.usd) && a.usd > 0 ? a.usd : 0), 0);
@@ -36,6 +39,7 @@ export const SHARE_TEMPLATES = [
   { id: 'milestone', name: 'Milestone', desc: 'Peak, threshold, streak' },
   { id: 'bubble', name: 'Bubble', desc: 'Every asset, sized by share' },
   { id: 'bars', name: 'Bar List', desc: 'Every asset, small ones stay visible' },
+  { id: 'grid', name: 'Grid', desc: 'Equal tiles, every asset' },
 ];
 // Ukuran kanvas. `logical` = ukuran tata letak yang digambar; kanvas lain dipetakan ke sana
 // (portrait = square + pita atas/bawah, wide = landscape diperkecil) agar posisi tetap konsisten.
@@ -294,7 +298,7 @@ export function packCircles(weights: number[]): { x: number; y: number; r: numbe
 // ---------------------------------------------------------------------------
 const DEFAULT_TITLES: Record<string, string> = {
   overview: 'The bigger picture.', allocation: 'How it is allocated.', performance: 'A view of the journey.', assets: 'Everything I hold.',
-  movers: 'What moved today.', returns: 'The long game.', thennow: 'Then and now.', composition: 'Where it lives.', spotlight: 'One to watch.', milestone: 'A milestone.', bubble: 'Sized by share.', bars: 'All of it, in bars.',
+  movers: 'What moved today.', returns: 'The long game.', thennow: 'Then and now.', composition: 'Where it lives.', spotlight: 'One to watch.', milestone: 'A milestone.', bubble: 'Sized by share.', bars: 'All of it, in bars.', grid: 'Every single one.',
 };
 
 export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: any) {
@@ -590,6 +594,32 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
       text(share.toFixed(share >= 10 ? 1 : 2) + '%', w - pad, y, 24, ink, 'right', pctW);
     });
     note = 'Bars use a square-root scale so small holdings stay visible; percentages are exact.';
+  } else if (options.template === 'grid') {
+    const list = shareAssetList(data, { ...options, page: options.page });
+    text(list.rows.length + ' holdings · ' + (options.minDollar !== false ? 'Value ≥ US$1' : 'All nonzero holdings'), pad, 255, 26, muted);
+    text('PAGE ' + list.page + ' / ' + list.pages, w - pad, 300, 21, muted, 'right');
+    const cols = wide ? 6 : 4, gap = 16;
+    const rowsN = Math.ceil(list.perPage / cols);
+    const tileW = (inner - gap * (cols - 1)) / cols;
+    const areaH = h - 330 - 150;
+    const tileH = Math.min(wide ? 150 : 130, (areaH - gap * (rowsN - 1)) / rowsN);
+    if (!list.rows.length) text('No assets match this filter.', pad, 450, 30, muted);
+    list.visible.forEach((a: any, i: number) => {
+      const index = (list.page - 1) * list.perPage + i;
+      const col = colors[index % colors.length];
+      const x = pad + (i % cols) * (tileW + gap), y = 330 + Math.floor(i / cols) * (tileH + gap);
+      ctx.beginPath(); ctx.roundRect(x, y, tileW, tileH, 18);
+      ctx.fillStyle = light ? 'rgba(15,23,42,0.05)' : 'rgba(255,255,255,0.06)'; ctx.fill();
+      ctx.strokeStyle = col + '99'; ctx.lineWidth = 2; ctx.stroke();
+      const share = list.positiveTotal > 0 && a.usd > 0 ? (a.usd / list.positiveTotal) * 100 : 0;
+      const nameSize = tileH >= 120 ? 24 : 20;
+      if (showLogos) { logo(a.asset, x + 18 + 16, y + 20 + 16, 16); text(nameOf(a.asset, index), x + 18 + 40, y + 20 + 16 + 8, nameSize, ink, 'left', tileW - 76); }
+      else { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + 18 + 7, y + 20 + 16, 7, 0, Math.PI * 2); ctx.fill(); text(nameOf(a.asset, index), x + 18 + 24, y + 20 + 16 + 8, nameSize, ink, 'left', tileW - 60); }
+      const pctText = share > 0 ? (share < 0.01 ? '<0.01%' : share.toFixed(share >= 10 ? 1 : 2) + '%') : '—';
+      text(pctText, x + 18, y + tileH - 20, tileH >= 120 ? 30 : 24, ink);
+      if (showMoney && tileH >= 100) text(money(a.usd), x + tileW - 16, y + tileH - 20, 18, muted, 'right', tileW / 2, blurMoney);
+    });
+    note = 'Equal tiles so every holding is readable; percentages are exact.';
   } else if (options.template === 'bubble') {
     const list = shareAssetList(data, { ...options, order: 'value-desc', page: 1 });
     const items = list.rows.filter((a: any) => a.usd > 0);
@@ -597,7 +627,11 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
     text(items.length + ' assets · ' + (options.minDollar !== false ? 'Value ≥ US$1' : 'All positive holdings') + (showMoney ? ' · ' + money(sum) : ''), pad, 255, 26, muted, 'left', inner, blurMoney);
     if (!items.length) text('No positive holdings to display', pad, h / 2, 30, muted);
     else {
-      const packed = packCircles(items.map((a: any) => a.usd));
+      // Opsi "keep small assets readable": bobot aset kecil diangkat ke lantai (radius ≥ 20% terbesar)
+      // supaya tetap berlabel; proporsi aset kecil jadi tidak persis — dicatat di kaki kartu.
+      const maxUsd = Math.max(...items.map((a: any) => a.usd));
+      const floor = options.bubbleMin ? maxUsd * 0.2 * 0.2 : 0;
+      const packed = packCircles(items.map((a: any) => Math.max(a.usd, floor)));
       // Area gambar: di bawah subjudul sampai di atas footer; skalakan bounding box agar muat.
       const ax = pad, ay = 300, aw = inner, ah = h - 300 - 185; // sisakan ruang baris 'Also:' + caption + footer
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -626,7 +660,7 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
       });
       if (unlabeledNames.length) text((options.names ? 'Also: ' + unlabeledNames.join(', ') : unlabeledNames.length + ' smaller assets too small to label'), pad, ay + ah + 32, 20, muted, 'left', inner);
     }
-    note = 'Bubble area = share of positive holdings' + (options.minDollar !== false ? ' (assets ≥ US$1).' : '.');
+    note = (options.bubbleMin ? 'Small assets enlarged to stay readable; percentages are exact' : 'Bubble area = share of positive holdings') + (options.minDollar !== false ? ' (assets ≥ US$1).' : '.');
   } else if (options.template === 'milestone') {
     const m = shareMilestone(data);
     if (!m) { text('No history yet', pad, h / 2, 40); text('Milestones appear once snapshots exist.', pad, h / 2 + 55, 25, muted); }

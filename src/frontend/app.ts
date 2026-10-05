@@ -719,11 +719,12 @@ export const appHtml = `<!doctype html>
                 </div>
                 <label class="flex items-center gap-2 text-sm" :class="!shareOptions.names ? 'opacity-50' : ''"><input type="checkbox" x-model="shareOptions.logos" :disabled="!shareOptions.names" @change="loadShareIcons()"> Show asset logos next to names <span class="text-xs text-slate-500">(needs names)</span></label>
                 <label x-show="['performance','thennow'].includes(shareOptions.template)" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.relative"> Relative mode (start = 100, no currency)</label>
-                <div x-show="['assets','spotlight','bubble','bars'].includes(shareOptions.template)" class="space-y-3">
-                  <label x-show="['assets','bubble','bars'].includes(shareOptions.template)" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.minDollar" @change="shareOptions.page=1"> Only assets worth ≥ US$1</label>
-                  <label x-show="!['bubble','bars'].includes(shareOptions.template)" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.quantities"> Show amount (units)</label>
+                <div x-show="['assets','spotlight','bubble','bars','grid'].includes(shareOptions.template)" class="space-y-3">
+                  <label x-show="['assets','bubble','bars','grid'].includes(shareOptions.template)" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.minDollar" @change="shareOptions.page=1"> Only assets worth ≥ US$1</label>
+                  <label x-show="shareOptions.template==='bubble'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.bubbleMin"> Keep small assets readable (minimum bubble size)</label>
+                  <label x-show="!['bubble','bars','grid'].includes(shareOptions.template)" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.quantities"> Show amount (units)</label>
                   <label x-show="shareOptions.template==='assets'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.percentages"> Show percentage</label>
-                  <label x-show="shareOptions.template==='assets' || shareOptions.template==='bars'" class="block text-sm">Order<select x-model="shareOptions.order" @change="shareOptions.page=1" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="value-desc">Value: highest first</option><option value="value-asc">Value: lowest first</option><option value="name-asc">Name: A–Z</option><option value="name-desc">Name: Z–A</option></select></label>
+                  <label x-show="['assets','bars','grid'].includes(shareOptions.template)" class="block text-sm">Order<select x-model="shareOptions.order" @change="shareOptions.page=1" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="value-desc">Value: highest first</option><option value="value-asc">Value: lowest first</option><option value="name-asc">Name: A–Z</option><option value="name-desc">Name: Z–A</option></select></label>
                 </div>
                 <p class="text-xs text-slate-500 dark:text-slate-400">Values start hidden. "Blurred" and "Rounded (≈ $35k)" are middle grounds. Untick "Show asset names" to replace names with Asset 1, Asset 2, … Percentages and chart shape can still reveal portfolio information.</p>
               </fieldset>
@@ -735,7 +736,7 @@ export const appHtml = `<!doctype html>
                   <button type="button" @click="refreshShareData()" :disabled="analysisLoading || shareRefreshing" class="rounded-xl border border-slate-300 px-4 py-2 text-sm dark:border-slate-600 disabled:opacity-50" x-text="shareRefreshing ? 'Refreshing…' : 'Refresh data'"></button>
                 </div>
                 <p x-show="shareError" x-text="shareError" role="alert" class="text-sm text-rose-600 dark:text-rose-400"></p>
-                <div x-show="shareOptions.template==='assets' || shareOptions.template==='bars'" class="space-y-2">
+                <div x-show="['assets','bars','grid'].includes(shareOptions.template)" class="space-y-2">
                   <div class="flex items-center justify-between gap-2 text-sm"><button type="button" @click="shareOptions.page=sharePage-1; renderSharePreview()" :disabled="sharePage<=1" class="rounded-lg border px-3 py-2 disabled:opacity-40">Previous page</button><span x-text="shareCount+' assets · '+sharePage+' / '+sharePages"></span><button type="button" @click="shareOptions.page=sharePage+1; renderSharePreview()" :disabled="sharePage>=sharePages" class="rounded-lg border px-3 py-2 disabled:opacity-40">Next page</button></div>
                   <div x-show="sharePages>1" class="flex flex-wrap gap-2"><button type="button" @click="downloadAllPages('zip')" :disabled="shareBusy" class="rounded-lg border px-3 py-2 text-xs disabled:opacity-40">All pages as ZIP</button><button type="button" @click="downloadAllPages('long')" :disabled="shareBusy" class="rounded-lg border px-3 py-2 text-xs disabled:opacity-40">All pages as one tall PNG</button></div>
                 </div>
@@ -1752,13 +1753,13 @@ export const appHtml = `<!doctype html>
       return {
         view: 'dashboard', sidebarOpen: false, moreOpen: false, csrf: '', username: '',
         shareOpen: false, shareBusy: false, shareRefreshing: false, shareError: '', shareData: null,
-        shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amountMode:'hidden',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1,relative:false,title:'',caption:'',handle:'',watermark:true,accent:'indigo',font:'sans',frame:'none',portfolioId:'',spotlight:'',logos:false},
+        shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amountMode:'hidden',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1,relative:false,title:'',caption:'',handle:'',watermark:true,accent:'indigo',font:'sans',frame:'none',portfolioId:'',spotlight:'',logos:false,bubbleMin:false},
         sharePage: 1, sharePages: 1, shareCount: 0,
         shareAvatar: null, shareSpotlightLoading: false, shareCarousel: ['overview','performance','assets'],
         shareIcons: {}, // simbol -> Image (same-origin via /icon/...), null = tidak ada ikon (pakai inisial)
         sharePresets: (()=>{ try { return JSON.parse(localStorage.getItem('sharePresets')||'[]'); } catch(e) { return []; } })(), sharePresetName: '',
         shareCanCopy: !!(navigator.clipboard && window.ClipboardItem), shareCanShare: !!(navigator.share && navigator.canShare),
-        shareDefaultTitle() { const m={overview:'The bigger picture.',allocation:'How it is allocated.',performance:'A view of the journey.',assets:'Everything I hold.',movers:'What moved today.',returns:'The long game.',thennow:'Then and now.',composition:'Where it lives.',spotlight:'One to watch.',milestone:'A milestone.',bubble:'Sized by share.',bars:'All of it, in bars.'}; return m[this.shareOptions.template]||''; },
+        shareDefaultTitle() { const m={overview:'The bigger picture.',allocation:'How it is allocated.',performance:'A view of the journey.',assets:'Everything I hold.',movers:'What moved today.',returns:'The long game.',thennow:'Then and now.',composition:'Where it lives.',spotlight:'One to watch.',milestone:'A milestone.',bubble:'Sized by share.',bars:'All of it, in bars.',grid:'Every single one.'}; return m[this.shareOptions.template]||''; },
         // Opsi render = shareOptions + hal yang tak bisa disimpan (gambar avatar) + kompatibilitas flag lama.
         shareRenderOptions(extra) { return Object.assign({}, this.shareOptions, { avatar:this.shareAvatar, icons:this.shareIcons, amounts:this.shareOptions.amountMode!=='hidden' }, extra||{}); },
         // Muat ikon aset lewat proxy Worker (same-origin -> canvas tetap bisa diekspor). Render ulang tiap ikon tiba.
@@ -1850,7 +1851,7 @@ export const appHtml = `<!doctype html>
         // ---- ekspor ----
         shareRenderOffscreen(extra) { const c=document.createElement('canvas'); WorthlyShare.renderShareCard(c,this.shareData,this.shareRenderOptions(extra)); return c; },
         shareBlob(canvas) { return new Promise(resolve=>canvas.toBlob(resolve,'image/png')); },
-        shareFileName(extra) { const o=Object.assign({},this.shareOptions,extra||{}); return 'worthly-'+o.template+'-'+o.size+((o.template==='assets'||o.template==='bars')?'-page-'+(o.page||1):'')+'.png'; },
+        shareFileName(extra) { const o=Object.assign({},this.shareOptions,extra||{}); return 'worthly-'+o.template+'-'+o.size+(['assets','bars','grid'].includes(o.template)?'-page-'+(o.page||1):'')+'.png'; },
         shareSave(blob, name) { const url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); },
         async downloadShareCard() {
           if(this.shareBusy) return;
@@ -1897,7 +1898,7 @@ export const appHtml = `<!doctype html>
             const order=WorthlyShare.SHARE_TEMPLATES.map(t=>t.id).filter(id=>this.shareCarousel.includes(id));
             const files=[]; let n=0;
             for(const id of order) {
-              const pages = (id==='assets'||id==='bars') ? WorthlyShare.shareAssetList(this.shareData, this.shareRenderOptions({template:id, page:1})).pages : 1;
+              const pages = ['assets','bars','grid'].includes(id) ? WorthlyShare.shareAssetList(this.shareData, this.shareRenderOptions({template:id, page:1})).pages : 1;
               for(let p=1;p<=pages;p++){ n++; const blob=await this.shareBlob(this.shareRenderOffscreen({template:id,page:p})); files.push({name:String(n).padStart(2,'0')+'-'+id+(pages>1?'-p'+p:'')+'.png', data:new Uint8Array(await blob.arrayBuffer())}); }
             }
             this.shareSave(WorthlyShare.makeZip(files),'worthly-carousel-'+this.shareOptions.size+'.zip');
