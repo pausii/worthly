@@ -2446,8 +2446,9 @@ export const appHtml = `<!doctype html>
         },
 
         // ---- Analysis ----
-        PERIODS: [ {k:'1W',d:7}, {k:'1M',d:30}, {k:'3M',d:90}, {k:'6M',d:180}, {k:'1Y',d:365}, {k:'ALL',d:'all'} ],
-        periodDays() { const p=this.PERIODS.find(x=>x.k===this.analysisPeriod); return p?p.d:30; },
+        PERIODS: [ {k:'1W',d:7}, {k:'1M',d:30}, {k:'3M',d:90}, {k:'6M',d:180}, {k:'1Y',d:365}, {k:'YTD',d:'ytd'}, {k:'ALL',d:'all'} ],
+        // 'ytd' = jumlah hari sejak 1 Januari tahun berjalan (zona waktu lokal), dihitung saat dipakai.
+        periodDays() { const p=this.PERIODS.find(x=>x.k===this.analysisPeriod); if(!p) return 30; if(p.d==='ytd'){ const jan1=new Date(new Date().getFullYear(),0,1).getTime(); return Math.max(1, Math.ceil((Date.now()-jan1)/86400000)); } return p.d; },
         async loadAnalysisHistory() {
           this.analysisLoading=true;
           const r = this.valueMode==='holdings'
