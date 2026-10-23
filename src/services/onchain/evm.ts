@@ -1,4 +1,27 @@
-import type { NormalizedBalance, OnchainConfig } from '../../types';
+import type { NormalizedBalance, OnchainConfig, WalletType } from '../../types';
+
+// Simbol on-chain -> simbol harga. Token terbungkus dinilai seperti aset dasarnya.
+const PRICE_ALIAS: Record<string, string> = { WETH: 'ETH', WBTC: 'BTC', BTCB: 'BTC', WBNB: 'BNB' };
+
+/**
+ * Normalisasi simbol token hasil auto-deteksi menjadi { asset, walletType }.
+ * - aToken Aave (v3: aEthUSDT/aBnbUSDT/aArbUSDC…, v2: aUSDT) = posisi supply, saldo 1:1 dengan
+ *   aset dasarnya -> disimpan sebagai aset dasar di dompet 'defi' agar ikut ternilai.
+ * - Debt token Aave (variableDebt…/stableDebt…) adalah utang, bukan aset -> null (dilewati).
+ * - Token terbungkus (WETH/WBTC/BTCB) dinilai seperti aset dasarnya.
+ */
+export function normalizeEvmToken(rawSymbol: string): { asset: string; walletType: WalletType } | null {
+  const sym = (rawSymbol || '').trim();
+  if (!sym) return null;
+  if (/^(variable|stable)Debt/i.test(sym)) return null;
+  const aave = /^a(?:Eth|Bnb|Arb|Opt|Pol|Base|Ava|Gno|Met|Lin|Scr|Zk|Son|Cel)?([A-Za-z0-9.]{2,})$/.exec(sym);
+  if (aave && /^[A-Z]/.test(aave[1])) {
+    const under = aave[1].toUpperCase();
+    return { asset: PRICE_ALIAS[under] ?? under, walletType: 'defi' };
+  }
+  const up = sym.toUpperCase();
+  return { asset: PRICE_ALIAS[up] ?? up, walletType: 'onchain' };
+}
 
 // ETH & BSC pakai JSON-RPC standar (Ethereum) lewat endpoint Alchemy.
 
@@ -59,7 +82,13 @@ export async function getEvmBalances(
     }
     const total = formatUnits(hex, token.decimals);
     if (total > 0)
-      out.push({ walletType: 'onchain', asset: token.symbol.toUpperCase(), free: total, locked: 0, total });
+      out.push({
+        walletType: token.wallet ?? 'onchain',
+        asset: (token.priceAs || token.symbol).toUpperCase(),
+        free: total,
+        locked: 0,
+        total,
+      });
   }
   return out;
 }
@@ -93,8 +122,8 @@ export async function getEvmAutoBalances(url: string, address: string): Promise<
       ]);
       if (!meta || !meta.symbol || meta.decimals == null) continue;
       const total = formatUnits(t.tokenBalance as string, meta.decimals);
-      if (total > 0)
-        out.push({ walletType: 'onchain', asset: meta.symbol.toUpperCase(), free: total, locked: 0, total });
+      const norm = normalizeEvmToken(meta.symbol);
+      if (total > 0 && norm) out.push({ walletType: norm.walletType, asset: norm.asset, free: total, locked: 0, total });
     } catch {
       // token bermasalah — lanjut
     }

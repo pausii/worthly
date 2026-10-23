@@ -1668,13 +1668,26 @@ export const appHtml = `<!doctype html>
                   <span x-text="nativeSymbol()+' (native coin)'"></span>
                 </label>
                 <div class="flex flex-wrap gap-x-5 gap-y-2">
-                  <template x-for="t in (TOKEN_PRESETS[ac.type]||[])" :key="t.symbol">
+                  <template x-for="t in (TOKEN_PRESETS[ac.type]||[]).filter(t=>!t.group)" :key="t.symbol">
                     <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
                       <input type="checkbox" x-model="ac.tokens" :value="t.symbol" class="h-4 w-4 rounded accent-indigo-600" />
                       <span x-text="t.symbol"></span>
                     </label>
                   </template>
                 </div>
+                <template x-if="(TOKEN_PRESETS[ac.type]||[]).some(t=>t.group==='Aave')">
+                  <div class="border-t border-slate-200 dark:border-slate-600 pt-3">
+                    <p class="mb-2 text-xs font-medium text-slate-600 dark:text-slate-400">Aave supply (aToken) <span class="font-normal text-slate-400 dark:text-slate-500">— dihitung sebagai aset dasarnya, bunga ikut terbaca otomatis</span></p>
+                    <div class="flex flex-wrap gap-x-5 gap-y-2">
+                      <template x-for="t in (TOKEN_PRESETS[ac.type]||[]).filter(t=>t.group==='Aave')" :key="t.symbol">
+                        <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                          <input type="checkbox" x-model="ac.tokens" :value="t.symbol" class="h-4 w-4 rounded accent-indigo-600" />
+                          <span x-text="t.symbol"></span><span class="text-[11px] text-slate-400 dark:text-slate-500" x-text="'→ '+t.priceAs"></span>
+                        </label>
+                      </template>
+                    </div>
+                  </div>
+                </template>
                 <template x-if="ac.type==='eth' || ac.type==='bsc'">
                   <label class="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer border-t border-slate-200 dark:border-slate-600 pt-3">
                     <input type="checkbox" x-model="ac.autoDetect" class="mt-0.5 h-4 w-4 rounded accent-indigo-600" />
@@ -1975,12 +1988,22 @@ export const appHtml = `<!doctype html>
         TOKEN_PRESETS: {
           eth:[
             {symbol:'USDT',contract:'0xdAC17F958D2ee523a2206206994597C13D831ec7',decimals:6},
-            {symbol:'BTC',contract:'0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',decimals:8}
+            {symbol:'BTC',contract:'0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',decimals:8},
+            // Aave v3 Ethereum — aToken = posisi supply, saldo tumbuh otomatis, 1:1 dengan aset dasar.
+            {symbol:'aEthUSDT',contract:'0x23878914EFE38d27C4D67Ab83ed1b93A74D4086a',decimals:6,priceAs:'USDT',wallet:'defi',group:'Aave'},
+            {symbol:'aEthUSDC',contract:'0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c',decimals:6,priceAs:'USDC',wallet:'defi',group:'Aave'},
+            {symbol:'aEthWETH',contract:'0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8',decimals:18,priceAs:'ETH',wallet:'defi',group:'Aave'},
+            {symbol:'aEthWBTC',contract:'0x5Ee5bf7ae06D1Be5997A1A72006FE6C607eC6DE8',decimals:8,priceAs:'BTC',wallet:'defi',group:'Aave'},
+            {symbol:'aEthDAI',contract:'0x018008bfb33d285247A21d44E50697654f754e63',decimals:18,priceAs:'DAI',wallet:'defi',group:'Aave'}
           ],
           bsc:[
             {symbol:'USDT',contract:'0x55d398326f99059fF775485246999027B3197955',decimals:18},
             {symbol:'BTC',contract:'0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c',decimals:18},
-            {symbol:'ETH',contract:'0x2170Ed0880ac9A755fd29B2688956BD959F933F8',decimals:18}
+            {symbol:'ETH',contract:'0x2170Ed0880ac9A755fd29B2688956BD959F933F8',decimals:18},
+            // Aave v3 BNB Chain
+            {symbol:'aBnbUSDT',contract:'0xa9251ca9DE909CB71783723713B21E4233fbf1B1',decimals:18,priceAs:'USDT',wallet:'defi',group:'Aave'},
+            {symbol:'aBnbUSDC',contract:'0x00901a076785e0906d1028c7d6372d247bec7d61',decimals:18,priceAs:'USDC',wallet:'defi',group:'Aave'},
+            {symbol:'aBnbBTCB',contract:'0x56a7ddc4e848EbF43845854205ad71D5D5F72d3D',decimals:18,priceAs:'BTC',wallet:'defi',group:'Aave'}
           ],
           sol:[
             {symbol:'USDT',contract:'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',decimals:6}

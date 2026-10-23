@@ -8,6 +8,7 @@ All-in-one personal net worth & multi-asset portfolio tracker (Crypto CEX, On-ch
 - **Frontend:** Alpine.js + Tailwind CSS + ApexCharts, **self-hosted** (di-build lokal ke `public/`, disajikan via Workers Assets — bukan CDN), responsif, dark mode, PWA dengan deteksi update otomatis
 - **CEX:** Binance & Bybit (saldo SPOT / FUTURES / EARN / FUNDING + riwayat deposit) via API resmi
 - **On-chain:** Ethereum & BSC (native + token) via Alchemy, TRON via TronGrid, Solana (SOL + SPL seperti USDT) via JSON-RPC, Bitcoin
+- **DeFi (Aave v3):** posisi supply (aToken seperti aEthUSDT / aBnbUSDT) dihitung sebagai aset dasarnya di dompet `defi` — saldo plus bunga terbaca otomatis dari balanceOf; auto-detect mengenali aToken dan melewati debt token
 - **Saham IDX:** posisi saham Bursa Efek Indonesia (harga via Yahoo Finance) + untung/rugi (cost basis)
 - **Share Studio:** kartu PNG untuk dibagikan — 10 layout (overview, alokasi, performa, semua aset, movers 24h, all-time return, then vs now, komposisi sumber, spotlight aset, milestone, bubble, bar list, grid), 10 background, aksen, font, bingkai, avatar, judul/handle kustom, mode privasi (sembunyi, blur, bulat, relatif), format square/4:5/story/landscape/16:9, copy, Web Share, ZIP semua halaman, carousel, dan preset
 - **Aset tetap:** properti / kendaraan / emas fisik — harga beli sebagai cost basis, nilai kini ditaksir manual dengan riwayat valuasi

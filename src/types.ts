@@ -47,7 +47,8 @@ export type Variables = {
 export type AppContext = Context<{ Bindings: Env; Variables: Variables }>;
 
 export type AccountType = 'binance' | 'bybit' | 'tron' | 'eth' | 'bsc' | 'btc' | 'sol' | 'idx';
-export type WalletType = 'spot' | 'futures' | 'earn' | 'funding' | 'onchain' | 'stock';
+// defi = posisi di protokol DeFi (mis. aToken Aave) yang nilainya 1:1 dengan aset dasarnya.
+export type WalletType = 'spot' | 'futures' | 'earn' | 'funding' | 'onchain' | 'stock' | 'defi';
 
 export interface NormalizedBalance {
   walletType: WalletType;
@@ -94,8 +95,10 @@ export interface OnchainCredentials {
 // Token yang ditrack untuk account on-chain (disimpan di kolom config, non-rahasia)
 export interface TrackedToken {
   contract: string; // EVM/TRON: alamat kontrak. Solana: alamat mint SPL.
-  symbol: string;
+  symbol: string; // nama tampilan di UI (mis. aEthUSDT)
   decimals: number;
+  priceAs?: string; // simbol untuk harga & penyimpanan saldo (mis. USDT untuk aEthUSDT); default = symbol
+  wallet?: WalletType; // dompet penyimpanan (mis. 'defi' untuk aToken Aave); default 'onchain'
 }
 
 export interface OnchainConfig {

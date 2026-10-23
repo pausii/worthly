@@ -1024,6 +1024,8 @@ export const resolvers = {
                 contract: String(t.contract).trim(),
                 symbol: String(t.symbol).trim().toUpperCase(),
                 decimals: Number(t.decimals) || 18,
+                ...(t.priceAs ? { priceAs: String(t.priceAs).trim().toUpperCase() } : {}),
+                ...(t.wallet === 'defi' ? { wallet: 'defi' } : {}),
               }))
           : [];
         config = JSON.stringify({ address, trackNative: body.trackNative !== false, tokens, autoDetect: body.autoDetect === true });
@@ -1069,6 +1071,8 @@ export const resolvers = {
                   contract: String(t.contract).trim(),
                   symbol: String(t.symbol).trim().toUpperCase(),
                   decimals: Number(t.decimals) || 18,
+                  ...(t.priceAs ? { priceAs: String(t.priceAs).trim().toUpperCase() } : {}),
+                  ...(t.wallet === 'defi' ? { wallet: 'defi' } : {}),
                 }))
             : prev.tokens ?? [];
         const autoDetect = body.autoDetect !== undefined ? body.autoDetect === true : prev.autoDetect === true;

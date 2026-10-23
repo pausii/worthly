@@ -426,12 +426,13 @@ async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
     // Auto-deteksi token: gabungkan, dahulukan token manual/native yang sudah ada.
     if (config.autoDetect) {
       const auto = await getEvmAutoBalances(rpcUrl, config.address);
-      const seen = new Set(balances.map((b) => b.asset.toUpperCase()));
+      // Kunci = dompet + simbol: USDT di 'onchain' dan USDT di 'defi' (aToken) boleh sama-sama ada.
+      const seen = new Set(balances.map((b) => b.walletType + ':' + b.asset.toUpperCase()));
       for (const b of auto) {
-        const sym = b.asset.toUpperCase();
-        if (!seen.has(sym)) {
+        const key = b.walletType + ':' + b.asset.toUpperCase();
+        if (!seen.has(key)) {
           balances.push(b);
-          seen.add(sym);
+          seen.add(key);
         }
       }
     }
