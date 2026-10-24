@@ -9,7 +9,8 @@ import { iconSvg, manifestJson, swJs } from './frontend/pwa';
 
 import { yoga } from './graphql/yoga';
 import { graphiqlGate } from './graphql/graphiqlGate';
-import { syncAll } from './services/sync';
+import { cronTick, consumeSyncJob, onSyncDeadLetter, syncRetryDelaySeconds } from './services/sync';
+import type { SyncJob } from './types';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -148,7 +149,32 @@ export default {
   // Cron Trigger Cloudflare (tiap 10 menit, lihat wrangler.toml).
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
-      syncAll(env).catch((e) => console.error('Cron syncAll error:', e)),
+      cronTick(env)
+        .then((r) => console.log(`Cron tick: ${r.queued} job sync dikirim ke queue, ${r.synced} disinkron inline`))
+        .catch((e) => console.error('Cron tick error:', e)),
     );
+  },
+
+  // Consumer Cloudflare Queues (wallet-sync + dead-letter wallet-sync-dlq, lihat wrangler.toml).
+  async queue(batch: MessageBatch<SyncJob>, env: Env) {
+    for (const msg of batch.messages) {
+      try {
+        if (batch.queue.endsWith('-dlq')) {
+          await onSyncDeadLetter(env, msg.body);
+          msg.ack();
+          continue;
+        }
+        const result = await consumeSyncJob(env, msg.body);
+        if (result === 'retry') {
+          const delaySeconds = syncRetryDelaySeconds(env, msg.attempts);
+          console.warn(`Sync account #${msg.body.accountId} gagal (percobaan ${msg.attempts}) — retry dalam ${delaySeconds}s`);
+          msg.retry({ delaySeconds });
+        } else msg.ack();
+      } catch (e) {
+        // Error tak terduga (mis. D1 down): biarkan queue mengulang dengan jeda.
+        console.error('Queue consumer error:', e);
+        msg.retry({ delaySeconds: syncRetryDelaySeconds(env, msg.attempts) });
+      }
+    }
   },
 };

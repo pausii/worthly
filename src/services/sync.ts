@@ -6,6 +6,7 @@ import type {
   OnchainConfig,
   OnchainCredentials,
   StockConfig,
+  SyncJob,
   WalletType,
 } from '../types';
 import { batch, now, queryAll, queryOne, run, type BatchStmt } from '../lib/db';
@@ -441,11 +442,19 @@ async function syncOnchainAccount(env: Env, acc: AccountRow): Promise<void> {
   await upsertBalances(env, acc, balances);
 }
 
-/** Sinkronkan satu account dan update status. */
-export async function syncAccount(env: Env, acc: AccountRow): Promise<void> {
+export type SyncOutcome = { status: 'ok' } | { status: 'cooling' } | { status: 'error'; error: string };
+
+/**
+ * Sinkronkan satu account dan update status.
+ *
+ * `quiet` = jangan tulis event "Sync gagal" untuk error biasa (dipakai consumer queue: percobaan
+ * yang masih akan di-retry tidak perlu membanjiri Activity; event ditulis sekali saat job benar-benar
+ * menyerah di dead-letter queue). Event 451/cooldown tetap ditulis karena ia memicu circuit breaker.
+ */
+export async function syncAccount(env: Env, acc: AccountRow, opts: { quiet?: boolean } = {}): Promise<SyncOutcome> {
   const isCex = acc.type === 'binance' || acc.type === 'bybit';
   // Circuit breaker: kalau penyedia lagi cooldown (habis 451), lewati tanpa menyentuh data/status.
-  if (isCex && (await isCooling(env, `cex:${acc.type}`))) return;
+  if (isCex && (await isCooling(env, `cex:${acc.type}`))) return { status: 'cooling' };
   try {
     if (isCex) await syncCexAccount(env, acc);
     else if (acc.type === 'idx') await syncStockAccount(env, acc);
@@ -458,20 +467,23 @@ export async function syncAccount(env: Env, acc: AccountRow): Promise<void> {
       now(),
       acc.id,
     );
+    return { status: 'ok' };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // 451 = geo/flag IP. Cooldown agar tick berikutnya tak ikut menghantam IP yang ke-flag.
     const is451 = isCex && msg.includes('451');
     if (is451) await setCooldown(env, `cex:${acc.type}`, CEX_COOLDOWN_SECONDS);
-    await addEvent(env, {
-      level: is451 ? 'warning' : 'error',
-      source: acc.type,
-      account_id: acc.id,
-      message: is451
-        ? `451 geo-block: ${acc.label} — cooldown ${CEX_COOLDOWN_SECONDS / 60} menit`
-        : `Sync gagal: ${acc.label}`,
-      detail: msg.slice(0, 500),
-    });
+    if (is451 || !opts.quiet) {
+      await addEvent(env, {
+        level: is451 ? 'warning' : 'error',
+        source: acc.type,
+        account_id: acc.id,
+        message: is451
+          ? `451 geo-block: ${acc.label} — cooldown ${CEX_COOLDOWN_SECONDS / 60} menit`
+          : `Sync gagal: ${acc.label}`,
+        detail: msg.slice(0, 500),
+      });
+    }
     await run(
       env,
       'UPDATE accounts SET status = ?, last_error = ?, updated_at = ? WHERE id = ?',
@@ -480,6 +492,7 @@ export async function syncAccount(env: Env, acc: AccountRow): Promise<void> {
       now(),
       acc.id,
     );
+    return { status: 'error', error: msg };
   }
 }
 
@@ -519,27 +532,85 @@ async function setSyncCursor(env: Env, value: number): Promise<void> {
   );
 }
 
-/** Dipanggil oleh cron / trigger manual. Sinkronkan account aktif. */
-export async function syncAll(env: Env): Promise<{ synced: number }> {
-  const accounts = await queryAll<AccountRow>(
-    env,
-    'SELECT id, portfolio_id, type, label, enc_credentials, config FROM accounts WHERE enabled = 1 ORDER BY id',
-  );
+const ENABLED_ACCOUNTS_SQL =
+  'SELECT id, portfolio_id, type, label, enc_credentials, config FROM accounts WHERE enabled = 1 ORDER BY id';
 
-  // Round-robin (Workers Free: batas CPU per-invocation ketat). 0/kosong = sinkron semua.
-  const batchSize = parseInt(env.SYNC_BATCH_SIZE ?? '0', 10) || 0;
-  let toSync = accounts;
-  if (batchSize > 0 && accounts.length > batchSize) {
-    const start = (await getSyncCursor(env)) % accounts.length;
-    toSync = [];
-    for (let i = 0; i < batchSize; i++) toSync.push(accounts[(start + i) % accounts.length]);
-    await setSyncCursor(env, (start + batchSize) % accounts.length);
+/**
+ * Kirim satu job sync per account aktif ke Cloudflare Queues. Tiap job dieksekusi consumer dalam
+ * invokasi terpisah (budget CPU/subrequest sendiri), diulang otomatis bila gagal, dan berakhir di
+ * dead-letter queue bila tetap gagal. Mengembalikan jumlah job yang dikirim.
+ */
+export async function enqueueSyncAll(env: Env, reason: SyncJob['reason']): Promise<number> {
+  if (!env.SYNC_QUEUE) throw new Error('SYNC_QUEUE binding tidak tersedia');
+  const accounts = await queryAll<{ id: number }>(env, 'SELECT id FROM accounts WHERE enabled = 1 ORDER BY id');
+  if (!accounts.length) return 0;
+  const ts = now();
+  // sendBatch maksimal 100 pesan per panggilan.
+  for (let i = 0; i < accounts.length; i += 100) {
+    await env.SYNC_QUEUE.sendBatch(
+      accounts.slice(i, i + 100).map((a) => ({
+        body: { kind: 'sync', accountId: a.id, reason, enqueuedAt: ts } as SyncJob,
+      })),
+    );
   }
+  return accounts.length;
+}
 
-  // Sekuensial agar ramah rate-limit API eksternal.
-  for (const acc of toSync) await syncAccount(env, acc);
+/**
+ * Consumer queue: jalankan satu job. Hasil menentukan nasib pesan:
+ * - 'ack'   : selesai (sukses, account sudah dihapus/nonaktif, atau penyedia sedang cooldown —
+ *             tick cron berikutnya akan mengirim job baru, tak perlu antre).
+ * - 'retry' : gagal; pesan diulang dengan jeda (caller yang memanggil message.retry()).
+ */
+export async function consumeSyncJob(env: Env, job: SyncJob): Promise<'ack' | 'retry'> {
+  const acc = await queryOne<AccountRow>(
+    env,
+    'SELECT id, portfolio_id, type, label, enc_credentials, config FROM accounts WHERE id = ? AND enabled = 1',
+    job.accountId,
+  );
+  if (!acc) return 'ack';
+  const out = await syncAccount(env, acc, { quiet: true });
+  if (out.status === 'error') return 'retry';
+  if (out.status === 'ok') {
+    // Overview tersimpan langsung segar setelah tiap account; snapshot tetap urusan cron.
+    await refreshOverview(env).catch(() => undefined);
+  }
+  return 'ack';
+}
+
+/**
+ * Job yang sudah habis jatah retry (max_retries di wrangler.toml): catat sekali di Activity.
+ * Status/last_error account sudah di-set oleh percobaan terakhir; di sini hanya ringkasannya.
+ */
+export async function onSyncDeadLetter(env: Env, job: SyncJob): Promise<void> {
+  const acc = await queryOne<{ label: string; type: string; last_error: string | null }>(
+    env,
+    'SELECT label, type, last_error FROM accounts WHERE id = ?',
+    job.accountId,
+  );
+  if (!acc) return;
+  await addEvent(env, {
+    level: 'error',
+    source: acc.type,
+    account_id: job.accountId,
+    message: `Sync gagal berulang, retry otomatis habis: ${acc.label} — saldo lama dipertahankan`,
+    detail: `${acc.last_error ?? '-'} (job ${job.reason}, dikirim ${new Date(job.enqueuedAt).toISOString()})`.slice(0, 500),
+  });
+}
+
+/** Jeda sebelum percobaan berikutnya: 60s, 120s, 240s, … (maks 15 menit). */
+export function syncRetryDelaySeconds(env: Env, attempts: number): number {
+  const base = parseInt(env.SYNC_RETRY_BASE_SECONDS ?? '60', 10) || 60;
+  return Math.min(900, base * 2 ** Math.max(0, attempts - 1));
+}
+
+/**
+ * Pekerjaan tick cron selain sync saldo: lanjutkan backfill deposit yang sedang berjalan,
+ * lalu snapshot + overview dari saldo yang tersimpan.
+ */
+async function finishTick(env: Env, accounts: AccountRow[]): Promise<void> {
   // Lanjutkan backfill deposit yang sedang berjalan (hanya bila sudah dimulai via tombol).
-  for (const acc of toSync) {
+  for (const acc of accounts) {
     if (acc.type !== 'binance') continue;
     if (await isCooling(env, 'cex:binance')) break; // lagi cooldown — jangan poke IP yang ke-flag
     const raw = await getCursor(env, acc.id, 'deposit_backfill');
@@ -565,6 +636,41 @@ export async function syncAll(env: Env): Promise<{ synced: number }> {
   await maybeSnapshot(env, valuation);
   // Simpan overview ke DB agar UI cukup membaca dari sana (bukan hitung live).
   await refreshOverview(env, valuation).catch(() => undefined);
+}
+
+/**
+ * Tick cron. Dengan Queues: kirim job sync untuk SEMUA account aktif (tiap job punya invokasi
+ * sendiri), lalu kerjakan backfill/snapshot/overview dari saldo tersimpan. Tanpa Queues: sync
+ * inline round-robin seperti semula.
+ */
+export async function cronTick(env: Env): Promise<{ synced: number; queued: number }> {
+  if (!env.SYNC_QUEUE) {
+    const r = await syncAll(env);
+    return { synced: r.synced, queued: 0 };
+  }
+  const queued = await enqueueSyncAll(env, 'cron');
+  const accounts = await queryAll<AccountRow>(env, ENABLED_ACCOUNTS_SQL);
+  await finishTick(env, accounts);
+  return { synced: 0, queued };
+}
+
+/** Sync inline (fallback tanpa Queues / dipakai tes). Sinkronkan account aktif lalu snapshot. */
+export async function syncAll(env: Env): Promise<{ synced: number }> {
+  const accounts = await queryAll<AccountRow>(env, ENABLED_ACCOUNTS_SQL);
+
+  // Round-robin (Workers Free: batas CPU per-invocation ketat). 0/kosong = sinkron semua.
+  const batchSize = parseInt(env.SYNC_BATCH_SIZE ?? '0', 10) || 0;
+  let toSync = accounts;
+  if (batchSize > 0 && accounts.length > batchSize) {
+    const start = (await getSyncCursor(env)) % accounts.length;
+    toSync = [];
+    for (let i = 0; i < batchSize; i++) toSync.push(accounts[(start + i) % accounts.length]);
+    await setSyncCursor(env, (start + batchSize) % accounts.length);
+  }
+
+  // Sekuensial agar ramah rate-limit API eksternal.
+  for (const acc of toSync) await syncAccount(env, acc);
+  await finishTick(env, toSync);
   return { synced: toSync.length };
 }
 

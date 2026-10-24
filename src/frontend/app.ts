@@ -2656,7 +2656,9 @@ export const appHtml = `<!doctype html>
           this.syncing=true;
           const r=await this.gql('SyncAll');
           this.syncing=false;
-          if (r&&r.ok) { this.flash('Sync complete ('+r.data.synced+' accounts)', 'success'); await Promise.all([this.loadOverview(),this.loadAccounts(),this.loadDeposits(),this.loadHistory(),this.loadReturns()]); if(this.view==='analysis') this.loadAnalysis(); }
+          const refresh=async()=>{ await Promise.all([this.loadOverview(),this.loadAccounts(),this.loadDeposits(),this.loadHistory(),this.loadReturns()]); if(this.view==='analysis') this.loadAnalysis(); };
+          if (r&&r.ok&&r.data.queued) { this.flash('Sync queued for '+r.data.queued+' accounts — running in the background', 'success'); setTimeout(refresh, 15000); setTimeout(refresh, 45000); }
+          else if (r&&r.ok) { this.flash('Sync complete ('+r.data.synced+' accounts)', 'success'); await refresh(); }
           else this.flash('Sync failed', 'error');
         },
         async syncAccount(id) {

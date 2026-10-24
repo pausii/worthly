@@ -17,7 +17,7 @@ All-in-one personal net worth & multi-asset portfolio tracker (Crypto CEX, On-ch
 - **Ekspor/impor CSV:** ekspor balances, holdings, dan aset tetap; impor holdings manual dari CSV
 - **Share card:** render kartu ringkasan portofolio sebagai gambar (template Overview, Allocation, Performance, dan All Assets dengan filter, pilihan kolom, dan pengurutan)
 - **AI Insight:** ringkasan portofolio via Cloudflare Workers AI (opsional)
-- **Sinkronisasi otomatis:** Cron Trigger tiap 10 menit (round-robin per batch account)
+- **Sinkronisasi otomatis:** Cron Trigger tiap 10 menit mengantrekan satu job per account ke **Cloudflare Queues**; tiap job berjalan di invokasi sendiri, gagal → retry otomatis (60s/120s/240s), gagal terus → dead-letter queue dan tercatat di *Activity*
 - **Tahan gangguan sesaat:** dompet yang gagal diambil atau mendadak kosong (padahal sebelumnya bersaldo) mempertahankan saldo lama; hasil kosong baru diterima bila terulang 3 sync berturut-turut, dan tercatat di *Activity*
 - **Keamanan:** login single-user (PBKDF2-HMAC-SHA256 100k iterasi + pepper), sesi httpOnly+Secure+SameSite=Strict,
   rate-limit login, proteksi CSRF, security headers + CSP ketat (nonce per-request), kredensial CEX/RPC **dienkripsi AES-GCM** di D1.
@@ -25,9 +25,10 @@ All-in-one personal net worth & multi-asset portfolio tracker (Crypto CEX, On-ch
 ## Arsitektur singkat
 
 ```
-Cron (10 mnt) ─┐
-               ├─► syncAll() ─► tiap account (per batch): ambil saldo + deposit ─► D1
-HTTP request  ─┘                 └─► snapshot nilai portofolio (interval) ─► chart
+Cron (10 mnt) ──► cronTick(): job per account ─► Queue wallet-sync ─► consumer: ambil saldo + deposit ─► D1
+   │                                                   └─ gagal 3x retry ─► wallet-sync-dlq ─► event Activity
+   └─► backfill deposit + snapshot nilai portofolio (interval) + overview ─► chart
+"Sync all" di UI ─► mengantrekan job yang sama (reason: manual); "Sync" per account tetap inline
 
 Frontend (Alpine, self-hosted) ─► /graphql (Hono + GraphQL Yoga, butuh sesi) ─► D1 / KV
 Harga: ticker publik Binance (crypto) + Frankfurter/ECB (fiat) + Yahoo Finance (saham) ─► konversi ke USD
@@ -132,7 +133,9 @@ Buka aplikasi → akan diminta **setup user pertama** (username + password ≥ 1
 |---|---|---|
 | `[triggers] crons` | `*/10 * * * *` | jadwal sinkronisasi saldo |
 | `SNAPSHOT_INTERVAL_MINUTES` | `30` | jarak minimal antar snapshot nilai portofolio (bahan chart histori). Sync saldo tetap tiap cron |
-| `SYNC_BATCH_SIZE` | `2` | jumlah account yang disinkron per tick cron (round-robin). Diperlukan karena batas CPU per-invocation di **Workers Free** ketat; `0`/kosong = sinkron semua account sekaligus |
+| `[[queues.producers]]` / `[[queues.consumers]]` | `wallet-sync`, `wallet-sync-dlq` | binding `SYNC_QUEUE`. Buat dulu dengan `npx wrangler queues create wallet-sync` dan `… wallet-sync-dlq` (butuh **Workers Paid**). Consumer: 1 pesan per invokasi, konkurensi 1 (ramah rate-limit exchange), `max_retries = 3`. Hapus kedua blok bila tidak memakai Queues — cron otomatis kembali ke sync inline round-robin |
+| `SYNC_RETRY_BASE_SECONDS` | `60` | jeda retry pertama job sync yang gagal; dilipatgandakan tiap percobaan (maks 15 menit) |
+| `SYNC_BATCH_SIZE` | `2` | **hanya jalur fallback tanpa Queues:** jumlah account yang disinkron per tick cron (round-robin), karena batas CPU per-invocation di **Workers Free** ketat; `0`/kosong = semua |
 | `[ai] binding = "AI"` | aktif | binding Workers AI untuk **AI Insight** (model `@cf/meta/llama-3.1-8b-instruct`). Bila akun tidak punya akses Workers AI, hapus blok `[ai]`; tombol Insight akan menampilkan pesan gagal tetapi fitur lain tidak terpengaruh |
 | `[version_metadata]` | aktif | menyuplai id versi deploy ke frontend untuk deteksi update PWA (banner "versi baru tersedia") |
 | `[observability]` | aktif | simpan log `console.*` dan metrik di dashboard Cloudflare |

@@ -5,7 +5,7 @@ import { hashPassword, verifyPassword, encryptSecret } from '../lib/crypto';
 import { createSession, destroySession } from '../lib/session';
 import { rateLimit, resetRateLimit } from '../lib/ratelimit';
 import { isCooling } from '../lib/cooldown';
-import { syncOne, startDepositBackfill, runDepositBackfill, syncAll } from '../services/sync';
+import { syncOne, startDepositBackfill, runDepositBackfill, syncAll, enqueueSyncAll } from '../services/sync';
 import { getStoredOverview, refreshOverview } from '../services/overview';
 import { computeCostBasis } from '../services/returns';
 import { FIXED_ASSETS_LATEST_SQL } from '../services/valuation';
@@ -1405,6 +1405,8 @@ export const resolvers = {
     },
 
     async syncAll(_p: unknown, _a: unknown, ctx: GraphQLContext) {
+      // Dengan Queues: antrekan semua account (retry otomatis), jawab segera.
+      if (ctx.env.SYNC_QUEUE) return { synced: 0, queued: await enqueueSyncAll(ctx.env, 'manual') };
       return syncAll(ctx.env);
     },
 

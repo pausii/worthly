@@ -22,6 +22,25 @@ head_sampling_rate = 1
 [triggers]
 crons = ["*/10 * * * *"]
 
+# Cloudflare Queues — tiap account disinkron dalam invokasi tersendiri (budget CPU sendiri),
+# gagal → retry otomatis (60s, 120s, 240s), gagal terus → dead-letter queue (dicatat di Activity).
+[[queues.producers]]
+binding = "SYNC_QUEUE"
+queue = "wallet-sync"
+
+[[queues.consumers]]
+queue = "wallet-sync"
+max_batch_size = 1
+max_batch_timeout = 0
+max_retries = 3
+max_concurrency = 1
+dead_letter_queue = "wallet-sync-dlq"
+
+[[queues.consumers]]
+queue = "wallet-sync-dlq"
+max_batch_size = 10
+max_retries = 0
+
 # Cloudflare D1 (buat dulu: `npm run db:create`, lalu tempel database_id di sini)
 [[d1_databases]]
 binding = "DB"

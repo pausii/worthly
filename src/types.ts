@@ -4,6 +4,9 @@ export interface Env {
   DB: D1Database;
   KV: KVNamespace;
   AI: Ai; // Cloudflare Workers AI (inferensi LLM) — binding [ai] di wrangler.toml
+  // Cloudflare Queues — producer job sinkronisasi per account. Opsional: tanpa binding ini
+  // (mis. wrangler.toml tanpa blok [[queues.producers]]) cron kembali ke sync inline round-robin.
+  SYNC_QUEUE?: Queue<SyncJob>;
 
   // Binding metadata versi Worker (Cloudflare) — id unik per deploy.
   CF_VERSION_METADATA?: { id: string; tag?: string; timestamp?: string };
@@ -14,8 +17,10 @@ export interface Env {
   ENVIRONMENT?: string;
   SNAPSHOT_INTERVAL_MINUTES?: string;
   // Round-robin sync: jumlah account yang disinkron per tick cron (0/kosong = semua).
-  // Berguna di Workers Free (batas CPU per-invocation ketat) untuk memecah beban antar-tick.
+  // Hanya dipakai pada jalur fallback tanpa Queues (Workers Free: batas CPU per-invocation ketat).
   SYNC_BATCH_SIZE?: string;
+  // Jeda retry pertama job sync yang gagal (detik); dilipatgandakan tiap percobaan. Default 60.
+  SYNC_RETRY_BASE_SECONDS?: string;
   COINGECKO_API_KEY?: string;
   // Endpoint RPC default (netral provider: Alchemy untuk EVM, TronGrid untuk TRON, JSON-RPC untuk Solana).
   RPC_ETH_URL?: string;
@@ -26,6 +31,14 @@ export interface Env {
   // Proxy HTTP CONNECT untuk bypass geo-block Binance (format: http://user:pass@host:port).
   // Set via: wrangler secret put BINANCE_PROXY_URL
   BINANCE_PROXY_URL?: string;
+}
+
+/** Pesan di queue `wallet-sync`: satu job = sinkron satu account. */
+export interface SyncJob {
+  kind: 'sync';
+  accountId: number;
+  reason: 'cron' | 'manual';
+  enqueuedAt: number;
 }
 
 export interface SessionData {
