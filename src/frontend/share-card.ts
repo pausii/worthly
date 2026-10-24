@@ -14,9 +14,11 @@ export function shareAssetList(data: any, options: any) {
   // Bar List: baris lebih tipis, muat lebih banyak per halaman.
   const bars = options.template === 'bars', grid = options.template === 'grid';
   const landscape = options.size === 'landscape' || options.size === 'wide';
+  // All Assets: opsi dense = lebih banyak baris per halaman (jarak baris dirapatkan saat render).
+  const dense = options.template === 'assets' && !!options.assetsDense;
   const perPage = grid
     ? (options.size === 'story' ? 40 : landscape ? 18 : 20)
-    : options.size === 'story' ? (bars ? 23 : 20) : landscape ? (bars ? 7 : 6) : (bars ? 10 : 8);
+    : options.size === 'story' ? (bars ? 23 : dense ? 24 : 20) : landscape ? (bars ? 7 : dense ? 8 : 6) : (bars ? 10 : dense ? 10 : 8);
   const pages = Math.max(1, Math.ceil(rows.length / perPage));
   const page = Math.min(Math.max(Math.floor(Number(options.page) || 1), 1), pages);
   const positiveTotal = (data.assets || []).reduce((sum: number, a: any) => sum + (Number.isFinite(a.usd) && a.usd > 0 ? a.usd : 0), 0);
@@ -423,11 +425,14 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
     text('ASSET', pad, 350, 20, muted);
     columns.forEach((c, i) => text(c.label, pad + nameWidth + cellWidth * (i + 1), 350, 20, muted, 'right', cellWidth - 18));
     if (!list.rows.length) text('No assets match this filter.', pad, 450, 30, muted);
+    // Jarak baris: 70 px bila muat, dirapatkan agar perPage baris tetap di atas footer (mode dense).
+    const rowH = Math.min(70, Math.floor((h - 405 - 150) / list.perPage));
+    const rowFont = rowH >= 60 ? 26 : rowH >= 48 ? 23 : 20;
     list.visible.forEach((a: any, i: number) => {
-      const y = 405 + i * 70;
+      const y = 405 + i * rowH;
       const index = (list.page - 1) * list.perPage + i;
-      if (showLogos) { logo(a.asset, pad + 18, y - 9, 18); text(nameOf(a.asset, index), pad + 48, y, 26, ink, 'left', nameWidth - 64); }
-      else { ctx.fillStyle = colors[index % colors.length]; ctx.fillRect(pad, y - 22, 4, 29); text(nameOf(a.asset, index), pad + 20, y, 26, ink, 'left', nameWidth - 36); }
+      if (showLogos) { logo(a.asset, pad + 18, y - 9, Math.min(18, rowH * 0.3)); text(nameOf(a.asset, index), pad + 48, y, rowFont, ink, 'left', nameWidth - 64); }
+      else { ctx.fillStyle = colors[index % colors.length]; ctx.fillRect(pad, y - 22, 4, 29); text(nameOf(a.asset, index), pad + 20, y, rowFont, ink, 'left', nameWidth - 36); }
       columns.forEach((c, ci) => {
         let content = '—'; let blur = false;
         if (c.field === 'amount' && Number.isFinite(a.amount)) {
@@ -436,9 +441,9 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
         }
         if (c.field === 'value') { content = money(a.usd); blur = blurMoney; }
         if (c.field === 'percent' && a.usd >= 0 && list.positiveTotal > 0) content = (a.usd / list.positiveTotal * 100).toFixed(2) + '%';
-        text(content, pad + nameWidth + cellWidth * (ci + 1), y, 24, ink, 'right', cellWidth - 18, blur);
+        text(content, pad + nameWidth + cellWidth * (ci + 1), y, rowFont - 2, ink, 'right', cellWidth - 18, blur);
       });
-      hline(y + 25);
+      hline(y + Math.min(25, rowH - 30));
     });
     note = percent ? 'Share = % of all positive holdings, before the filter.' : 'Holdings at the date shown above.';
   } else if (options.template === 'performance' || options.template === 'thennow') {

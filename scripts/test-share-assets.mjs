@@ -65,6 +65,10 @@ assert.equal(ms.peak.total_usd, 2600);
 assert.equal(shareMilestone({ history: [] }), null);
 assert.equal(SHARE_TEMPLATES.length, 13);
 assert.equal(shareAssetList(many, { size: 'square', template: 'grid' }).perPage, 20);
+assert.equal(shareAssetList(many, { size: 'square', template: 'assets', assetsDense: true }).perPage, 10);
+assert.equal(shareAssetList(many, { size: 'story', template: 'assets', assetsDense: true }).perPage, 24);
+assert.equal(shareAssetList(many, { size: 'landscape', template: 'assets', assetsDense: true }).perPage, 8);
+assert.equal(shareAssetList(many, { size: 'square', template: 'assets' }).perPage, 8); // default tak berubah
 assert.equal(shareAssetList(many, { size: 'square', template: 'bars' }).perPage, 10); // bar list lebih padat dari tabel
 // Circle packing: tidak ada lingkaran yang saling tumpang tindih, terbesar di pusat.
 {

@@ -725,6 +725,7 @@ export const appHtml = `<!doctype html>
                 <div x-show="['assets','spotlight','bubble','bars','grid'].includes(shareOptions.template)" class="space-y-3">
                   <label x-show="['assets','bubble','bars','grid'].includes(shareOptions.template)" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.minDollar" @change="shareOptions.page=1"> Only assets worth ≥ US$1</label>
                   <label x-show="shareOptions.template==='bubble'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.bubbleMin"> Keep small assets readable (minimum bubble size)</label>
+                  <label x-show="shareOptions.template==='assets'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.assetsDense" @change="shareOptions.page=1"> Dense rows <span class="text-xs text-slate-500">(10 per page on square, 24 on story, 8 on landscape)</span></label>
                   <label x-show="!['bubble','bars','grid'].includes(shareOptions.template)" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.quantities"> Show amount (units)</label>
                   <label x-show="shareOptions.template==='assets'" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.percentages"> Show percentage</label>
                   <label x-show="['assets','bars','grid'].includes(shareOptions.template)" class="block text-sm">Order<select x-model="shareOptions.order" @change="shareOptions.page=1" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-700"><option value="value-desc">Value: highest first</option><option value="value-asc">Value: lowest first</option><option value="name-asc">Name: A–Z</option><option value="name-desc">Name: Z–A</option></select></label>
@@ -1771,7 +1772,7 @@ export const appHtml = `<!doctype html>
         sidebarCollapsed: localStorage.getItem('sidebarCollapsed')==='1', // desktop: sidebar ikon saja
         toggleSidebar() { this.sidebarCollapsed=!this.sidebarCollapsed; try { localStorage.setItem('sidebarCollapsed', this.sidebarCollapsed?'1':'0'); } catch(e) {} },
         shareOpen: false, shareBusy: false, shareRefreshing: false, shareError: '', shareData: null,
-        shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amountMode:'hidden',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1,relative:false,title:'',caption:'',handle:'',watermark:true,accent:'indigo',font:'sans',frame:'none',portfolioId:'',spotlight:'',logos:false,bubbleMin:false},
+        shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amountMode:'hidden',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1,relative:false,title:'',caption:'',handle:'',watermark:true,accent:'indigo',font:'sans',frame:'none',portfolioId:'',spotlight:'',logos:false,bubbleMin:false,assetsDense:false},
         sharePage: 1, sharePages: 1, shareCount: 0,
         shareAvatar: null, shareSpotlightLoading: false, shareCarousel: ['overview','performance','assets'],
         shareIcons: {}, // simbol -> Image (same-origin via /icon/...), null = tidak ada ikon (pakai inisial)
