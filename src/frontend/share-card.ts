@@ -77,6 +77,11 @@ export const SHARE_AMOUNT_MODES = [
   { id: 'rounded', name: 'Rounded (≈ $35k)' },
   { id: 'exact', name: 'Exact' },
 ];
+export const SHARE_CURRENCIES = [
+  { id: 'auto', name: 'Follow app setting' },
+  { id: 'USD', name: 'US Dollar ($)' },
+  { id: 'IDR', name: 'Rupiah (Rp)' },
+];
 // ---------------------------------------------------------------------------
 // Background presets — digambar prosedural di canvas (tanpa aset eksternal, aman CSP).
 // Tiap preset punya varian dark/light mengikuti pilihan Theme. `swatch` = CSS untuk
@@ -355,14 +360,27 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
   const mode: string = options.amountMode || (options.amounts ? 'exact' : 'hidden');
   const showMoney = mode !== 'hidden';
   const blurMoney = mode === 'blur';
-  const toDisplay = (usd: number) => usd * (data.currency === 'IDR' ? data.idrRate : 1);
+  // ---- mata uang: options.currency ('auto' | 'USD' | 'IDR') mengalahkan data.currency (setelan header app) ----
+  const currency: string = options.currency && options.currency !== 'auto' ? options.currency : (data.currency || 'USD');
+  const idr = currency === 'IDR';
+  const rate = idr ? Number(data.idrRate) || 0 : 1;
+  const toDisplay = (usd: number) => usd * rate;
+  const compactIdr = (v: number) => {
+    const units: [number, string][] = [[1e12, 'T'], [1e9, 'M'], [1e6, 'jt'], [1e3, 'rb']];
+    for (const [n, suffix] of units) if (Math.abs(v) >= n) return (v / n).toLocaleString('en-US', { maximumSignificantDigits: 2 }) + ' ' + suffix;
+    return Math.round(v).toLocaleString('en-US');
+  };
   const money = (usd: number) => {
     if (!showMoney) return 'Amounts hidden';
-    if (data.currency === 'IDR' && !(data.idrRate > 0)) return 'IDR rate unavailable';
+    if (idr && !(rate > 0)) return 'IDR rate unavailable';
     const v = toDisplay(usd);
-    if (mode === 'rounded') return '≈ ' + new Intl.NumberFormat('en-US', { style: 'currency', currency: data.currency, notation: 'compact', maximumSignificantDigits: 2 }).format(v);
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: data.currency, maximumFractionDigits: 0 }).format(v);
+    if (idr) return mode === 'rounded' ? '≈ Rp ' + compactIdr(v) : 'Rp ' + Math.round(v).toLocaleString('en-US');
+    if (mode === 'rounded') return '≈ ' + new Intl.NumberFormat('en-US', { style: 'currency', currency, notation: 'compact', maximumSignificantDigits: 2 }).format(v);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(v);
   };
+  // Ambang filter "≥ US$1" ditampilkan dalam mata uang terpilih agar konsisten dengan nominal.
+  const minShort = idr && rate > 0 ? 'Rp ' + Math.round(rate).toLocaleString('en-US') : 'US$1';
+  const minLabel = 'Value ≥ ' + minShort;
   const signed = (v: number, digits = 2) => (v >= 0 ? '+' : '') + v.toFixed(digits) + '%';
 
   // ---- header ----
@@ -413,7 +431,7 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
     const percent = options.percentages !== false;
     const qty = !!options.quantities;
     const value = showMoney;
-    text(list.rows.length + ' holdings · ' + (options.minDollar !== false ? 'Value ≥ US$1' : 'All nonzero holdings'), pad, 255, 26, muted);
+    text(list.rows.length + ' holdings · ' + (options.minDollar !== false ? minLabel : 'All nonzero holdings'), pad, 255, 26, muted);
     text('PAGE ' + list.page + ' / ' + list.pages, w - pad, 300, 21, muted, 'right');
     const columnCount = Number(qty) + Number(value) + Number(percent);
     const nameWidth = columnCount ? inner * 0.35 : inner;
@@ -574,7 +592,7 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
     note = 'Price from exchange data; share = % of positive holdings.';
   } else if (options.template === 'bars') {
     const list = shareAssetList(data, { ...options, page: options.page });
-    text(list.rows.length + ' holdings · ' + (options.minDollar !== false ? 'Value ≥ US$1' : 'All nonzero holdings'), pad, 255, 26, muted);
+    text(list.rows.length + ' holdings · ' + (options.minDollar !== false ? minLabel : 'All nonzero holdings'), pad, 255, 26, muted);
     text('PAGE ' + list.page + ' / ' + list.pages, w - pad, 300, 21, muted, 'right');
     const pctW = 110, valW = showMoney ? 170 : 0, nameW = Math.round(inner * (wide ? 0.22 : 0.3));
     const trackX = pad + nameW, trackW = inner - nameW - valW - pctW - 24;
@@ -601,7 +619,7 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
     note = 'Bars use a square-root scale so small holdings stay visible; percentages are exact.';
   } else if (options.template === 'grid') {
     const list = shareAssetList(data, { ...options, page: options.page });
-    text(list.rows.length + ' holdings · ' + (options.minDollar !== false ? 'Value ≥ US$1' : 'All nonzero holdings'), pad, 255, 26, muted);
+    text(list.rows.length + ' holdings · ' + (options.minDollar !== false ? minLabel : 'All nonzero holdings'), pad, 255, 26, muted);
     text('PAGE ' + list.page + ' / ' + list.pages, w - pad, 300, 21, muted, 'right');
     const cols = wide ? 6 : 4, gap = 16;
     const rowsN = Math.ceil(list.perPage / cols);
@@ -629,7 +647,7 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
     const list = shareAssetList(data, { ...options, order: 'value-desc', page: 1 });
     const items = list.rows.filter((a: any) => a.usd > 0);
     const sum = items.reduce((s: number, a: any) => s + a.usd, 0);
-    text(items.length + ' assets · ' + (options.minDollar !== false ? 'Value ≥ US$1' : 'All positive holdings') + (showMoney ? ' · ' + money(sum) : ''), pad, 255, 26, muted, 'left', inner, blurMoney);
+    text(items.length + ' assets · ' + (options.minDollar !== false ? minLabel : 'All positive holdings') + (showMoney ? ' · ' + money(sum) : ''), pad, 255, 26, muted, 'left', inner, blurMoney);
     if (!items.length) text('No positive holdings to display', pad, h / 2, 30, muted);
     else {
       // Opsi "keep small assets readable": bobot aset kecil diangkat ke lantai (radius ≥ 20% terbesar)
@@ -665,7 +683,7 @@ export function renderShareCard(canvas: HTMLCanvasElement, data: any, options: a
       });
       if (unlabeledNames.length) text((options.names ? 'Also: ' + unlabeledNames.join(', ') : unlabeledNames.length + ' smaller assets too small to label'), pad, ay + ah + 32, 20, muted, 'left', inner);
     }
-    note = (options.bubbleMin ? 'Small assets enlarged to stay readable; percentages are exact' : 'Bubble area = share of positive holdings') + (options.minDollar !== false ? ' (assets ≥ US$1).' : '.');
+    note = (options.bubbleMin ? 'Small assets enlarged to stay readable; percentages are exact' : 'Bubble area = share of positive holdings') + (options.minDollar !== false ? ' (assets ≥ ' + minShort + ').' : '.');
   } else if (options.template === 'milestone') {
     const m = shareMilestone(data);
     if (!m) { text('No history yet', pad, h / 2, 40); text('Milestones appear once snapshots exist.', pad, h / 2 + 55, 25, muted); }

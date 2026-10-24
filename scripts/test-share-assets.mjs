@@ -101,3 +101,24 @@ for (const t of SHARE_TEMPLATES) {
   assert(!drawn.includes('worthly'), t.id + ' must respect watermark=false');
 }
 console.log('Share layouts: movers, composition, milestone, zip, and privacy across all templates passed.');
+
+// ---- currency option: Rp formatting, override of app setting, threshold label ----
+{
+  const idrData = { ...data, currency: 'USD', idrRate: 16000 };
+  const grab = (d, opts) => { drawn.length = 0; renderShareCard(canvas, d, opts); return drawn.slice(); };
+  let out = grab(idrData, { template: 'overview', amountMode: 'exact', currency: 'IDR' });
+  assert(out.includes('Rp 1,551,840'), 'exact IDR total: ' + out.join('|'));
+  out = grab(idrData, { template: 'overview', amountMode: 'rounded', currency: 'IDR' });
+  assert(out.includes('≈ Rp 1.6 jt'), 'rounded IDR total: ' + out.join('|'));
+  out = grab({ ...idrData, currency: 'IDR' }, { template: 'overview', amountMode: 'exact', currency: 'auto' });
+  assert(out.includes('Rp 1,551,840'), 'auto follows data.currency');
+  out = grab({ ...idrData, currency: 'IDR' }, { template: 'overview', amountMode: 'exact', currency: 'USD' });
+  assert(out.includes('$97'), 'USD override of IDR app setting: ' + out.join('|'));
+  out = grab(idrData, { template: 'assets', amountMode: 'exact', currency: 'IDR' });
+  assert(out.includes('2 holdings · Value ≥ Rp 16,000'), 'threshold label in Rp: ' + out.join('|'));
+  out = grab({ ...idrData, idrRate: 0 }, { template: 'overview', amountMode: 'exact', currency: 'IDR' });
+  assert(out.includes('IDR rate unavailable'));
+  out = grab(idrData, { template: 'overview', amountMode: 'exact', currency: 'USD' });
+  assert(out.includes('$97') && !out.some(t => t.startsWith('Rp')));
+}
+console.log('currency option OK');

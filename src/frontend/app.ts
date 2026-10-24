@@ -718,8 +718,9 @@ export const appHtml = `<!doctype html>
               <fieldset class="space-y-3"><legend class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">04 / Privacy</legend>
                 <div class="grid grid-cols-2 gap-3">
                   <label class="text-sm">Monetary values<select x-model="shareOptions.amountMode" :disabled="shareOptions.template==='allocation'" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700"><template x-for="m in WorthlyShare.SHARE_AMOUNT_MODES" :key="m.id"><option :value="m.id" x-text="m.name"></option></template></select></label>
-                  <label class="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" x-model="shareOptions.names"> Show asset names</label>
+                  <label class="text-sm">Currency<select x-model="shareOptions.currency" :disabled="shareOptions.template==='allocation' || shareOptions.amountMode==='hidden'" class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-2 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700"><template x-for="c in WorthlyShare.SHARE_CURRENCIES" :key="c.id"><option :value="c.id" x-text="c.id==='auto' ? c.name+' ('+displayCurrency+')' : c.name"></option></template></select></label>
                 </div>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.names"> Show asset names</label>
                 <label class="flex items-center gap-2 text-sm" :class="!shareOptions.names ? 'opacity-50' : ''"><input type="checkbox" x-model="shareOptions.logos" :disabled="!shareOptions.names" @change="loadShareIcons()"> Show asset logos next to names <span class="text-xs text-slate-500">(needs names)</span></label>
                 <label x-show="['performance','thennow'].includes(shareOptions.template)" class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="shareOptions.relative"> Relative mode (start = 100, no currency)</label>
                 <div x-show="['assets','spotlight','bubble','bars','grid'].includes(shareOptions.template)" class="space-y-3">
@@ -1772,7 +1773,7 @@ export const appHtml = `<!doctype html>
         sidebarCollapsed: localStorage.getItem('sidebarCollapsed')==='1', // desktop: sidebar ikon saja
         toggleSidebar() { this.sidebarCollapsed=!this.sidebarCollapsed; try { localStorage.setItem('sidebarCollapsed', this.sidebarCollapsed?'1':'0'); } catch(e) {} },
         shareOpen: false, shareBusy: false, shareRefreshing: false, shareError: '', shareData: null,
-        shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amountMode:'hidden',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1,relative:false,title:'',caption:'',handle:'',watermark:true,accent:'indigo',font:'sans',frame:'none',portfolioId:'',spotlight:'',logos:false,bubbleMin:false,assetsDense:false},
+        shareOptions: {template:'allocation',theme:'dark',size:'square',background:'classic',amountMode:'hidden',currency:'auto',amounts:false,names:true,minDollar:true,quantities:false,percentages:true,order:'value-desc',page:1,relative:false,title:'',caption:'',handle:'',watermark:true,accent:'indigo',font:'sans',frame:'none',portfolioId:'',spotlight:'',logos:false,bubbleMin:false,assetsDense:false},
         sharePage: 1, sharePages: 1, shareCount: 0,
         shareAvatar: null, shareSpotlightLoading: false, shareCarousel: ['overview','performance','assets'],
         shareIcons: {}, // simbol -> Image (same-origin via /icon/...), null = tidak ada ikon (pakai inisial)
