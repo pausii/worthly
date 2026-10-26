@@ -39,6 +39,9 @@ export interface SyncJob {
   accountId: number;
   reason: 'cron' | 'manual';
   enqueuedAt: number;
+  // Job terakhir dalam satu tick: setelah sync, kerjakan backfill + snapshot + overview
+  // (sekali per tick, bukan per account — hemat kuota baca D1).
+  finalize?: boolean;
 }
 
 export interface SessionData {

@@ -24,12 +24,17 @@ export async function buildOverview(env: Env, pre?: ValuationResult): Promise<Ov
   const [valuation, rates, pastRows] = await Promise.all([
     pre ? Promise.resolve(pre) : computeValuation(env),
     getUsdRates(env, ['IDR']),
-    queryAll<{ portfolio_id: number; total_usd: number }>(
+    // Nilai ≤ 24 jam lalu per portofolio. Subquery berkorelasi + ORDER BY/LIMIT memakai indeks
+    // (portfolio_id, captured_at) → hanya ~1 baris dibaca per portofolio. Versi lama (JOIN ke
+    // MAX() GROUP BY) memindai SELURUH tabel snapshot (~25k baris) tiap panggilan dan menjadi
+    // penyebab utama habisnya kuota baca harian D1 (free tier 5 juta baris).
+    queryAll<{ portfolio_id: number; total_usd: number | null }>(
       env,
-      `SELECT ps.portfolio_id AS portfolio_id, ps.total_usd AS total_usd FROM portfolio_snapshots ps
-       JOIN (SELECT portfolio_id, MAX(captured_at) AS mc FROM portfolio_snapshots
-             WHERE captured_at <= ? GROUP BY portfolio_id) m
-       ON m.portfolio_id = ps.portfolio_id AND m.mc = ps.captured_at`,
+      `SELECT p.id AS portfolio_id,
+              (SELECT s.total_usd FROM portfolio_snapshots s
+                WHERE s.portfolio_id = p.id AND s.captured_at <= ?
+                ORDER BY s.captured_at DESC LIMIT 1) AS total_usd
+         FROM portfolios p`,
       dayAgo,
     ),
   ]);
@@ -38,7 +43,7 @@ export async function buildOverview(env: Env, pre?: ValuationResult): Promise<Ov
   for (const p of valuation.portfolios) for (const a of p.assets) assetSet.add(a.asset);
   const assetChange = await get24hChangePct(env, [...assetSet]);
 
-  const pastMap = new Map(pastRows.map((r) => [r.portfolio_id, r.total_usd]));
+  const pastMap = new Map(pastRows.filter((r) => r.total_usd !== null).map((r) => [r.portfolio_id, r.total_usd as number]));
   let grandPast = 0;
   let grandPastKnown = false;
   const portfolios = valuation.portfolios.map((p) => {

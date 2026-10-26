@@ -27,7 +27,7 @@ All-in-one personal net worth & multi-asset portfolio tracker (Crypto CEX, On-ch
 ```
 Cron (10 mnt) ──► cronTick(): job per account ─► Queue wallet-sync ─► consumer: ambil saldo + deposit ─► D1
    │                                                   └─ gagal 3x retry ─► wallet-sync-dlq ─► event Activity
-   └─► backfill deposit + snapshot nilai portofolio (interval) + overview ─► chart
+   └─► job terakhir (finalize): backfill deposit + snapshot nilai portofolio (interval) + overview ─► chart
 "Sync all" di UI ─► mengantrekan job yang sama (reason: manual); "Sync" per account tetap inline
 
 Frontend (Alpine, self-hosted) ─► /graphql (Hono + GraphQL Yoga, butuh sesi) ─► D1 / KV

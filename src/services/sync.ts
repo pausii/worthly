@@ -545,13 +545,17 @@ export async function enqueueSyncAll(env: Env, reason: SyncJob['reason']): Promi
   const accounts = await queryAll<{ id: number }>(env, 'SELECT id FROM accounts WHERE enabled = 1 ORDER BY id');
   if (!accounts.length) return 0;
   const ts = now();
-  // sendBatch maksimal 100 pesan per panggilan.
-  for (let i = 0; i < accounts.length; i += 100) {
-    await env.SYNC_QUEUE.sendBatch(
-      accounts.slice(i, i + 100).map((a) => ({
-        body: { kind: 'sync', accountId: a.id, reason, enqueuedAt: ts } as SyncJob,
-      })),
-    );
+  // Job terakhir membawa finalize: snapshot + overview dihitung SEKALI setelah seluruh account
+  // (konsumsi berurutan, max_concurrency = 1). sendBatch maksimal 100 pesan per panggilan.
+  const jobs: SyncJob[] = accounts.map((a, i) => ({
+    kind: 'sync',
+    accountId: a.id,
+    reason,
+    enqueuedAt: ts,
+    ...(i === accounts.length - 1 ? { finalize: true } : {}),
+  }));
+  for (let i = 0; i < jobs.length; i += 100) {
+    await env.SYNC_QUEUE.sendBatch(jobs.slice(i, i + 100).map((body) => ({ body })));
   }
   return accounts.length;
 }
@@ -568,14 +572,17 @@ export async function consumeSyncJob(env: Env, job: SyncJob): Promise<'ack' | 'r
     'SELECT id, portfolio_id, type, label, enc_credentials, config FROM accounts WHERE id = ? AND enabled = 1',
     job.accountId,
   );
-  if (!acc) return 'ack';
-  const out = await syncAccount(env, acc, { quiet: true });
+  const out = acc ? await syncAccount(env, acc, { quiet: true }) : { status: 'ok' as const };
+  // Job finalize yang gagal: finalisasi ditunda ke percobaan berikutnya / dead-letter.
   if (out.status === 'error') return 'retry';
-  if (out.status === 'ok') {
-    // Overview tersimpan langsung segar setelah tiap account; snapshot tetap urusan cron.
-    await refreshOverview(env).catch(() => undefined);
-  }
+  if (job.finalize) await finalizeTick(env);
   return 'ack';
+}
+
+/** Backfill deposit + snapshot + overview — sekali per tick, setelah job sync terakhir. */
+async function finalizeTick(env: Env): Promise<void> {
+  const accounts = await queryAll<AccountRow>(env, ENABLED_ACCOUNTS_SQL);
+  await finishTick(env, accounts);
 }
 
 /**
@@ -588,14 +595,17 @@ export async function onSyncDeadLetter(env: Env, job: SyncJob): Promise<void> {
     'SELECT label, type, last_error FROM accounts WHERE id = ?',
     job.accountId,
   );
-  if (!acc) return;
-  await addEvent(env, {
-    level: 'error',
-    source: acc.type,
-    account_id: job.accountId,
-    message: `Sync gagal berulang, retry otomatis habis: ${acc.label} — saldo lama dipertahankan`,
-    detail: `${acc.last_error ?? '-'} (job ${job.reason}, dikirim ${new Date(job.enqueuedAt).toISOString()})`.slice(0, 500),
-  });
+  if (acc) {
+    await addEvent(env, {
+      level: 'error',
+      source: acc.type,
+      account_id: job.accountId,
+      message: `Sync gagal berulang, retry otomatis habis: ${acc.label} — saldo lama dipertahankan`,
+      detail: `${acc.last_error ?? '-'} (job ${job.reason}, dikirim ${new Date(job.enqueuedAt).toISOString()})`.slice(0, 500),
+    });
+  }
+  // Snapshot/overview tick ini tetap harus terjadi walau account terakhir gagal.
+  if (job.finalize) await finalizeTick(env).catch((e) => console.error('finalizeTick (dlq) error:', e));
 }
 
 /** Jeda sebelum percobaan berikutnya: 60s, 120s, 240s, … (maks 15 menit). */
@@ -649,8 +659,9 @@ export async function cronTick(env: Env): Promise<{ synced: number; queued: numb
     return { synced: r.synced, queued: 0 };
   }
   const queued = await enqueueSyncAll(env, 'cron');
-  const accounts = await queryAll<AccountRow>(env, ENABLED_ACCOUNTS_SQL);
-  await finishTick(env, accounts);
+  // Snapshot + overview dikerjakan job finalize (account terakhir). Tanpa account aktif
+  // (portofolio hanya berisi holding manual / aset tetap) kerjakan di sini.
+  if (queued === 0) await finishTick(env, []);
   return { synced: 0, queued };
 }
 
