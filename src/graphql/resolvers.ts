@@ -2,6 +2,7 @@ import { GraphQLError } from 'graphql';
 import { FIXED_ASSET_KINDS, type AccountType, type Env, type FixedAssetKind, type StockConfig } from '../types';
 import { now, queryAll, queryOne, run } from '../lib/db';
 import { hashPassword, verifyPassword, encryptSecret, decryptSecret } from '../lib/crypto';
+import { extractAiText } from '../lib/ai';
 import { createSession, destroySession } from '../lib/session';
 import { rateLimit, resetRateLimit } from '../lib/ratelimit';
 import { isCooling } from '../lib/cooldown';
@@ -195,7 +196,9 @@ function iso(ts: unknown): string {
 // =================== dashboard (konstanta) ===================
 const RETURNS_KV_KEY = 'returns_basis';
 const INSIGHT_KV_KEY = 'ai_insight';
-const INSIGHT_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+// Model bawaan AI Insight; bisa ditimpa lewat variabel INSIGHT_MODEL (wrangler.toml [vars]).
+// Cloudflare memensiunkan model Workers AI secara berkala, jadi jangan di-hardcode tanpa jalan keluar.
+const INSIGHT_MODEL_DEFAULT = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
 export const resolvers = {
   JSON: JSONScalar,
@@ -734,14 +737,14 @@ export const resolvers = {
         'JANGAN memberi nasihat beli/jual atau prediksi harga. JANGAN mengarang angka di luar data yang diberikan.';
 
       try {
-        const result = (await env.AI.run(INSIGHT_MODEL as any, {
+        const result = await env.AI.run((env.INSIGHT_MODEL || INSIGHT_MODEL_DEFAULT) as any, {
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: dataContext },
           ],
           max_tokens: 400,
-        } as any)) as { response?: string };
-        const text = (result?.response || '').trim();
+        } as any);
+        const text = extractAiText(result);
         if (!text) fail('AI tidak mengembalikan teks');
 
         await env.KV.put(
