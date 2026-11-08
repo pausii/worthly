@@ -275,11 +275,27 @@ export const resolvers = {
       });
     },
     async accountBalances(_p: unknown, { id }: { id: number }, ctx: GraphQLContext) {
-      return queryAll(
+      const rows = await queryAll<{
+        wallet_type: string;
+        asset: string;
+        free: number;
+        locked: number;
+        total: number;
+        updated_at: number;
+      }>(
         ctx.env,
         'SELECT wallet_type, asset, free, locked, total, updated_at FROM balances WHERE account_id = ? ORDER BY total DESC',
         id,
       );
+      if (!rows.length) return [];
+      // Nilai USD memakai sumber harga yang sama dengan kartu akun. Aset tanpa harga ditandai
+      // price_usd = null (usd = 0) supaya UI bisa menampilkannya apa adanya, bukan sebagai nol palsu.
+      const rates = await getUsdRates(ctx.env, [...new Set(rows.map((r) => r.asset.toUpperCase()))]);
+      return rows.map((r) => {
+        const price = rates[r.asset.toUpperCase()];
+        const priced = typeof price === 'number' && price > 0;
+        return { ...r, price_usd: priced ? price : null, usd: priced ? r.total * price : 0 };
+      });
     },
 
     // ---- holdings ----

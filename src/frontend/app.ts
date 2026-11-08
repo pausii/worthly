@@ -874,6 +874,7 @@ export const appHtml = `<!doctype html>
                 </template>
               </div>
               <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-100 dark:border-slate-700/60 pt-3">
+                <button @click="openAccountDetail(a)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Details</button>
                 <button @click="syncAccount(a.id)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Sync</button>
                 <button @click="openAccountModal(a)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Edit</button>
                 <button x-show="a.type==='binance'" @click="backfillDeposits(a.id)" class="rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-600">Full History</button>
@@ -1620,6 +1621,61 @@ export const appHtml = `<!doctype html>
     </div>
   </div>
 
+  <!-- MODAL: Account balance details -->
+  <div x-show="modal==='accountDetail'" class="fixed inset-0 z-40 flex items-center justify-center p-4">
+    <div @click="modal=null" class="absolute inset-0 bg-slate-900/50"></div>
+    <div class="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-xl">
+      <div class="mb-3 flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h3 class="truncate text-base font-semibold" x-text="accDetail.account ? accDetail.account.label : ''"></h3>
+            <span class="shrink-0 rounded-md bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400" x-text="accDetail.account ? accDetail.account.type : ''"></span>
+          </div>
+          <div x-show="accDetail.account && accDetail.account.last_synced_at" class="mt-0.5 text-xs text-slate-400 dark:text-slate-500">Synced <span x-text="accDetail.account ? timeAgo(accDetail.account.last_synced_at) : ''"></span></div>
+        </div>
+        <button type="button" @click="modal=null" aria-label="Close" class="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-200">&times;</button>
+      </div>
+      <p x-show="accDetail.loading" class="py-8 text-center text-sm text-slate-500 dark:text-slate-400">Loading balances…</p>
+      <p x-show="accDetail.error" x-text="accDetail.error" class="break-all rounded-lg bg-rose-50 dark:bg-rose-900/30 px-3 py-2 text-xs text-rose-600 dark:text-rose-400"></p>
+      <template x-if="!accDetail.loading && !accDetail.error">
+        <div>
+          <div class="mb-4">
+            <div class="text-2xl font-semibold" x-text="fmtDisplay(accDetailTotal())"></div>
+            <div x-show="displayCurrency==='IDR'" class="text-xs text-slate-400 dark:text-slate-500" x-text="fmtUsd(accDetailTotal())"></div>
+            <div x-show="accDetailUnpriced()>0" class="mt-1 text-xs text-amber-600 dark:text-amber-400" x-text="accDetailUnpriced() + ' asset(s) without a price are not counted in the total'"></div>
+          </div>
+          <p x-show="!accDetail.rows.length" class="py-6 text-center text-sm text-slate-500 dark:text-slate-400">No balances stored for this account yet. Run a sync first.</p>
+          <template x-for="g in accDetailGroups()" :key="g.wallet">
+            <div class="mb-4">
+              <div class="mb-1 flex items-baseline justify-between gap-2 border-b border-slate-100 dark:border-slate-700/60 pb-1">
+                <span class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400" x-text="g.label"></span>
+                <span class="text-xs text-slate-500 dark:text-slate-400"><span x-text="fmtDisplay(g.usd)"></span> · <span x-text="g.pct.toFixed(1)+'%'"></span></span>
+              </div>
+              <template x-for="r in g.rows" :key="g.wallet+':'+r.asset">
+                <div class="flex items-center justify-between gap-3 py-1.5">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="relative h-6 w-6 shrink-0">
+                      <span class="absolute inset-0 flex items-center justify-center rounded-full text-[8px] font-semibold text-white" :style="'background:'+tokenGradient(symLabel(r.asset))" x-text="tokenInitial(symLabel(r.asset))"></span>
+                      <img :src="r.icon" class="absolute inset-0 h-6 w-6 rounded-full object-cover" @error="$el.style.display='none'" alt="">
+                    </span>
+                    <div class="min-w-0">
+                      <div class="truncate text-sm font-medium" x-text="symLabel(r.asset)"></div>
+                      <div class="truncate text-xs text-slate-400 dark:text-slate-500"><span x-text="fmtNum(r.total)"></span><span x-show="r.locked>0" x-text="' · locked ' + fmtNum(r.locked)"></span></div>
+                    </div>
+                  </div>
+                  <div class="shrink-0 text-right">
+                    <div class="text-sm" :class="r.priced ? '' : 'text-amber-600 dark:text-amber-400'" x-text="r.priced ? fmtDisplay(r.usd) : 'No price'"></div>
+                    <div x-show="r.priced" class="text-xs text-slate-400 dark:text-slate-500" x-text="r.pct.toFixed(1)+'%'"></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+
   <!-- MODAL: Account -->
   <div x-show="modal==='account'" class="fixed inset-0 z-40 flex items-center justify-center p-4">
     <div @click="modal=null" class="absolute inset-0 bg-slate-900/50"></div>
@@ -1993,6 +2049,7 @@ export const appHtml = `<!doctype html>
         allocHideStable: false, // toggle chart Asset Allocation: sembunyikan stablecoin/fiat
         pf: { id:null, name:'', description:'' },
         hd: { id:null, portfolio_id:'', label:'', currency:'USD', amount:null, note:'', added_at:'' },
+        accDetail: { account:null, rows:[], loading:false, error:'' },
         ac: { id:null, type:'binance', portfolio_id:'', label:'', apiKey:'', apiSecret:'', merchantId:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, positions:[], error:'' },
         pw: { current:'', next:'' },
         // Preset token per jaringan. Simbol disimpan sesuai harga (BTC/ETH), bukan nama on-chain (BTCB).
@@ -2101,6 +2158,7 @@ export const appHtml = `<!doctype html>
           Insight: 'query Insight { insight }',
           Portfolios: 'query Portfolios { portfolios { id name description sort_order created_at updated_at } }',
           Accounts: 'query Accounts { accounts }',
+          AccountBalances: 'query AccountBalances($id:Int!){ accountBalances(id:$id) }',
           Holdings: 'query Holdings($portfolioId:Int){ holdings(portfolioId:$portfolioId) }',
           Stocks: 'query Stocks { stocks }',
           FixedAssets: 'query FixedAssets { fixedAssets }',
@@ -2771,6 +2829,39 @@ export const appHtml = `<!doctype html>
           return '';
         },
 
+        // Nama dompet yang ramah. Cryptomus: funding = grup Business, spot = grup Personal.
+        walletLabel(wt, type) {
+          if (type==='cryptomus') return wt==='funding' ? 'Business' : wt==='spot' ? 'Personal' : wt;
+          const m={ spot:'Spot', futures:'Futures', earn:'Earn', funding:'Funding', onchain:'On-chain', stock:'Stocks', defi:'DeFi (Aave)' };
+          return m[wt]||wt;
+        },
+        async openAccountDetail(a) {
+          this.accDetail={ account:a, rows:[], loading:true, error:'' };
+          this.modal='accountDetail';
+          // gqlRaw (bukan gql): kegagalan memuat rincian ditampilkan di modal, tidak di banner global.
+          const r=await this.gqlRaw('AccountBalances', this.Q.AccountBalances, { id:Number(a.id) });
+          if (!r || !this.accDetail.account || this.accDetail.account.id!==a.id) return;
+          this.accDetail.loading=false;
+          if (r.ok) this.accDetail.rows=Array.isArray(r.data) ? r.data : [];
+          else this.accDetail.error=r.error||'Could not load balances';
+        },
+        accDetailTotal() { return (this.accDetail.rows||[]).reduce((s,r)=>s+(Number(r.usd)||0),0); },
+        accDetailUnpriced() { return (this.accDetail.rows||[]).filter(r=>Number(r.total)>0 && !(Number(r.price_usd)>0)).length; },
+        accDetailGroups() {
+          const rows=this.accDetail.rows||[], total=this.accDetailTotal();
+          const type=this.accDetail.account ? this.accDetail.account.type : '';
+          const g={};
+          for (const r of rows) {
+            const wt=r.wallet_type;
+            if (!g[wt]) g[wt]={ wallet:wt, label:this.walletLabel(wt,type), usd:0, rows:[] };
+            const usd=Number(r.usd)||0;
+            g[wt].usd+=usd;
+            g[wt].rows.push({ asset:r.asset, total:Number(r.total)||0, locked:Number(r.locked)||0, usd, priced:Number(r.price_usd)>0, pct: total>0 ? usd/total*100 : 0, icon:(wt==='stock' ? '/icon/stock/' : '/icon/token/')+encodeURIComponent(this.symLabel(r.asset)) });
+          }
+          return Object.values(g)
+            .map(x=>({ wallet:x.wallet, label:x.label, usd:x.usd, pct: total>0 ? x.usd/total*100 : 0, rows:x.rows.sort((a,b)=>b.usd-a.usd||b.total-a.total) }))
+            .sort((a,b)=>b.usd-a.usd);
+        },
         openAccountModal(a) {
           if (a) {
             const cfg = a.config || {};
