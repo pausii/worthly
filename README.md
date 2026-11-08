@@ -8,6 +8,7 @@ All-in-one personal net worth & multi-asset portfolio tracker (Crypto CEX, On-ch
 - **Frontend:** Alpine.js + Tailwind CSS + ApexCharts, **self-hosted** (di-build lokal ke `public/`, disajikan via Workers Assets — bukan CDN), responsif, dark mode, PWA dengan deteksi update otomatis
 - **CEX:** Binance & Bybit (saldo SPOT / FUTURES / EARN / FUNDING + riwayat deposit) via API resmi
 - **Cryptomus:** saldo Business (*funding*) dan Personal (*spot*) lewat payment API key + Merchant UUID (tanpa riwayat deposit)
+- **Rincian saldo per akun:** tombol *Details* di kartu akun membuka daftar saldo per aset, dikelompokkan per dompet (Spot/Earn/Funding, atau Business/Personal untuk Cryptomus), lengkap dengan jumlah koin, nilai, dan persentase terhadap akun. Aset tanpa harga ditandai *No price* dan tidak dihitung dalam total
 - **On-chain:** Ethereum & BSC (native + token) via Alchemy, TRON via TronGrid, Solana (SOL + SPL seperti USDT) via JSON-RPC, Bitcoin
 - **DeFi (Aave v3):** posisi supply (aToken seperti aEthUSDT / aBnbUSDT) dihitung sebagai aset dasarnya di dompet `defi` — saldo plus bunga terbaca otomatis dari balanceOf; auto-detect mengenali aToken dan melewati debt token
 - **Saham IDX:** posisi saham Bursa Efek Indonesia (harga via Yahoo Finance) + untung/rugi (cost basis)
