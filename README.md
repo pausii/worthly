@@ -138,7 +138,7 @@ Buka aplikasi → akan diminta **setup user pertama** (username + password ≥ 1
 | `[[queues.producers]]` / `[[queues.consumers]]` | `wallet-sync`, `wallet-sync-dlq` | binding `SYNC_QUEUE`. Buat dulu dengan `npx wrangler queues create wallet-sync` dan `… wallet-sync-dlq` (butuh **Workers Paid**). Consumer: 1 pesan per invokasi, konkurensi 1 (ramah rate-limit exchange), `max_retries = 3`. Hapus kedua blok bila tidak memakai Queues — cron otomatis kembali ke sync inline round-robin |
 | `SYNC_RETRY_BASE_SECONDS` | `60` | jeda retry pertama job sync yang gagal; dilipatgandakan tiap percobaan (maks 15 menit) |
 | `SYNC_BATCH_SIZE` | `2` | **hanya jalur fallback tanpa Queues:** jumlah account yang disinkron per tick cron (round-robin), karena batas CPU per-invocation di **Workers Free** ketat; `0`/kosong = semua |
-| `[ai] binding = "AI"` | aktif | binding Workers AI untuk **AI Insight** (model `@cf/meta/llama-3.1-8b-instruct`). Bila akun tidak punya akses Workers AI, hapus blok `[ai]`; tombol Insight akan menampilkan pesan gagal tetapi fitur lain tidak terpengaruh |
+| `[ai] binding = "AI"` | aktif | binding Workers AI untuk **AI Insight** (model diatur lewat variabel `INSIGHT_MODEL`, bawaan `@cf/meta/llama-3.3-70b-instruct-fp8-fast`; ganti bila Cloudflare memensiunkannya). Bila akun tidak punya akses Workers AI, hapus blok `[ai]`; tombol Insight akan menampilkan pesan gagal tetapi fitur lain tidak terpengaruh |
 | `[version_metadata]` | aktif | menyuplai id versi deploy ke frontend untuk deteksi update PWA (banner "versi baru tersedia") |
 | `[observability]` | aktif | simpan log `console.*` dan metrik di dashboard Cloudflare |
 

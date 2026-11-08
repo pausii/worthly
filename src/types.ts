@@ -21,6 +21,8 @@ export interface Env {
   SYNC_BATCH_SIZE?: string;
   // Jeda retry pertama job sync yang gagal (detik); dilipatgandakan tiap percobaan. Default 60.
   SYNC_RETRY_BASE_SECONDS?: string;
+  // Model Workers AI untuk AI Insight. Kosong = bawaan di resolvers.ts.
+  INSIGHT_MODEL?: string;
   COINGECKO_API_KEY?: string;
   // Endpoint RPC default (netral provider: Alchemy untuk EVM, TronGrid untuk TRON, JSON-RPC untuk Solana).
   RPC_ETH_URL?: string;

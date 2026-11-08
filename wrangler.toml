@@ -61,6 +61,9 @@ binding = "AI"
 
 [vars]
 ENVIRONMENT = "production"
+# Model Workers AI untuk AI Insight. Cloudflare memensiunkan model secara berkala; kalau muncul
+# error "deprecated", ganti ID di sini (lihat https://developers.cloudflare.com/workers-ai/models/).
+INSIGHT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 # Default jadwal snapshot nilai portofolio (menit). Sync balance tetap tiap 10 menit.
 SNAPSHOT_INTERVAL_MINUTES = "30"
 # Workers Free: batas CPU per-invocation ketat. Sinkron sebagian account per tick (round-robin)
