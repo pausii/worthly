@@ -7,12 +7,14 @@ import type {
   OnchainCredentials,
   StockConfig,
   SyncJob,
+  CryptomusCredentials,
   WalletType,
 } from '../types';
 import { batch, now, queryAll, queryOne, run, type BatchStmt } from '../lib/db';
 import { decryptSecret } from '../lib/crypto';
 import * as binance from './cex/binance';
 import * as bybit from './cex/bybit';
+import * as cryptomus from './cex/cryptomus';
 import { getEvmBalances, getEvmAutoBalances } from './onchain/evm';
 import { getTronBalances } from './onchain/tron';
 import { getBitcoinBalances, getBitcoinDeposits } from './onchain/bitcoin';
@@ -260,8 +262,38 @@ export async function runDepositBackfill(
   return backfillDeposits(env, acc, maxWindows);
 }
 
+/**
+ * Cryptomus: satu panggilan saldo, tanpa riwayat deposit (cakupan issue awal). Memakai guard
+ * yang sama dengan exchange lain lewat upsertBalances.
+ */
+async function syncCryptomusAccount(env: Env, acc: AccountRow): Promise<void> {
+  const creds = JSON.parse(await decryptSecret(acc.enc_credentials!, env.MASTER_KEY)) as CryptomusCredentials;
+  const fetched = await cryptomus.getAllBalances(creds);
+  const storedWallets = new Set(
+    (
+      await queryAll<{ wallet_type: string }>(
+        env,
+        'SELECT DISTINCT wallet_type FROM balances WHERE account_id = ?',
+        acc.id,
+      )
+    ).map((r) => r.wallet_type),
+  );
+  await upsertBalances(env, acc, fetched.balances, fetched.synced);
+  const retained = fetched.failures.filter((f) => storedWallets.has(f.wallet));
+  if (retained.length) {
+    await addEvent(env, {
+      level: 'warning',
+      source: acc.type,
+      account_id: acc.id,
+      message: `Dompet ${retained.map((f) => f.wallet).join(', ')} gagal diambil — saldo lama dipertahankan`,
+      detail: retained.map((f) => `${f.wallet}: ${f.message}`).join(' | ').slice(0, 500),
+    });
+  }
+}
+
 async function syncCexAccount(env: Env, acc: AccountRow): Promise<void> {
   if (!acc.enc_credentials) throw new Error('Kredensial belum diisi');
+  if (acc.type === 'cryptomus') return syncCryptomusAccount(env, acc);
   const creds = JSON.parse(await decryptSecret(acc.enc_credentials, env.MASTER_KEY)) as CexCredentials;
   const api = acc.type === 'binance' ? binance : bybit;
   const proxyUrl = acc.type === 'binance' ? (env.BINANCE_PROXY_URL || undefined) : undefined;
@@ -452,7 +484,7 @@ export type SyncOutcome = { status: 'ok' } | { status: 'cooling' } | { status: '
  * menyerah di dead-letter queue). Event 451/cooldown tetap ditulis karena ia memicu circuit breaker.
  */
 export async function syncAccount(env: Env, acc: AccountRow, opts: { quiet?: boolean } = {}): Promise<SyncOutcome> {
-  const isCex = acc.type === 'binance' || acc.type === 'bybit';
+  const isCex = acc.type === 'binance' || acc.type === 'bybit' || acc.type === 'cryptomus';
   // Circuit breaker: kalau penyedia lagi cooldown (habis 451), lewati tanpa menyentuh data/status.
   if (isCex && (await isCooling(env, `cex:${acc.type}`))) return { status: 'cooling' };
   try {

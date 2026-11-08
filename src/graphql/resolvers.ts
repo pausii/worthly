@@ -1,7 +1,7 @@
 import { GraphQLError } from 'graphql';
 import { FIXED_ASSET_KINDS, type AccountType, type Env, type FixedAssetKind, type StockConfig } from '../types';
 import { now, queryAll, queryOne, run } from '../lib/db';
-import { hashPassword, verifyPassword, encryptSecret } from '../lib/crypto';
+import { hashPassword, verifyPassword, encryptSecret, decryptSecret } from '../lib/crypto';
 import { createSession, destroySession } from '../lib/session';
 import { rateLimit, resetRateLimit } from '../lib/ratelimit';
 import { isCooling } from '../lib/cooldown';
@@ -44,7 +44,7 @@ async function userCount(env: Env): Promise<number> {
 }
 
 // =================== accounts (helpers) ===================
-const CEX_TYPES = new Set<AccountType>(['binance', 'bybit']);
+const CEX_TYPES = new Set<AccountType>(['binance', 'bybit', 'cryptomus']);
 const ONCHAIN_TYPES = new Set<AccountType>(['tron', 'eth', 'bsc', 'btc', 'sol']);
 const STOCK_TYPES = new Set<AccountType>(['idx']);
 const ALL_TYPES = new Set<AccountType>([...CEX_TYPES, ...ONCHAIN_TYPES, ...STOCK_TYPES]);
@@ -1005,7 +1005,12 @@ export const resolvers = {
       let encCredentials: string | null = null;
       let config: string | null = null;
 
-      if (CEX_TYPES.has(type)) {
+      if (type === 'cryptomus') {
+        const merchantId = (body.merchantId ?? '').trim();
+        const apiKey = (body.apiKey ?? '').trim();
+        if (!merchantId || !apiKey) fail('Merchant UUID & API key wajib diisi');
+        encCredentials = await encryptSecret(JSON.stringify({ merchantId, apiKey }), env.MASTER_KEY);
+      } else if (CEX_TYPES.has(type)) {
         const apiKey = (body.apiKey ?? '').trim();
         const apiSecret = (body.apiSecret ?? '').trim();
         if (!apiKey || !apiSecret) fail('API key & secret wajib diisi');
@@ -1082,6 +1087,20 @@ export const resolvers = {
         const prev = row!.config ? JSON.parse(row!.config) : {};
         const positions = body.positions !== undefined ? parsePositions(body.positions) : prev.positions ?? [];
         config = JSON.stringify({ positions });
+      } else if (type === 'cryptomus') {
+        if (body.apiKey || body.merchantId) {
+          // Isian kosong mempertahankan nilai lama (sama seperti API secret exchange).
+          const prev = row!.enc_credentials
+            ? (JSON.parse(await decryptSecret(row!.enc_credentials, env.MASTER_KEY)) as { merchantId: string; apiKey: string })
+            : { merchantId: '', apiKey: '' };
+          encCredentials = await encryptSecret(
+            JSON.stringify({
+              merchantId: body.merchantId ? String(body.merchantId).trim() : prev.merchantId,
+              apiKey: body.apiKey ? String(body.apiKey).trim() : prev.apiKey,
+            }),
+            env.MASTER_KEY,
+          );
+        }
       } else {
         if (body.apiKey && body.apiSecret) {
           encCredentials = await encryptSecret(

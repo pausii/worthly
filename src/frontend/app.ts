@@ -1629,7 +1629,7 @@ export const appHtml = `<!doctype html>
         <div class="grid grid-cols-2 gap-3">
           <select x-model="ac.type" :disabled="ac.id"
             class="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 disabled:opacity-60">
-            <option value="binance">Binance</option><option value="bybit">Bybit</option>
+            <option value="binance">Binance</option><option value="bybit">Bybit</option><option value="cryptomus">Cryptomus</option>
             <option value="eth">Ethereum</option><option value="bsc">BSC</option><option value="tron">Tron</option><option value="sol">Solana</option><option value="btc">Bitcoin</option>
             <option value="idx">Saham IDX</option>
           </select>
@@ -1641,6 +1641,15 @@ export const appHtml = `<!doctype html>
         </div>
         <input x-model="ac.label" placeholder="Label (e.g. Binance Main)"
           class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+        <template x-if="ac.type==='cryptomus'">
+          <div class="space-y-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 p-3">
+            <p class="text-xs text-slate-500 dark:text-slate-400">Pakai <b>payment API key</b> dan Merchant UUID dari Cryptomus (Settings). Key disimpan terenkripsi dan hanya dipakai untuk membaca saldo.</p>
+            <input x-model="ac.merchantId" :placeholder="ac.id ? 'Merchant UUID (kosongkan untuk tetap)' : 'Merchant UUID'"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+            <input x-model="ac.apiKey" type="password" :placeholder="ac.id ? 'Payment API key (kosongkan untuk tetap)' : 'Payment API key'"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+          </div>
+        </template>
         <template x-if="ac.type==='binance' || ac.type==='bybit'">
           <div class="space-y-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 p-3">
             <p class="text-xs text-slate-500 dark:text-slate-400">Use a <b>read-only</b> API key (no trade/withdraw permissions). Key is stored encrypted.</p>
@@ -1984,7 +1993,7 @@ export const appHtml = `<!doctype html>
         allocHideStable: false, // toggle chart Asset Allocation: sembunyikan stablecoin/fiat
         pf: { id:null, name:'', description:'' },
         hd: { id:null, portfolio_id:'', label:'', currency:'USD', amount:null, note:'', added_at:'' },
-        ac: { id:null, type:'binance', portfolio_id:'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, positions:[], error:'' },
+        ac: { id:null, type:'binance', portfolio_id:'', label:'', apiKey:'', apiSecret:'', merchantId:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, positions:[], error:'' },
         pw: { current:'', next:'' },
         // Preset token per jaringan. Simbol disimpan sesuai harga (BTC/ETH), bukan nama on-chain (BTCB).
         TOKEN_PRESETS: {
@@ -2770,7 +2779,7 @@ export const appHtml = `<!doctype html>
             const positions = (cfg.positions||[]).map(p=>({ ticker:p.ticker||'', lots:p.lots, avgPrice:p.avgPrice }));
             this.ac = { id:a.id, type:a.type, portfolio_id:a.portfolio_id, label:a.label, apiKey:'', apiSecret:'', address:cfg.address||'', rpcUrl:'', trackNative:cfg.trackNative!==false, tokens, autoDetect:cfg.autoDetect===true, positions, error:'' };
           } else {
-            this.ac = { id:null, type:'binance', portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', label:'', apiKey:'', apiSecret:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, positions:[], error:'' };
+            this.ac = { id:null, type:'binance', portfolio_id:(this.portfolios[0]&&this.portfolios[0].id)||'', label:'', apiKey:'', apiSecret:'', merchantId:'', address:'', rpcUrl:'', trackNative:true, tokens:[], autoDetect:false, positions:[], error:'' };
           }
           this.modal='account';
         },
@@ -2778,6 +2787,7 @@ export const appHtml = `<!doctype html>
           this.ac.error='';
           const body={ type:this.ac.type, portfolio_id:this.ac.portfolio_id, label:this.ac.label };
           if (this.ac.type==='binance'||this.ac.type==='bybit') { if(this.ac.apiKey) body.apiKey=this.ac.apiKey; if(this.ac.apiSecret) body.apiSecret=this.ac.apiSecret; }
+          else if (this.ac.type==='cryptomus') { if(this.ac.merchantId) body.merchantId=this.ac.merchantId; if(this.ac.apiKey) body.apiKey=this.ac.apiKey; }
           else if (this.ac.type==='idx') {
             body.positions = (this.ac.positions||[])
               .map(p=>({ ticker:String(p.ticker||'').trim().toUpperCase(), lots:Number(p.lots), avgPrice:Number(p.avgPrice) }))

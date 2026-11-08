@@ -7,6 +7,7 @@ All-in-one personal net worth & multi-asset portfolio tracker (Crypto CEX, On-ch
 - **Backend:** Hono + GraphQL Yoga + Cloudflare D1 (database) + KV (session, rate limit, cache harga)
 - **Frontend:** Alpine.js + Tailwind CSS + ApexCharts, **self-hosted** (di-build lokal ke `public/`, disajikan via Workers Assets — bukan CDN), responsif, dark mode, PWA dengan deteksi update otomatis
 - **CEX:** Binance & Bybit (saldo SPOT / FUTURES / EARN / FUNDING + riwayat deposit) via API resmi
+- **Cryptomus:** saldo Business (*funding*) dan Personal (*spot*) lewat payment API key + Merchant UUID (tanpa riwayat deposit)
 - **On-chain:** Ethereum & BSC (native + token) via Alchemy, TRON via TronGrid, Solana (SOL + SPL seperti USDT) via JSON-RPC, Bitcoin
 - **DeFi (Aave v3):** posisi supply (aToken seperti aEthUSDT / aBnbUSDT) dihitung sebagai aset dasarnya di dompet `defi` — saldo plus bunga terbaca otomatis dari balanceOf; auto-detect mengenali aToken dan melewati debt token
 - **Saham IDX:** posisi saham Bursa Efek Indonesia (harga via Yahoo Finance) + untung/rugi (cost basis)
@@ -39,7 +40,7 @@ API hanya tersedia lewat **GraphQL** di `/graphql` (tidak ada endpoint REST). Li
 | Folder | Isi |
 |---|---|
 | `src/lib` | kripto/keamanan, db, session, auth middleware, rate limit, cooldown, events |
-| `src/services/cex` | klien Binance & Bybit (signed request) |
+| `src/services/cex` | klien Binance, Bybit, dan Cryptomus (signed request) |
 | `src/services/onchain` | klien EVM (ETH/BSC, Alchemy), TRON (TronGrid), Solana (JSON-RPC), Bitcoin |
 | `src/services/prices` | konversi harga ke USD + cache (crypto Binance, fiat Frankfurter, saham Yahoo) |
 | `src/services/sync.ts` | orkestrator sinkronisasi + snapshot |
@@ -144,6 +145,7 @@ Nilai `SNAPSHOT_INTERVAL_MINUTES` dan `SYNC_BATCH_SIZE` didefinisikan di blok `[
 
 ## Menambah sumber data
 
+- **Cryptomus:** menu *Accounts* → pilih Cryptomus → isi **Merchant UUID** dan **payment API key** (bukan payout key, karena payout key bisa menarik dana). Key disimpan terenkripsi
 - **Binance / Bybit:** menu *Accounts* → pilih exchange → tempel **API key read-only**
   (matikan izin trade & withdraw di dashboard exchange). Key langsung dienkripsi.
 - **On-chain (BTC/ETH/BSC/Tron/Solana):** menu *Accounts* → pilih jaringan → isi address wallet,
