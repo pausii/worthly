@@ -62,7 +62,7 @@ export type Variables = {
 
 export type AppContext = Context<{ Bindings: Env; Variables: Variables }>;
 
-export type AccountType = 'binance' | 'bybit' | 'tron' | 'eth' | 'bsc' | 'btc' | 'sol' | 'idx';
+export type AccountType = 'binance' | 'bybit' | 'cryptomus' | 'tron' | 'eth' | 'bsc' | 'btc' | 'sol' | 'idx';
 // defi = posisi di protokol DeFi (mis. aToken Aave) yang nilainya 1:1 dengan aset dasarnya.
 export type WalletType = 'spot' | 'futures' | 'earn' | 'funding' | 'onchain' | 'stock' | 'defi';
 
@@ -100,6 +100,12 @@ export interface CexBalanceFetch {
 export interface CexCredentials {
   apiKey: string;
   apiSecret: string;
+}
+
+// Kredensial Cryptomus: UUID merchant + payment API key (terenkripsi). Tanpa apiSecret.
+export interface CryptomusCredentials {
+  merchantId: string;
+  apiKey: string;
 }
 
 // Kredensial / konfigurasi on-chain (terenkripsi di enc_credentials)

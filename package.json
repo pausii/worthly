@@ -16,7 +16,8 @@
     "db:migrate:local": "wrangler d1 migrations apply wallet_db --local",
     "db:migrate:remote": "wrangler d1 migrations apply wallet_db --remote",
     "db:console:local": "wrangler d1 execute wallet_db --local --command",
-    "test:evm-tokens": "node scripts/test-evm-tokens.mjs"
+    "test:evm-tokens": "node scripts/test-evm-tokens.mjs",
+    "test:cryptomus": "node scripts/test-cryptomus.mjs"
   },
   "dependencies": {
     "apexcharts": "^5.13.0",
